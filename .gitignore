@@ -1,0 +1,36 @@
+# .gitignore for MTXF Bot
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# Python
+python/venv/
+python/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Credentials (NEVER commit these!)
+src/main/resources/application-prod.yml
+*.pfx
+*.p12
+
+# Sensitive config
+application-local.yml

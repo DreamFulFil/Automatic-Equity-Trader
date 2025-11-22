@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+trading:
+  # Trading window: 11:30 - 13:00 Taipei time
+  window:
+    start: "11:30"
+    end: "13:00"
+  
+  # Risk limits
+  risk:
+    max-position: 1
+    daily-loss-limit: 4500
+  
+  # Python bridge
+  bridge:
+    url: "http://localhost:8888"
+    timeout-ms: 3000
+
+# Telegram bot configuration
+telegram:
+  bot-token: "YOUR_TELEGRAM_BOT_TOKEN"
+  chat-id: "YOUR_TELEGRAM_CHAT_ID"
+  enabled: true
+
+# Shioaji credentials (used by Python bridge)
+shioaji:
+  api-key: "YOUR_SHIOAJI_API_KEY"
+  secret-key: "YOUR_SHIOAJI_SECRET_KEY"
+  ca-path: "/path/to/Sinopac.pfx"
+  ca-password: "YOUR_CA_PASSWORD"
+  # Set to true for paper trading
+  simulation: true
+
+# Ollama configuration
+ollama:
+  url: "http://localhost:11434"
+  model: "llama3.1:8b-instruct-q5_K_M"
+
+logging:
+  level:
+    root: INFO
+    tw.gc.mtxfbot: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/mtxf-bot.log
+    max-size: 10MB
+    max-history: 7
