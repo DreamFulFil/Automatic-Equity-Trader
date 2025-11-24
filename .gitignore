@@ -1,36 +1,58 @@
-# .gitignore for MTXF Bot
-
-# Maven
+HELP.md
 target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
 
-# Python
-python/venv/
-python/__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
 
-# Logs
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### macOS ###
+.DS_Store
+
+### Logs ###
 logs/
 *.log
 
-# IDE
-.idea/
-.vscode/
-*.iml
-.DS_Store
+### Environment files ###
+.env
+.env.local
+.env.production
 
-# Credentials (NEVER commit these!)
-src/main/resources/application-prod.yml
+### Certificates ###
 *.pfx
 *.p12
+*.jks
+*.keystore
 
-# Sensitive config
-application-local.yml
+### Temporary files ###
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
