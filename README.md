@@ -246,3 +246,28 @@ fish start-lunch-bot.fish
 **Read**: [FISH-SHELL-GUIDE.md](FISH-SHELL-GUIDE.md) for complete Fish documentation.
 
 ---
+
+---
+
+## 🔧 Lombok @Slf4j Fix
+
+**Issue**: Project wouldn't compile with `@Slf4j` on Java 21.0.8
+
+**Solution**: Using Lombok edge-SNAPSHOT version for Java 21 compatibility
+
+See [LOMBOK-FIX.md](LOMBOK-FIX.md) for details.
+
+**Build Commands**:
+```fish
+# Clean build
+mvn clean compile
+
+# Full package
+mvn package -DskipTests
+
+# Force update (if needed)
+mvn clean compile -U
+```
+
+**Status**: ✅ FIXED - Project now compiles successfully with all Lombok annotations!
+
