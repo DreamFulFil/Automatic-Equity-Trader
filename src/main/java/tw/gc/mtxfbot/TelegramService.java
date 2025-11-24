@@ -11,35 +11,57 @@ import java.nio.charset.StandardCharsets;
 @Service
 @Slf4j
 public class TelegramService {
-    
+
     private final RestTemplate restTemplate = new RestTemplate();
-    
+
     @Value("${telegram.bot-token}")
     private String botToken;
-    
+
     @Value("${telegram.chat-id}")
     private String chatId;
-    
+
     @Value("${telegram.enabled}")
     private boolean enabled;
-    
+
     public void sendMessage(String message) {
         if (!enabled) {
-            log.info("📱 [Telegram disabled] {}", message);
+            log.info("[Telegram disabled] {}", message);
             return;
         }
-        
+
         try {
-            String encodedMessage = URLEncoder.encode(message, StandardCharsets.UTF_8);
+            // Escape special characters for MarkdownV2
+            String safeMessage = message
+                    .replace("\\", "\\\\")
+                    .replace("_", "\\_")
+                    .replace("*", "\\*")
+                    .replace("[", "\\[")
+                    .replace("]", "\\]")
+                    .replace("(", "\\(")
+                    .replace(")", "\\)")
+                    .replace("~", "\\~")
+                    .replace("`", "\\`")
+                    .replace(">", "\\>")
+                    .replace("#", "\\#")
+                    .replace("+", "\\+")
+                    .replace("-", "\\-")
+                    .replace("=", "\\=")
+                    .replace("|", "\\|")
+                    .replace("{", "\\{")
+                    .replace("}", "\\}")
+                    .replace(".", "\\.")
+                    .replace("!", "\\!");
+
+            String encodedMessage = URLEncoder.encode(safeMessage, StandardCharsets.UTF_8);
             String url = String.format(
-                    "https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s",
+                    "https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s&parse_mode=MarkdownV2",
                     botToken, chatId, encodedMessage);
-            
+
             restTemplate.getForObject(url, String.class);
-            log.debug("✅ Telegram message sent");
-            
+            log.debug("Telegram message sent");
+
         } catch (Exception e) {
-            log.error("❌ Failed to send Telegram message", e);
+            log.error("Failed to send Telegram message", e);
         }
     }
 }
