@@ -10,14 +10,77 @@ import shioaji as sj
 import requests
 import yaml
 import sys
+import os
+import re
+import base64
+import hashlib
 from datetime import datetime
 import feedparser
+from Crypto.Cipher import DES
 
 app = FastAPI()
 
-# Load config
-with open('../src/main/resources/application.yml', 'r') as f:
-    config = yaml.safe_load(f)
+# Jasypt PBEWithMD5AndDES decryption
+def jasypt_decrypt(encrypted_value: str, password: str) -> str:
+    """Decrypt Jasypt PBEWithMD5AndDES encrypted value"""
+    # Decode base64
+    encrypted_bytes = base64.b64decode(encrypted_value)
+    
+    # Salt is first 8 bytes
+    salt = encrypted_bytes[:8]
+    ciphertext = encrypted_bytes[8:]
+    
+    # PBE key derivation: iterate MD5 1000 times (Jasypt default)
+    password_bytes = password.encode('utf-8')
+    key_material = password_bytes + salt
+    
+    for _ in range(1000):
+        key_material = hashlib.md5(key_material).digest()
+    
+    # Split into key (8 bytes) and IV (8 bytes)
+    key = key_material[:8]
+    iv = key_material[8:16]
+    
+    # Decrypt using DES-CBC
+    cipher = DES.new(key, DES.MODE_CBC, iv)
+    decrypted = cipher.decrypt(ciphertext)
+    
+    # Remove PKCS5 padding
+    pad_len = decrypted[-1]
+    if isinstance(pad_len, int) and 1 <= pad_len <= 8:
+        return decrypted[:-pad_len].decode('utf-8')
+    return decrypted.decode('utf-8')
+
+def decrypt_config_value(value, password: str):
+    """Decrypt value if it's ENC() wrapped, otherwise return as-is"""
+    if isinstance(value, str):
+        match = re.match(r'^ENC\((.+)\)$', value)
+        if match:
+            return jasypt_decrypt(match.group(1), password)
+    return value
+
+def load_config_with_decryption(password: str):
+    """Load application.yml and decrypt ENC() values"""
+    with open('../src/main/resources/application.yml', 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Decrypt shioaji credentials
+    if 'shioaji' in config:
+        for key in ['api-key', 'secret-key', 'ca-password', 'person-id']:
+            if key in config['shioaji']:
+                config['shioaji'][key] = decrypt_config_value(config['shioaji'][key], password)
+    
+    return config
+
+# Get Jasypt password from environment variable
+JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
+if not JASYPT_PASSWORD:
+    print("❌ JASYPT_PASSWORD environment variable not set!")
+    sys.exit(1)
+
+# Load config with decryption
+config = load_config_with_decryption(JASYPT_PASSWORD)
+print("✅ Configuration loaded and decrypted")
 
 # Initialize Shioaji
 api = sj.Shioaji()
