@@ -14,9 +14,19 @@ import tw.gc.mtxfbot.config.TradingProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.LocalTime;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * MTXF Lunch-Break Trading Engine (2025 Optimal Timing)
+ * 
+ * Timing Strategy:
+ * - Signal calculation (price/momentum/volume/confidence) → every 30 seconds
+ * - News veto (Llama 3.1 8B via Python bridge) → every 10 minutes only
+ * - Trading window: 11:30 - 13:00 Taipei time
+ * - Auto-flatten and shutdown at 13:00
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -28,11 +38,18 @@ public class TradingEngine {
     private final TradingProperties tradingProperties;
     private final ApplicationContext applicationContext;
     
+    // Position and P&L tracking
     private final AtomicInteger currentPosition = new AtomicInteger(0);
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
     private final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
+    
+    // State flags
     private volatile boolean emergencyShutdown = false;
     private volatile boolean marketDataConnected = false;
+    
+    // News veto cache - updated every 10 minutes, used by all signal checks
+    private final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
+    private final AtomicReference<String> cachedNewsReason = new AtomicReference<>("");
     
     @PostConstruct
     public void initialize() {
@@ -40,7 +57,8 @@ public class TradingEngine {
         telegramService.sendMessage("🚀 MTXF Lunch Bot started\n" +
                 "Trading window: " + tradingProperties.getWindow().getStart() + " - " + tradingProperties.getWindow().getEnd() + "\n" +
                 "Max position: " + tradingProperties.getRisk().getMaxPosition() + " contract\n" +
-                "Daily loss limit: " + tradingProperties.getRisk().getDailyLossLimit() + " TWD");
+                "Daily loss limit: " + tradingProperties.getRisk().getDailyLossLimit() + " TWD\n" +
+                "Signal interval: 30s | News check: 10min");
         
         try {
             String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
@@ -56,7 +74,11 @@ public class TradingEngine {
         return tradingProperties.getBridge().getUrl();
     }
     
-    @Scheduled(fixedRate = 60000)
+    /**
+     * Main trading loop - runs every 30 seconds
+     * Signal calculation happens every call, news veto only every 10 minutes
+     */
+    @Scheduled(fixedRate = 30000)
     public void tradingLoop() {
         if (emergencyShutdown || !marketDataConnected) return;
         
@@ -64,13 +86,22 @@ public class TradingEngine {
         LocalTime start = LocalTime.parse(tradingProperties.getWindow().getStart());
         LocalTime end = LocalTime.parse(tradingProperties.getWindow().getEnd());
         
+        // Only trade during 11:30 - 13:00 window
         if (now.isBefore(start) || now.isAfter(end)) {
             return;
         }
         
         try {
+            // Check risk limits every cycle
             checkRiskLimits();
             
+            // Update news veto cache every 10 minutes (when minute % 10 == 0 and second < 30)
+            // This ensures it runs once per 10-minute window, not twice
+            if (now.getMinute() % 10 == 0 && now.getSecond() < 30) {
+                updateNewsVetoCache();
+            }
+            
+            // Signal check and trade execution every 30 seconds
             if (currentPosition.get() == 0) {
                 evaluateEntry();
             } else {
@@ -80,6 +111,38 @@ public class TradingEngine {
         } catch (Exception e) {
             log.error("❌ Trading loop error", e);
             telegramService.sendMessage("⚠️ Trading loop error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Update news veto cache - calls Ollama via Python bridge
+     * Only called every 10 minutes to avoid false vetoes from transient news
+     */
+    private void updateNewsVetoCache() {
+        try {
+            log.info("📰 Checking news veto (10-min interval)...");
+            String newsJson = restTemplate.getForObject(getBridgeUrl() + "/signal/news", String.class);
+            JsonNode newsData = objectMapper.readTree(newsJson);
+            
+            boolean veto = newsData.path("news_veto").asBoolean(false);
+            String reason = newsData.path("news_reason").asText("");
+            double score = newsData.path("news_score").asDouble(0.5);
+            
+            cachedNewsVeto.set(veto);
+            cachedNewsReason.set(reason);
+            
+            if (veto) {
+                log.warn("🚫 News veto ACTIVE: {} (score: {})", reason, score);
+                telegramService.sendMessage(String.format(
+                        "🚫 NEWS VETO ACTIVE\nReason: %s\nScore: %.2f\nNo new entries until next check",
+                        reason, score));
+            } else {
+                log.info("✅ News check passed (score: {})", score);
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ News veto check failed: {}", e.getMessage());
+            // On error, keep previous veto state (fail-safe)
         }
     }
     
@@ -95,22 +158,26 @@ public class TradingEngine {
         }
     }
     
+    /**
+     * Evaluate entry - uses cached news veto + real-time signal
+     */
     private void evaluateEntry() throws Exception {
+        // Check cached news veto first (updated every 10 min)
+        if (cachedNewsVeto.get()) {
+            log.debug("🚫 News veto active (cached) - no entry. Reason: {}", cachedNewsReason.get());
+            return;
+        }
+        
+        // Get real-time signal (price/momentum/volume/confidence)
         String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
         JsonNode signal = objectMapper.readTree(signalJson);
         
-        boolean newsVeto = signal.path("news_veto").asBoolean(false);
         String direction = signal.path("direction").asText("NEUTRAL");
         double confidence = signal.path("confidence").asDouble(0.0);
         double currentPrice = signal.path("current_price").asDouble(0.0);
         
-        if (newsVeto) {
-            log.info("🚫 News veto active - no entry");
-            return;
-        }
-        
         if (confidence < 0.65) {
-            log.debug("⏸️ Low confidence: {}", confidence);
+            log.debug("⏸️ Low confidence: {:.2f}", confidence);
             return;
         }
         
@@ -121,6 +188,9 @@ public class TradingEngine {
         }
     }
     
+    /**
+     * Evaluate exit - real-time signal only (no news veto needed for exits)
+     */
     private void evaluateExit() throws Exception {
         String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
         JsonNode signal = objectMapper.readTree(signalJson);
@@ -128,11 +198,11 @@ public class TradingEngine {
         double currentPrice = signal.path("current_price").asDouble(0.0);
         int pos = currentPosition.get();
         double entry = entryPrice.get();
-        double unrealizedPnL = (currentPrice - entry) * pos * 50; // MTXF tick value
+        double unrealizedPnL = (currentPrice - entry) * pos * 50; // MTXF tick value = 50 TWD
         
         // Exit only on: stop-loss OR explicit exit signal (trend reversal)
         // NO PROFIT TARGETS - let winners run until reversal!
-        boolean stopLoss = unrealizedPnL < -500; // -10 points stop
+        boolean stopLoss = unrealizedPnL < -500; // -10 points stop = -500 TWD
         boolean exitSignal = signal.path("exit_signal").asBoolean(false);
         
         if (stopLoss) {
@@ -200,6 +270,10 @@ public class TradingEngine {
         }
     }
     
+    /**
+     * Auto-flatten at 13:00 - end of trading window
+     * Flattens positions, sends summary, shuts down all services
+     */
     @Scheduled(cron = "0 0 13 * * MON-FRI")
     public void autoFlatten() {
         log.info("⏰ 13:00 Auto-flatten triggered");
