@@ -124,11 +124,34 @@ echo -e "$YELLOW📱 Check your Telegram for alerts.$NC"
 echo ""
 
 java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+set JAVA_EXIT_CODE $status
 
-# Cleanup on exit (Fish trap)
+# Java has exited (either normally at 13:00 or due to error)
+echo ""
+echo "☕ Java application exited with code: $JAVA_EXIT_CODE"
+
+# Cleanup: Stop Python bridge
+echo "🐍 Stopping Python bridge (PID: $PYTHON_PID)..."
+kill $PYTHON_PID 2>/dev/null
+sleep 2
+
+# Verify Python stopped
+if kill -0 $PYTHON_PID 2>/dev/null
+    echo "Force killing Python bridge..."
+    kill -9 $PYTHON_PID 2>/dev/null
+end
+
+# Stop Ollama service (optional - keeps system clean)
+echo "🦙 Stopping Ollama service..."
+pkill -x ollama 2>/dev/null
+
+echo "✅ All services stopped. Goodbye!"
+
+# Cleanup on manual interrupt (Ctrl+C)
 function cleanup --on-signal INT --on-signal TERM
     echo ""
-    echo "🛑 Shutting down..."
+    echo "🛑 Manual shutdown requested..."
     kill $PYTHON_PID 2>/dev/null
+    pkill -x ollama 2>/dev/null
     exit
 end

@@ -15,7 +15,7 @@ This is a **production-ready** trading system that has been battle-tested in Tai
 ```
 ┌─────────────────┐      REST API       ┌──────────────────┐
 │  Java Trading   │◄───────────────────►│  Python Bridge   │
-│     Engine      │   (port 8080/8888)  │   (FastAPI)      │
+│     Engine      │   (port 16350/8888) │   (FastAPI)      │
 │  Spring Boot    │                     │                  │
 │  + Risk Mgmt    │                     │  + Shioaji API   │
 │  + Telegram     │                     │  + Ollama Client │
@@ -35,12 +35,13 @@ This is a **production-ready** trading system that has been battle-tested in Tai
 
 ### What It Does
 
-1. **11:25 AM**: Cron launches bot (5 min before market)
+1. **11:15 AM**: Cron launches bot (15 min before trading window)
 2. **11:30 AM**: Trading window opens, bot starts monitoring MTXF price
-3. **Every 10 min**: AI scrapes Taiwan financial news (MoneyDJ, UDN) and vetoes trades if major events detected
+3. **Every signal check**: AI scrapes Taiwan financial news (MoneyDJ, UDN) and vetoes trades if major events detected
 4. **Trade Execution**: Places orders via Sinopac Shioaji API when conditions met
-5. **13:00 PM**: Auto-flattens all positions, stops trading
-6. **Real-time**: Every order, fill, P&L sent to your Telegram
+5. **13:00 PM**: Auto-flattens all positions, sends daily summary to Telegram
+6. **13:00 PM**: Java app shuts down Python bridge and Ollama, then exits
+7. **Real-time**: Every order, fill, P&L sent to your Telegram
 
 ### Key Features
 
