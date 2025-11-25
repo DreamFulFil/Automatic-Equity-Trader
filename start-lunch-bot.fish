@@ -1,8 +1,17 @@
 #!/usr/bin/env fish
 ###############################################################################
 # MTXF Lunch Bot Startup Script (Fish Shell)
-# Double-click to run or: fish start-lunch-bot.fish
+# Usage: fish start-lunch-bot.fish <jasypt-secret>
 ###############################################################################
+
+# Check for required secret parameter
+if test (count $argv) -lt 1
+    echo "❌ Usage: fish start-lunch-bot.fish <jasypt-secret>"
+    echo "   The secret is required to decrypt application properties."
+    exit 1
+end
+
+set JASYPT_SECRET $argv[1]
 
 set BOT_DIR (dirname (status --current-filename))
 cd $BOT_DIR
@@ -113,7 +122,7 @@ echo -e "$YELLOW📊 Bot is running! Press Ctrl+C to stop.$NC"
 echo -e "$YELLOW📱 Check your Telegram for alerts.$NC"
 echo ""
 
-java -jar target/mtxf-bot-1.0.0.jar
+java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 
 # Cleanup on exit (Fish trap)
 function cleanup --on-signal INT --on-signal TERM
