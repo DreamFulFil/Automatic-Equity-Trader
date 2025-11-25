@@ -1,45 +1,40 @@
 package tw.gc.mtxfbot;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.mtxfbot.config.TelegramProperties;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class TelegramService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
-
-    @Value("${telegram.bot-token}")
-    private String botToken;
-
-    @Value("${telegram.chat-id}")
-    private String chatId;
-
-    @Value("${telegram.enabled}")
-    private boolean enabled;
+    private final RestTemplate restTemplate;
+    private final TelegramProperties telegramProperties;
 
     public void sendMessage(String message) {
-        if (!enabled) {
+        if (!telegramProperties.isEnabled()) {
             log.info("[Telegram disabled] {}", message);
             return;
         }
 
         try {
-            String url = String.format("https://api.telegram.org/bot%s/sendMessage", botToken);
+            String url = String.format("https://api.telegram.org/bot%s/sendMessage", 
+                    telegramProperties.getBotToken());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> body = new HashMap<>();
-            body.put("chat_id", chatId);
+            body.put("chat_id", telegramProperties.getChatId());
             body.put("text", message);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);

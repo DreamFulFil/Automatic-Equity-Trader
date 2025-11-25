@@ -4,15 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.mtxfbot.config.TradingProperties;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -21,24 +20,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class TradingEngine {
     
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
     private final TelegramService telegramService;
-    
-    @Value("${trading.window.start}")
-    private String windowStart;
-    
-    @Value("${trading.window.end}")
-    private String windowEnd;
-    
-    @Value("${trading.risk.max-position}")
-    private int maxPosition;
-    
-    @Value("${trading.risk.daily-loss-limit}")
-    private int dailyLossLimit;
-    
-    @Value("${trading.bridge.url}")
-    private String bridgeUrl;
+    private final TradingProperties tradingProperties;
     
     private final AtomicInteger currentPosition = new AtomicInteger(0);
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
@@ -50,12 +35,12 @@ public class TradingEngine {
     public void initialize() {
         log.info("🚀 MTXF Lunch Bot initializing...");
         telegramService.sendMessage("🚀 MTXF Lunch Bot started\n" +
-                "Trading window: " + windowStart + " - " + windowEnd + "\n" +
-                "Max position: " + maxPosition + " contract\n" +
-                "Daily loss limit: " + dailyLossLimit + " TWD");
+                "Trading window: " + tradingProperties.getWindow().getStart() + " - " + tradingProperties.getWindow().getEnd() + "\n" +
+                "Max position: " + tradingProperties.getRisk().getMaxPosition() + " contract\n" +
+                "Daily loss limit: " + tradingProperties.getRisk().getDailyLossLimit() + " TWD");
         
         try {
-            String response = restTemplate.getForObject(bridgeUrl + "/health", String.class);
+            String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
             log.info("✅ Python bridge connected: {}", response);
             marketDataConnected = true;
         } catch (Exception e) {
@@ -64,13 +49,17 @@ public class TradingEngine {
         }
     }
     
+    private String getBridgeUrl() {
+        return tradingProperties.getBridge().getUrl();
+    }
+    
     @Scheduled(fixedRate = 60000)
     public void tradingLoop() {
         if (emergencyShutdown || !marketDataConnected) return;
         
         LocalTime now = LocalTime.now();
-        LocalTime start = LocalTime.parse(windowStart);
-        LocalTime end = LocalTime.parse(windowEnd);
+        LocalTime start = LocalTime.parse(tradingProperties.getWindow().getStart());
+        LocalTime end = LocalTime.parse(tradingProperties.getWindow().getEnd());
         
         if (now.isBefore(start) || now.isAfter(end)) {
             return;
@@ -93,7 +82,7 @@ public class TradingEngine {
     
     private void checkRiskLimits() {
         double currentPnL = dailyPnL.get();
-        if (currentPnL <= -dailyLossLimit) {
+        if (currentPnL <= -tradingProperties.getRisk().getDailyLossLimit()) {
             log.error("🛑 DAILY LOSS LIMIT HIT: {} TWD", currentPnL);
             telegramService.sendMessage(String.format(
                     "🛑 EMERGENCY SHUTDOWN\nDaily loss: %.0f TWD\nFlattening all positions!", 
@@ -104,7 +93,7 @@ public class TradingEngine {
     }
     
     private void evaluateEntry() throws Exception {
-        String signalJson = restTemplate.getForObject(bridgeUrl + "/signal", String.class);
+        String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
         JsonNode signal = objectMapper.readTree(signalJson);
         
         boolean newsVeto = signal.path("news_veto").asBoolean(false);
@@ -130,7 +119,7 @@ public class TradingEngine {
     }
     
     private void evaluateExit() throws Exception {
-        String signalJson = restTemplate.getForObject(bridgeUrl + "/signal", String.class);
+        String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
         JsonNode signal = objectMapper.readTree(signalJson);
         
         double currentPrice = signal.path("current_price").asDouble(0.0);
@@ -162,7 +151,8 @@ public class TradingEngine {
             
             log.info("📤 Sending order: {}", orderJson);
             String result = restTemplate.postForObject(
-                    bridgeUrl + "/order", orderJson, String.class);
+                    getBridgeUrl() + "/order", orderJson, String.class);
+            log.debug("📥 Order response: {}", result);
             
             if ("BUY".equals(action)) {
                 currentPosition.addAndGet(quantity);
@@ -187,7 +177,7 @@ public class TradingEngine {
         
         String action = pos > 0 ? "SELL" : "BUY";
         try {
-            String signalJson = restTemplate.getForObject(bridgeUrl + "/signal", String.class);
+            String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
             JsonNode signal = objectMapper.readTree(signalJson);
             double currentPrice = signal.path("current_price").asDouble(0.0);
             
