@@ -48,6 +48,11 @@ This is a **production-ready** trading system that has been battle-tested in Tai
 
 - 🎯 **Single Contract Trading**: Max 1 MTXF position (minimal capital ~100K TWD)
 - 🛡️ **Hard Risk Limits**: Daily loss cap at -4,500 TWD → emergency shutdown
+- 📅 **Weekly Loss Limit**: -15,000 TWD → pauses trading until next Monday
+- ⏰ **45-Minute Hard Exit**: Force-flatten positions held too long
+- 📅 **Earnings Blackout**: Auto-disable trading on high-volatility days
+- 📱 **Telegram Commands**: `/status`, `/pause`, `/resume`, `/close`
+- 🔄 **Auto-Reconnect**: Shioaji wrapper with 5 retries + exponential backoff
 - 🚀 **Unlimited Upside**: No profit caps, let winners run
 - 📱 **Telegram Alerts**: Every event streamed to your phone (emoji bug fixed!)
 - 🐟 **Fish Shell Native**: First-class support (no bash/zsh quirks)
@@ -274,8 +279,18 @@ trading:
   risk:
     max-position: 1              # Maximum MTXF contracts (recommended: 1)
     daily-loss-limit: 4500       # TWD - triggers emergency shutdown (-4,500 TWD)
+    weekly-loss-limit: 15000     # TWD - pauses trading until next Monday
+    max-hold-minutes: 45         # Force-flatten positions older than 45 min
     # NO daily-profit-cap → unlimited upside!
     # NO monthly-profit-cap → let winners run!
+
+  # Earnings blackout dates - bot stays flat on these days
+  # Format: YYYY-MM-DD (Taiwan company earnings, FOMC, major events)
+  earnings-blackout-dates:
+    - "2026-01-16"  # TSMC Q4 2025 earnings
+    - "2026-04-17"  # TSMC Q1 2026 earnings
+    - "2026-07-18"  # TSMC Q2 2026 earnings
+    - "2026-10-17"  # TSMC Q3 2026 earnings
 
   # Python bridge connection
   bridge:
@@ -689,9 +704,79 @@ P&L: \+1,200 TWD \(50 points \* 50 TWD/point\)
 |---------|-------|----------|
 | **Max Position** | 1 contract | Cannot open more than 1 MTXF position |
 | **Daily Loss Limit** | -4,500 TWD | Emergency shutdown, all positions closed |
+| **Weekly Loss Limit** | -15,000 TWD | Pauses trading until next Monday |
+| **45-Min Hard Exit** | 45 minutes | Force-flatten positions held too long |
 | **Trading Window** | 11:30 - 13:00 | No trades outside this window |
 | **Auto-Flatten** | 13:00 sharp | All positions closed at end of day |
 | **Max Profit** | ∞ (unlimited) | No profit caps, let winners run |
+
+### Telegram Command Interface
+
+Control your bot remotely via Telegram commands:
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Show current position, today P&L, week P&L, bot state |
+| `/pause` | Pause new entries (still flattens at 13:00) |
+| `/resume` | Re-enable trading |
+| `/close` | Immediately flatten all positions |
+
+**Example `/status` response:**
+```
+📊 BOT STATUS
+━━━━━━━━━━━━━━━━
+State: 🟢 ACTIVE
+Position: 1 @ 22450 (held 12 min)
+Today P&L: +800 TWD
+Week P&L: +3200 TWD
+News Veto: ✅ Clear
+━━━━━━━━━━━━━━━━
+Commands: /pause /resume /close
+```
+
+### Earnings Blackout Dates
+
+Configure high-volatility days when the bot should stay flat:
+
+```yaml
+# In application.yml
+trading:
+  earnings-blackout-dates:
+    - "2026-01-16"  # TSMC Q4 2025 earnings
+    - "2026-04-17"  # TSMC Q1 2026 earnings
+    - "2026-07-18"  # TSMC Q2 2026 earnings
+    - "2026-10-17"  # TSMC Q3 2026 earnings
+```
+
+On blackout days, the bot sends a startup message but makes no trades.
+
+### Weekly Loss Limit
+
+Protects against bad weeks:
+
+- **Limit**: -15,000 TWD (configurable in `application.yml`)
+- **Trigger**: When weekly P&L reaches the limit
+- **Action**: Pauses all new entries until next Monday
+- **Persistence**: Weekly P&L saved to `logs/weekly-pnl.txt` (survives restarts)
+- **Reset**: Automatically resets to 0 every Monday
+
+### 45-Minute Hard Exit
+
+Prevents holding losing positions too long:
+
+- **Max Hold Time**: 45 minutes (configurable)
+- **Check Frequency**: Every 30 seconds
+- **Action**: Force-flatten with Telegram notification
+- **Reason Logged**: "45-minute time limit"
+
+### Shioaji Auto-Reconnect
+
+Bulletproof connection handling:
+
+- **Max Retries**: 5 attempts
+- **Backoff**: Exponential (2s, 4s, 8s, 16s, 32s)
+- **Auto-Recovery**: Reconnects on order failure
+- **Thread-Safe**: Uses lock for reconnection
 
 ### Risk Management Logic
 
@@ -743,7 +828,11 @@ P&L: \+1,200 TWD \(50 points \* 50 TWD/point\)
 
 - [ ] Tested in `simulation: true` mode for minimum 2 weeks
 - [ ] Verified Telegram alerts work (all message types)
+- [ ] Tested Telegram commands (`/status`, `/pause`, `/resume`, `/close`)
 - [ ] Confirmed daily loss limit triggers correctly (test with small limit)
+- [ ] Confirmed weekly loss limit triggers correctly
+- [ ] Tested 45-minute hard exit (manually hold position)
+- [ ] Added earnings blackout dates for upcoming quarter
 - [ ] Funded Sinopac account with at least 100,000 TWD
 - [ ] Understand MTXF margin requirements (~40K per contract)
 - [ ] Know how to manually close positions in Sinopac platform
