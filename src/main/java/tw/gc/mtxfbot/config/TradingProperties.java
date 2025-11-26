@@ -16,8 +16,8 @@ public class TradingProperties {
     private Risk risk = new Risk();
     private Bridge bridge = new Bridge();
     
-    /** Earnings blackout dates - bot stays flat on these days */
-    private List<String> earningsBlackoutDates = new ArrayList<>();
+    // Note: Earnings blackout dates are now loaded from config/earnings-blackout-dates.json
+    // See TradingEngine.loadEarningsBlackoutDates()
     
     @Data
     public static class Window {

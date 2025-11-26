@@ -57,7 +57,6 @@ class TradingEngineTest {
         when(tradingProperties.getWindow()).thenReturn(window);
         when(tradingProperties.getRisk()).thenReturn(risk);
         when(tradingProperties.getBridge()).thenReturn(bridge);
-        when(tradingProperties.getEarningsBlackoutDates()).thenReturn(java.util.Collections.emptyList());
         when(window.getStart()).thenReturn("11:30");
         when(window.getEnd()).thenReturn("13:00");
         when(risk.getMaxPosition()).thenReturn(1);

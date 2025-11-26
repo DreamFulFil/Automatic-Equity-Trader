@@ -12,6 +12,7 @@ Lightweight bridge between Java trading engine and market data/AI
 Bulletproof Features:
 - Shioaji auto-reconnect (max 5 attempts, exponential backoff)
 - Graceful shutdown on /shutdown endpoint
+- Auto-scrape earnings dates from Yahoo Finance (--scrape-earnings)
 """
 
 from fastapi import FastAPI
@@ -26,6 +27,8 @@ import time
 import base64
 import hashlib
 import threading
+import json
+import argparse
 from datetime import datetime, timedelta
 from collections import deque
 import statistics
@@ -450,7 +453,124 @@ def place_order(order: dict):
     
     return shioaji.place_order(action, quantity, price)
 
+# ============================================================================
+# EARNINGS BLACKOUT SCRAPER
+# ============================================================================
+
+def scrape_earnings_dates():
+    """
+    Scrape Yahoo Finance for earnings dates of major Taiwan stocks.
+    Saves sorted dates to config/earnings-blackout-dates.json
+    
+    Run standalone: python3 bridge.py --scrape-earnings
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    config_dir = os.path.join(project_root, 'config')
+    output_file = os.path.join(config_dir, 'earnings-blackout-dates.json')
+    
+    # Major Taiwan stocks to track (Yahoo Finance tickers)
+    TICKERS = [
+        'TSM',      # TSMC (ADR)
+        '2330.TW',  # TSMC (Taiwan)
+        '2454.TW',  # MediaTek
+        '2317.TW',  # Hon Hai (Foxconn)
+        'UMC',      # UMC (ADR)
+        '2303.TW',  # UMC (Taiwan)
+        'ASX',      # ASE Technology (ADR)
+        '3711.TW',  # ASE (Taiwan)
+        '2412.TW',  # Chunghwa Telecom
+        '2882.TW',  # Cathay Financial
+        '2881.TW',  # Fubon Financial
+        '1301.TW',  # Formosa Plastics
+        '2002.TW',  # China Steel
+    ]
+    
+    print(f"📅 Scraping earnings dates for {len(TICKERS)} stocks...")
+    
+    earnings_dates = set()
+    today = datetime.now().date()
+    one_year_later = today + timedelta(days=365)
+    
+    for ticker in TICKERS:
+        try:
+            # Yahoo Finance earnings calendar API
+            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=calendarEvents"
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                print(f"  ⚠️ {ticker}: HTTP {response.status_code}")
+                continue
+            
+            data = response.json()
+            calendar = data.get('quoteSummary', {}).get('result', [{}])[0].get('calendarEvents', {})
+            earnings = calendar.get('earnings', {})
+            
+            # Get earnings date(s)
+            earnings_date_raw = earnings.get('earningsDate', [])
+            for ed in earnings_date_raw:
+                if 'raw' in ed:
+                    ts = ed['raw']
+                    dt = datetime.fromtimestamp(ts).date()
+                    # Only include dates within next 365 days
+                    if today <= dt <= one_year_later:
+                        earnings_dates.add(dt.isoformat())
+                        print(f"  ✅ {ticker}: {dt.isoformat()}")
+            
+            # Be nice to Yahoo API
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"  ❌ {ticker}: {e}")
+            continue
+    
+    # Load existing dates (graceful: keep old if scrape fails)
+    existing_dates = set()
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, 'r') as f:
+                existing = json.load(f)
+                existing_dates = set(existing.get('dates', []))
+        except:
+            pass
+    
+    # Merge new dates with existing (never lose data)
+    all_dates = earnings_dates.union(existing_dates)
+    
+    # Filter to only future dates
+    future_dates = sorted([d for d in all_dates if d >= today.isoformat()])
+    
+    # Save to JSON
+    os.makedirs(config_dir, exist_ok=True)
+    result = {
+        "last_updated": datetime.now().isoformat(),
+        "source": "Yahoo Finance",
+        "tickers_checked": TICKERS,
+        "dates": future_dates
+    }
+    
+    with open(output_file, 'w') as f:
+        json.dump(result, f, indent=2)
+    
+    print(f"\n✅ Saved {len(future_dates)} blackout dates to {output_file}")
+    print(f"   Next dates: {future_dates[:5]}...")
+    
+    return future_dates
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='MTXF Trading Bridge')
+    parser.add_argument('--scrape-earnings', action='store_true', 
+                        help='Scrape Yahoo Finance for earnings dates and exit')
+    args = parser.parse_args()
+    
+    if args.scrape_earnings:
+        # Standalone scraper mode - no FastAPI, no Shioaji
+        scrape_earnings_dates()
+        sys.exit(0)
+    
+    # Normal FastAPI server mode
     import uvicorn
     print("🐍 Python bridge starting on port 8888...")
     uvicorn.run(app, host="0.0.0.0", port=8888, log_level="info")

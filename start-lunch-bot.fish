@@ -97,6 +97,17 @@ if not test -f "target/mtxf-bot-1.0.0.jar"
 end
 echo -e "$GREEN✅ Java app built$NC"
 
+# Step 5.5: Ensure earnings blackout dates exist
+if not test -f "config/earnings-blackout-dates.json"
+    echo "📅 Scraping initial earnings blackout dates..."
+    cd python
+    source venv/bin/activate.fish
+    python3 bridge.py --scrape-earnings
+    cd ..
+else
+    echo -e "$GREEN📅 Earnings blackout dates loaded$NC"
+end
+
 # Step 6: Create logs directory
 mkdir -p logs
 
