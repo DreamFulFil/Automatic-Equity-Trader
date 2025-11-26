@@ -1,104 +1,101 @@
-# MTXF Lunch-Break Trading Bot - Copilot Instructions
+# MTXF Lunch-Break Trading Bot - Instructions
 
 ## Project Overview
-This is a **production Taiwan Mini-TXF (MTXF) day-trading bot** for the 11:30-13:00 lunch session.
-- **Owner:** DreamFulFil
-- **Live Account:** 100K TWD
-- **Status:** Production-ready (Score: 100/100)
+**Production Taiwan Mini-TXF (MTXF) day-trading bot** for 11:30-13:00 lunch session.
+- **Owner:** DreamFulFil | **Live Account:** 100K TWD | **Status:** Production-ready (100/100)
 
 ## Architecture
 ```
-┌─────────────────┐      REST API       ┌──────────────────┐
-│  Java Trading   │◄───────────────────►│  Python Bridge   │
-│     Engine      │   (port 16350/8888) │   (FastAPI)      │
-│  Spring Boot    │                     │  + Shioaji API   │
-│  + Risk Mgmt    │                     │  + Ollama Client │
-└─────────────────┘                     └──────────────────┘
+Java (Spring Boot :16350) ◄──REST──► Python (FastAPI :8888) ──► Shioaji + Ollama
 ```
 
-## Critical Timing Rules (DO NOT CHANGE)
-| Component | Interval | Rationale |
-|-----------|----------|-----------|
-| Signal calculation | **30 seconds** | `@Scheduled(fixedRate = 30000)` |
-| News veto (Ollama) | **10 minutes** | `minute % 10 == 0 && second < 30` |
+---
+
+## 🚨 IMMUTABLE RULES
+
+### Timing (DO NOT CHANGE)
+| Component | Value | Code |
+|-----------|-------|------|
+| Signal check | **30s** | `@Scheduled(fixedRate = 30000)` |
+| News veto | **10min** | `minute % 10 == 0 && second < 30` |
 | Trading window | **11:30-13:00** | Asia/Taipei timezone |
-| Auto-flatten | **13:00** | `@Scheduled(cron = "0 0 13 * * MON-FRI")` |
+| Auto-flatten | **13:00** | `cron = "0 0 13 * * MON-FRI"` |
 
-## Risk Controls (IMMUTABLE)
-- `max-position: 1` - Single contract only
-- `daily-loss-limit: 4500` TWD - Emergency shutdown trigger
-- **NO profit caps** - Let winners run unlimited
-- Auto-flatten at 13:00 regardless of P&L
+### Risk Controls
+- `max-position: 1` (single contract)
+- `daily-loss-limit: 4500` TWD (emergency shutdown)
+- **NO profit caps** - let winners run unlimited
 
-## Security Requirements
-- All credentials MUST use Jasypt encryption: `ENC(...)`
-- Never commit plain-text tokens/passwords
-- `Sinopac.pfx` is gitignored (certificate file)
-- Jasypt password passed via CLI argument or env var
+### Security
+- All credentials: `ENC(...)` Jasypt encryption
+- Never commit plain-text tokens
+- `Sinopac.pfx` is gitignored
 
-## File Structure
-```
-├── src/main/java/tw/gc/mtxfbot/
-│   ├── TradingEngine.java    # Core trading loop (30s signals, 10min news)
-│   ├── TelegramService.java  # Alerts (plain JSON, no MarkdownV2)
-│   └── config/               # Properties classes
-├── python/
-│   └── bridge.py             # FastAPI + Shioaji + Ollama
-├── src/main/resources/
-│   └── application.yml       # Config with ENC() values
-├── start-lunch-bot.fish      # Launcher script
-└── logs/                     # Daily rolling logs
-```
+---
 
 ## Coding Guidelines
 
-### When modifying TradingEngine.java:
-1. Keep `@Scheduled(fixedRate = 30000)` - NEVER change to 60000 or other
-2. Keep news veto logic: `now.getMinute() % 10 == 0 && now.getSecond() < 30`
-3. Always use `TAIPEI_ZONE` for time checks
-4. Never add profit caps or take-profit logic
+### TradingEngine.java
+- Keep `fixedRate = 30000` - NEVER change
+- Always use `TAIPEI_ZONE` for time checks
+- Never add profit caps
 
-### When modifying bridge.py:
-1. Keep momentum strategy: 3-min + 5-min alignment
-2. Keep volume surge detection: `volume_ratio > 1.3`
-3. Keep `/signal/news` separate from `/signal`
-4. Resolve `ca-path` relative to project root
+### bridge.py
+- Keep 3-min + 5-min momentum alignment
+- Keep `/signal/news` separate from `/signal`
+- Resolve `ca-path` relative to project root
 
-### When modifying application.yml:
-1. All sensitive values MUST be `ENC(...)`
-2. Keep `simulation: false` for live trading
-3. Logging pattern: `logs/mtxf-bot-%d{yyyy-MM-dd}.log`
+### application.yml
+- All sensitive values: `ENC(...)`
+- Keep `simulation: false` for live
 
-## Crontab Setup
-```cron
-15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /path/to/mtxf-bot && ./start-lunch-bot.fish <secret>' >> /tmp/mtxf-bot-cron.log 2>&1
-```
+---
 
-## Common Commands
+## Shell Tools (Use Instead of Traditional Commands)
+| Task | Use | Avoid |
+|------|-----|-------|
+| Find files | `fd` | `find`, `ls -R` |
+| Search text | `rg` (ripgrep) | `grep`, `ag` |
+| Code structure | `ast-grep` | `grep`, `sed` |
+| JSON | `jq` | `python -m json.tool` |
+
+## File Reading Efficiency
+- **DO NOT** read entire files unnecessarily
+- **DO** use targeted reads with `offset`/`limit` around specific lines
+- Trust provided line numbers - be surgical, not exploratory
+
+## Code Compilation Verification
+- **ALWAYS** run build command after changes: `mvn compile` or `mvn clean compile`
+- **FIX** compilation errors before marking complete
+- Never consider task done without compilation verification
+
+## Import Statement Management
+🚨 **CRITICAL**: Add imports IMMEDIATELY when making code changes:
+- **NEVER** add code without corresponding imports FIRST
+- **ALWAYS** add imports in the SAME edit where you introduce new class usage
+- Check BOTH standard library (`java.io.*`, `java.nio.charset.*`) AND project imports
+- Forgetting imports wastes tokens on failed compilation cycles
+
+---
+
+## Quick Reference
 ```bash
 # Build
 mvn clean package -DskipTests
 
-# Run manually
-./start-lunch-bot.fish dreamfulfil
+# Run
+./start-lunch-bot.fish <jasypt-secret>
 
-# Test Python bridge
+# Test endpoints
 curl http://localhost:8888/health
 curl http://localhost:8888/signal
-
-# Encrypt a value with Jasypt
-echo -n "secret" | java -cp target/mtxf-bot-1.0.0.jar org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI password=<key> algorithm=PBEWithMD5AndDES input=<value>
 ```
 
-## Do NOT:
-- Change signal interval from 30 seconds
-- Add profit caps or take-profit logic
-- Commit plain-text credentials
-- Remove Jasypt encryption
-- Change timezone from Asia/Taipei
-- Skip the 13:00 auto-flatten
+## Crontab
+```
+15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /path/to/mtxf-bot && ./start-lunch-bot.fish <secret>' >> /tmp/mtxf-bot-cron.log 2>&1
+```
 
-## Last Audit: 2025-11-26
-- Score: 100/100
-- Status: Production-ready
-- All blockers resolved
+---
+
+**Last Audit:** 2025-11-26 | **Score:** 100/100
