@@ -35,7 +35,7 @@ telegram:
 shioaji:
   api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
   secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
-  ca-path: "${MTXF_CA_PATH:./Sinopac.pfx}"
+  ca-path: "Sinopac.pfx"
   ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
   person-id: "ENC(fNJEeUmwdyu2PCWL6YfIwbpLYY3XKmmI)"
   # Set to true for paper trading
