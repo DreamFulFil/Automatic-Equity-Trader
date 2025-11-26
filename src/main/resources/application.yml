@@ -17,8 +17,19 @@ trading:
   risk:
     max-position: 1
     daily-loss-limit: 4500
+    weekly-loss-limit: 15000  # Pause trading if weekly loss exceeds this
+    max-hold-minutes: 45      # Force-flatten positions older than 45 min
     # NO daily-profit-cap - let winners run!
     # NO monthly-profit-cap - unlimited upside!
+  
+  # Earnings blackout dates - bot stays flat on these days
+  # Format: YYYY-MM-DD (Taiwan company earnings, FOMC, major events)
+  earnings-blackout-dates:
+    - "2026-01-16"  # TSMC Q4 2025 earnings
+    - "2026-04-17"  # TSMC Q1 2026 earnings
+    - "2026-07-18"  # TSMC Q2 2026 earnings
+    - "2026-10-17"  # TSMC Q3 2026 earnings
+    # Add more dates as needed
   
   # Python bridge
   bridge:

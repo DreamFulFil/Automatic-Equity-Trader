@@ -8,6 +8,10 @@ Lightweight bridge between Java trading engine and market data/AI
 - Volume confirmation (institutional flow)
 - Fair-value anchor from overnight session
 - Exit on trend reversal only
+
+Bulletproof Features:
+- Shioaji auto-reconnect (max 5 attempts, exponential backoff)
+- Graceful shutdown on /shutdown endpoint
 """
 
 from fastapi import FastAPI
@@ -18,8 +22,10 @@ import yaml
 import sys
 import os
 import re
+import time
 import base64
 import hashlib
+import threading
 from datetime import datetime, timedelta
 from collections import deque
 import statistics
@@ -28,32 +34,28 @@ from Crypto.Cipher import DES
 
 app = FastAPI()
 
-# Jasypt PBEWithMD5AndDES decryption
+# ============================================================================
+# JASYPT DECRYPTION
+# ============================================================================
+
 def jasypt_decrypt(encrypted_value: str, password: str) -> str:
     """Decrypt Jasypt PBEWithMD5AndDES encrypted value"""
-    # Decode base64
     encrypted_bytes = base64.b64decode(encrypted_value)
-    
-    # Salt is first 8 bytes
     salt = encrypted_bytes[:8]
     ciphertext = encrypted_bytes[8:]
     
-    # PBE key derivation: iterate MD5 1000 times (Jasypt default)
     password_bytes = password.encode('utf-8')
     key_material = password_bytes + salt
     
     for _ in range(1000):
         key_material = hashlib.md5(key_material).digest()
     
-    # Split into key (8 bytes) and IV (8 bytes)
     key = key_material[:8]
     iv = key_material[8:16]
     
-    # Decrypt using DES-CBC
     cipher = DES.new(key, DES.MODE_CBC, iv)
     decrypted = cipher.decrypt(ciphertext)
     
-    # Remove PKCS5 padding
     pad_len = decrypted[-1]
     if isinstance(pad_len, int) and 1 <= pad_len <= 8:
         return decrypted[:-pad_len].decode('utf-8')
@@ -69,22 +71,18 @@ def decrypt_config_value(value, password: str):
 
 def load_config_with_decryption(password: str):
     """Load application.yml and decrypt ENC() values"""
-    # Get the directory where bridge.py is located (python/)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Project root is one level up from python/
     project_root = os.path.dirname(script_dir)
     config_path = os.path.join(project_root, 'src/main/resources/application.yml')
     
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    # Decrypt shioaji credentials
     if 'shioaji' in config:
         for key in ['api-key', 'secret-key', 'ca-password', 'person-id']:
             if key in config['shioaji']:
                 config['shioaji'][key] = decrypt_config_value(config['shioaji'][key], password)
         
-        # Resolve ca-path relative to project root
         ca_path = config['shioaji'].get('ca-path', 'Sinopac.pfx')
         if not os.path.isabs(ca_path):
             ca_path = os.path.join(project_root, ca_path)
@@ -93,6 +91,149 @@ def load_config_with_decryption(password: str):
         print(f"✅ CA certificate path: {config['shioaji']['ca-path']}")
     
     return config
+
+# ============================================================================
+# SHIOAJI AUTO-RECONNECT WRAPPER
+# ============================================================================
+
+class ShioajiWrapper:
+    """
+    Shioaji wrapper with auto-reconnect capability.
+    Retries login + subscription up to 5 times with exponential backoff.
+    """
+    
+    MAX_RETRIES = 5
+    BASE_BACKOFF_SECONDS = 2
+    
+    def __init__(self, config):
+        self.config = config
+        self.api = None
+        self.mtxf_contract = None
+        self.connected = False
+        self._lock = threading.Lock()
+        
+    def connect(self) -> bool:
+        """Connect to Shioaji with retry logic"""
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            try:
+                print(f"🔄 Shioaji connection attempt {attempt}/{self.MAX_RETRIES}...")
+                
+                # Create fresh API instance
+                self.api = sj.Shioaji()
+                
+                # Login
+                self.api.login(
+                    api_key=self.config['shioaji']['api-key'],
+                    secret_key=self.config['shioaji']['secret-key'],
+                    contracts_cb=lambda security_type: print(f"✅ Contracts loaded: {security_type}")
+                )
+                
+                # Activate CA
+                self.api.activate_ca(
+                    ca_path=self.config['shioaji']['ca-path'],
+                    ca_passwd=self.config['shioaji']['ca-password'],
+                    person_id=self.config['shioaji']['person-id']
+                )
+                
+                mode = "📄 Paper trading" if self.config['shioaji']['simulation'] else "💰 LIVE TRADING"
+                print(f"{mode} mode activated")
+                
+                # Subscribe to MTXF
+                self.mtxf_contract = self.api.Contracts.Futures.TXF.TXFR1
+                self.api.quote.subscribe(
+                    self.mtxf_contract,
+                    quote_type=sj.constant.QuoteType.Tick,
+                    version=sj.constant.QuoteVersion.v1
+                )
+                
+                # Register tick handler
+                self.api.quote.set_on_tick_fop_v1_callback(self._handle_tick)
+                
+                print(f"✅ Subscribed to {self.mtxf_contract.symbol}")
+                self.connected = True
+                return True
+                
+            except Exception as e:
+                print(f"❌ Connection attempt {attempt} failed: {e}")
+                if attempt < self.MAX_RETRIES:
+                    backoff = self.BASE_BACKOFF_SECONDS ** attempt
+                    print(f"⏳ Waiting {backoff}s before retry...")
+                    time.sleep(backoff)
+                else:
+                    print("❌ All connection attempts failed!")
+                    return False
+        
+        return False
+    
+    def reconnect(self) -> bool:
+        """Force reconnect (called when connection is lost)"""
+        with self._lock:
+            print("🔄 Reconnecting to Shioaji...")
+            self.connected = False
+            try:
+                if self.api:
+                    self.api.logout()
+            except:
+                pass
+            return self.connect()
+    
+    def _handle_tick(self, exchange, tick):
+        """Internal tick handler - updates global market data"""
+        global session_open_price, session_high, session_low
+        
+        latest_tick["price"] = float(tick.close)
+        latest_tick["volume"] = tick.volume
+        latest_tick["timestamp"] = tick.datetime
+        
+        price_history.append({"price": float(tick.close), "time": tick.datetime, "volume": tick.volume})
+        volume_history.append(tick.volume)
+        
+        if session_open_price is None:
+            session_open_price = float(tick.close)
+            session_high = float(tick.close)
+            session_low = float(tick.close)
+        else:
+            session_high = max(session_high, float(tick.close))
+            session_low = min(session_low, float(tick.close))
+    
+    def place_order(self, action: str, quantity: int, price: float):
+        """Place order with auto-reconnect on failure"""
+        if not self.connected:
+            if not self.reconnect():
+                raise Exception("Cannot place order - not connected")
+        
+        try:
+            order_obj = self.api.Order(
+                price=price,
+                quantity=quantity,
+                action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
+                price_type=sj.constant.FuturesPriceType.LMT,
+                order_type=sj.constant.OrderType.ROD,
+                account=self.api.futopt_account
+            )
+            
+            trade = self.api.place_order(self.mtxf_contract, order_obj)
+            return {"status": "filled", "order_id": trade.status.id}
+            
+        except Exception as e:
+            print(f"❌ Order failed: {e}, attempting reconnect...")
+            if self.reconnect():
+                # Retry once after reconnect
+                return self.place_order(action, quantity, price)
+            raise
+    
+    def logout(self):
+        """Graceful logout"""
+        try:
+            if self.api:
+                self.api.logout()
+                print("✅ Shioaji logged out")
+        except Exception as e:
+            print(f"⚠️ Logout error: {e}")
+
+# ============================================================================
+# GLOBAL STATE
+# ============================================================================
 
 # Get Jasypt password from environment variable
 JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
@@ -104,80 +245,32 @@ if not JASYPT_PASSWORD:
 config = load_config_with_decryption(JASYPT_PASSWORD)
 print("✅ Configuration loaded and decrypted")
 
-# Initialize Shioaji
-api = sj.Shioaji()
-api.login(
-    api_key=config['shioaji']['api-key'],
-    secret_key=config['shioaji']['secret-key'],
-    contracts_cb=lambda security_type: print(f"✅ Contracts loaded: {security_type}")
-)
-
-if config['shioaji']['simulation']:
-    api.activate_ca(
-        ca_path=config['shioaji']['ca-path'],
-        ca_passwd=config['shioaji']['ca-password'],
-        person_id=config['shioaji']['person-id']
-    )
-    print("📄 Paper trading mode activated")
-else:
-    print("💰 LIVE TRADING MODE - Using real account")
-    api.activate_ca(
-        ca_path=config['shioaji']['ca-path'],
-        ca_passwd=config['shioaji']['ca-password'],
-        person_id=config['shioaji']['person-id']
-    )
-
-# Subscribe to MTXF
-mtxf_contract = api.Contracts.Futures.TXF.TXFR1  # Current month Mini-TXF
-api.quote.subscribe(
-    mtxf_contract,
-    quote_type=sj.constant.QuoteType.Tick,
-    version=sj.constant.QuoteVersion.v1
-)
-
-# ============================================================================
-# PRICE HISTORY & MOMENTUM TRACKING
-# ============================================================================
+# Initialize Shioaji with auto-reconnect wrapper
+shioaji = ShioajiWrapper(config)
+if not shioaji.connect():
+    print("❌ Failed to connect to Shioaji after all retries!")
+    sys.exit(1)
 
 # Latest market data
 latest_tick = {"price": 0, "volume": 0, "timestamp": None}
 
-# Price history for momentum calculation (keep 10 minutes of data at ~1 tick/sec)
-price_history = deque(maxlen=600)  # 10 min * 60 sec
+# Price history for momentum calculation (keep 10 minutes of data)
+price_history = deque(maxlen=600)
 volume_history = deque(maxlen=600)
 
 # Session tracking
-session_open_price = None  # First price of trading session
+session_open_price = None
 session_high = None
 session_low = None
-last_direction = "NEUTRAL"  # Track for reversal detection
-
-@api.quote.on_quote
-def handle_tick(exchange: sj.constant.Exchange, tick):
-    global session_open_price, session_high, session_low
-    
-    latest_tick["price"] = tick.close
-    latest_tick["volume"] = tick.volume
-    latest_tick["timestamp"] = tick.datetime
-    
-    # Track price/volume history
-    price_history.append({"price": tick.close, "time": tick.datetime, "volume": tick.volume})
-    volume_history.append(tick.volume)
-    
-    # Track session stats
-    if session_open_price is None:
-        session_open_price = tick.close
-        session_high = tick.close
-        session_low = tick.close
-    else:
-        session_high = max(session_high, tick.close)
-        session_low = min(session_low, tick.close)
-
-print(f"✅ Subscribed to {mtxf_contract.symbol}")
+last_direction = "NEUTRAL"
 
 # Ollama client
 OLLAMA_URL = config['ollama']['url']
 OLLAMA_MODEL = config['ollama']['model']
+
+# ============================================================================
+# NEWS ANALYSIS
+# ============================================================================
 
 def fetch_news_headlines():
     """Scrape MoneyDJ + UDN RSS feeds"""
@@ -220,30 +313,30 @@ Score: 0.0=very bearish, 0.5=neutral, 1.0=very bullish"""
             timeout=5
         )
         result = response.json()['response']
-        # Parse JSON from response
         import json
         return json.loads(result)
     except:
         return {"veto": False, "score": 0.5, "reason": "Analysis failed"}
 
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "time": datetime.now().isoformat()}
+    return {
+        "status": "ok",
+        "shioaji_connected": shioaji.connected,
+        "time": datetime.now().isoformat()
+    }
 
 @app.post("/shutdown")
 def shutdown():
     """Graceful shutdown endpoint - called by Java app before exit"""
-    import threading
-    
     def do_shutdown():
-        import time
-        time.sleep(1)  # Give time for response to be sent
+        time.sleep(1)
         print("🛑 Shutdown requested - cleaning up...")
-        try:
-            api.logout()
-            print("✅ Shioaji logged out")
-        except:
-            pass
+        shioaji.logout()
         os._exit(0)
     
     threading.Thread(target=do_shutdown).start()
@@ -251,14 +344,7 @@ def shutdown():
 
 @app.get("/signal")
 def get_signal():
-    """Generate trading signal using momentum + volume strategy
-    
-    2025 PRODUCTION STRATEGY:
-    - 3-min momentum: Short-term trend direction
-    - 5-min momentum: Medium-term confirmation
-    - Volume surge: Institutional flow detection
-    - Exit on momentum reversal (no profit caps)
-    """
+    """Generate trading signal using momentum + volume strategy"""
     global last_direction
     
     price = latest_tick["price"]
@@ -267,7 +353,7 @@ def get_signal():
     exit_signal = False
     
     # Need minimum data for calculations
-    if len(price_history) < 60:  # At least 1 minute of data
+    if len(price_history) < 60:
         return {
             "current_price": price,
             "direction": "NEUTRAL",
@@ -277,45 +363,34 @@ def get_signal():
             "timestamp": datetime.now().isoformat()
         }
     
-    # ========== MOMENTUM CALCULATIONS ==========
-    
-    # 3-minute momentum (180 ticks at ~1/sec)
+    # 3-minute momentum
     lookback_3min = min(180, len(price_history))
     prices_3min = [p["price"] for p in list(price_history)[-lookback_3min:]]
     momentum_3min = (prices_3min[-1] - prices_3min[0]) / prices_3min[0] * 100 if prices_3min[0] > 0 else 0
     
-    # 5-minute momentum (300 ticks)
+    # 5-minute momentum
     lookback_5min = min(300, len(price_history))
     prices_5min = [p["price"] for p in list(price_history)[-lookback_5min:]]
     momentum_5min = (prices_5min[-1] - prices_5min[0]) / prices_5min[0] * 100 if prices_5min[0] > 0 else 0
     
-    # ========== VOLUME ANALYSIS ==========
-    
-    # Recent volume vs average (volume surge detection)
+    # Volume analysis
     if len(volume_history) >= 60:
-        recent_vol = sum(list(volume_history)[-30:])  # Last 30 sec
-        avg_vol = sum(list(volume_history)[-60:]) / 2  # Average of last minute
+        recent_vol = sum(list(volume_history)[-30:])
+        avg_vol = sum(list(volume_history)[-60:]) / 2
         volume_ratio = recent_vol / avg_vol if avg_vol > 0 else 1.0
     else:
         volume_ratio = 1.0
     
-    # ========== SIGNAL GENERATION ==========
+    # Thresholds
+    MOMENTUM_THRESHOLD = 0.02
+    VOLUME_SURGE_THRESHOLD = 1.3
     
-    # Thresholds (tuned for MTXF lunch session volatility)
-    MOMENTUM_THRESHOLD = 0.02  # 0.02% = ~4 points on 20000 index
-    VOLUME_SURGE_THRESHOLD = 1.3  # 30% above average
-    
-    # Both momentums aligned = strong trend
     both_bullish = momentum_3min > MOMENTUM_THRESHOLD and momentum_5min > MOMENTUM_THRESHOLD
     both_bearish = momentum_3min < -MOMENTUM_THRESHOLD and momentum_5min < -MOMENTUM_THRESHOLD
-    
-    # Volume confirms institutional participation
     volume_confirms = volume_ratio > VOLUME_SURGE_THRESHOLD
     
-    # Calculate confidence based on signal strength
     if both_bullish:
         direction = "LONG"
-        # Confidence: base 0.5 + momentum strength + volume bonus
         confidence = min(0.95, 0.5 + abs(momentum_3min) * 10 + abs(momentum_5min) * 5)
         if volume_confirms:
             confidence = min(0.95, confidence + 0.15)
@@ -330,15 +405,12 @@ def get_signal():
         direction = "NEUTRAL"
         confidence = 0.3
     
-    # ========== EXIT SIGNAL (Trend Reversal) ==========
-    
-    # Exit when momentum reverses against position
+    # Exit signal (trend reversal)
     if last_direction == "LONG" and momentum_3min < -MOMENTUM_THRESHOLD:
         exit_signal = True
     elif last_direction == "SHORT" and momentum_3min > MOMENTUM_THRESHOLD:
         exit_signal = True
     
-    # Update last direction for next check
     if direction != "NEUTRAL" and confidence >= 0.65:
         last_direction = direction
     
@@ -357,7 +429,7 @@ def get_signal():
 
 @app.get("/signal/news")
 def get_news_veto():
-    """Check news veto via Ollama Llama 3.1 8B - call every 10 minutes only"""
+    """Check news veto via Ollama Llama 3.1 8B"""
     headlines = fetch_news_headlines()
     news_analysis = call_llama_news_veto(headlines)
     
@@ -371,22 +443,12 @@ def get_news_veto():
 
 @app.post("/order")
 def place_order(order: dict):
-    """Execute order via Shioaji"""
+    """Execute order via Shioaji with auto-reconnect"""
     action = order['action']
     quantity = order['quantity']
     price = order['price']
     
-    order_obj = api.Order(
-        price=price,
-        quantity=quantity,
-        action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
-        price_type=sj.constant.FuturesPriceType.LMT,
-        order_type=sj.constant.OrderType.ROD,
-        account=api.futopt_account
-    )
-    
-    trade = api.place_order(mtxf_contract, order_obj)
-    return {"status": "filled", "order_id": trade.status.id}
+    return shioaji.place_order(action, quantity, price)
 
 if __name__ == "__main__":
     import uvicorn

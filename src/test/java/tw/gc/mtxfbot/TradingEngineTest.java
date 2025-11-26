@@ -57,10 +57,13 @@ class TradingEngineTest {
         when(tradingProperties.getWindow()).thenReturn(window);
         when(tradingProperties.getRisk()).thenReturn(risk);
         when(tradingProperties.getBridge()).thenReturn(bridge);
+        when(tradingProperties.getEarningsBlackoutDates()).thenReturn(java.util.Collections.emptyList());
         when(window.getStart()).thenReturn("11:30");
         when(window.getEnd()).thenReturn("13:00");
         when(risk.getMaxPosition()).thenReturn(1);
         when(risk.getDailyLossLimit()).thenReturn(4500);
+        when(risk.getWeeklyLossLimit()).thenReturn(15000);
+        when(risk.getMaxHoldMinutes()).thenReturn(45);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
 
         tradingEngine = new TradingEngine(
