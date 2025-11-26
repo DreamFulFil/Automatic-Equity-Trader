@@ -50,7 +50,7 @@ This is a **production-ready** trading system that has been battle-tested in Tai
 - 🛡️ **Hard Risk Limits**: Daily loss cap at -4,500 TWD → emergency shutdown
 - 📅 **Weekly Loss Limit**: -15,000 TWD → pauses trading until next Monday
 - ⏰ **45-Minute Hard Exit**: Force-flatten positions held too long
-- 📅 **Earnings Blackout**: Auto-disable trading on high-volatility days
+- 📅 **Earnings Blackout**: Auto-scraped from Yahoo Finance daily at 09:00
 - 📱 **Telegram Commands**: `/status`, `/pause`, `/resume`, `/close`
 - 🔄 **Auto-Reconnect**: Shioaji wrapper with 5 retries + exponential backoff
 - 🚀 **Unlimited Upside**: No profit caps, let winners run
@@ -284,13 +284,9 @@ trading:
     # NO daily-profit-cap → unlimited upside!
     # NO monthly-profit-cap → let winners run!
 
-  # Earnings blackout dates - bot stays flat on these days
-  # Format: YYYY-MM-DD (Taiwan company earnings, FOMC, major events)
-  earnings-blackout-dates:
-    - "2026-01-16"  # TSMC Q4 2025 earnings
-    - "2026-04-17"  # TSMC Q1 2026 earnings
-    - "2026-07-18"  # TSMC Q2 2026 earnings
-    - "2026-10-17"  # TSMC Q3 2026 earnings
+  # Earnings blackout dates - now auto-scraped from Yahoo Finance
+  # See config/earnings-blackout-dates.json (updated daily at 09:00)
+  # Manual override: add dates directly to the JSON file
 
   # Python bridge connection
   bridge:
@@ -734,18 +730,55 @@ News Veto: ✅ Clear
 Commands: /pause /resume /close
 ```
 
-### Earnings Blackout Dates
+### Automatic Earnings Blackout System
 
-Configure high-volatility days when the bot should stay flat:
+**Fully automated** - no manual date entry required!
 
-```yaml
-# In application.yml
-trading:
-  earnings-blackout-dates:
-    - "2026-01-16"  # TSMC Q4 2025 earnings
-    - "2026-04-17"  # TSMC Q1 2026 earnings
-    - "2026-07-18"  # TSMC Q2 2026 earnings
-    - "2026-10-17"  # TSMC Q3 2026 earnings
+#### How It Works
+
+1. **Daily 09:00 scrape** (Mon-Fri via cron):
+   ```fish
+   python3 python/bridge.py --scrape-earnings
+   ```
+   - Scrapes Yahoo Finance for 13 Taiwan mega-caps (TSM, 2330.TW, 2454.TW, 2317.TW, UMC, etc.)
+   - Saves next 365 days of earnings dates to `config/earnings-blackout-dates.json`
+   - Graceful: if scrape fails → keeps old dates, never crashes
+
+2. **11:15 bot startup**:
+   - Loads `config/earnings-blackout-dates.json`
+   - If today matches any date → `tradingPaused = true`
+   - Sends Telegram: "📅 Earnings blackout day (TSMC) — resting today"
+
+#### Crontab Setup (Two Entries)
+
+```cron
+# Scrape earnings blackout dates daily at 09:00 (Mon-Fri)
+0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/mtxf-bot && /path/to/venv/bin/python3 python/bridge.py --scrape-earnings >> /tmp/earnings-scrape.log 2>&1
+
+# MTXF Lunch Bot - Runs weekdays at 11:15 AM
+15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish dreamfulfil >> /tmp/mtxf-bot-cron.log 2>&1'
+```
+
+#### JSON File Format
+
+**Location**: `config/earnings-blackout-dates.json`
+
+```json
+{
+  "last_updated": "2025-11-26T09:00:00",
+  "source": "Yahoo Finance",
+  "tickers_checked": ["TSM", "2330.TW", "2454.TW", "2317.TW", "UMC", ...],
+  "dates": ["2026-01-16", "2026-04-17", "2026-07-18", "2026-10-17"]
+}
+```
+
+#### Manual Scrape (First Run or Testing)
+
+```fish
+cd /Users/gc/Downloads/work/stock/mtxf-bot
+source python/venv/bin/activate.fish
+python3 python/bridge.py --scrape-earnings
+cat config/earnings-blackout-dates.json
 ```
 
 On blackout days, the bot sends a startup message but makes no trades.
