@@ -14,6 +14,7 @@ import tw.gc.mtxfbot.config.TradingProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,6 +32,9 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 @RequiredArgsConstructor
 public class TradingEngine {
+    
+    // Explicit timezone for Taiwan futures trading
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -82,11 +86,12 @@ public class TradingEngine {
     public void tradingLoop() {
         if (emergencyShutdown || !marketDataConnected) return;
         
-        LocalTime now = LocalTime.now();
+        // Use explicit Taipei timezone for all time checks
+        LocalTime now = LocalTime.now(TAIPEI_ZONE);
         LocalTime start = LocalTime.parse(tradingProperties.getWindow().getStart());
         LocalTime end = LocalTime.parse(tradingProperties.getWindow().getEnd());
         
-        // Only trade during 11:30 - 13:00 window
+        // Only trade during 11:30 - 13:00 window (Asia/Taipei)
         if (now.isBefore(start) || now.isAfter(end)) {
             return;
         }
