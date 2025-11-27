@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>MoneyDJ News - Taiwan Stock Market</title>
+    <link>https://www.moneydj.com</link>
+    <description>Taiwan stock market news and analysis</description>
+    <language>zh-TW</language>
+    <lastBuildDate>Wed, 27 Nov 2025 09:00:00 +0800</lastBuildDate>
+    
+    <!-- Neutral news - should NOT trigger veto -->
+    <item>
+      <title>台股開盤上漲 站穩萬七關卡</title>
+      <link>https://www.moneydj.com/news/12345</link>
+      <description>台股今日開盤上漲50點，站穩17000點關卡，外資持續買超。</description>
+      <pubDate>Wed, 27 Nov 2025 09:00:00 +0800</pubDate>
+    </item>
+    
+    <!-- Positive news - bullish -->
+    <item>
+      <title>台積電法說會後股價走揚 外資看好明年展望</title>
+      <link>https://www.moneydj.com/news/12346</link>
+      <description>台積電法說會釋出正面訊息，外資紛紛上調目標價。</description>
+      <pubDate>Wed, 27 Nov 2025 08:30:00 +0800</pubDate>
+    </item>
+    
+    <!-- Negative but not veto-worthy -->
+    <item>
+      <title>美股收跌 道瓊下跌200點</title>
+      <link>https://www.moneydj.com/news/12347</link>
+      <description>美股昨晚收跌，道瓊工業指數下跌200點。</description>
+      <pubDate>Wed, 27 Nov 2025 08:00:00 +0800</pubDate>
+    </item>
+    
+    <!-- Earnings related -->
+    <item>
+      <title>聯發科營收創新高 AI晶片需求強勁</title>
+      <link>https://www.moneydj.com/news/12348</link>
+      <description>聯發科公布10月營收，年增15%，創歷史新高。</description>
+      <pubDate>Wed, 27 Nov 2025 07:30:00 +0800</pubDate>
+    </item>
+    
+    <!-- Veto-worthy: Geopolitical crisis -->
+    <!--
+    <item>
+      <title>台海緊張升級 解放軍軍演擴大</title>
+      <link>https://www.moneydj.com/news/99999</link>
+      <description>台海局勢緊張，解放軍宣布擴大軍演範圍。</description>
+      <pubDate>Wed, 27 Nov 2025 06:00:00 +0800</pubDate>
+    </item>
+    -->
+    
+    <!-- Veto-worthy: Market crash -->
+    <!--
+    <item>
+      <title>台股崩跌千點 觸發熔斷機制</title>
+      <link>https://www.moneydj.com/news/99998</link>
+      <description>台股重挫逾1000點，觸發市場熔斷機制，暫停交易15分鐘。</description>
+      <pubDate>Wed, 27 Nov 2025 09:30:00 +0800</pubDate>
+    </item>
+    -->
+    
+  </channel>
+</rss>

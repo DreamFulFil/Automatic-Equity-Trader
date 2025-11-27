@@ -1,0 +1,73 @@
+{
+  "tick": {
+    "close": 20000.0,
+    "volume": 10,
+    "datetime": "2025-11-27T11:35:00+08:00",
+    "open": 19980.0,
+    "high": 20010.0,
+    "low": 19970.0
+  },
+  "margin": {
+    "equity": 100000.0,
+    "available_margin": 50000.0,
+    "maintenance_margin": 30000.0
+  },
+  "profit_loss": [
+    {"date": "2025-11-26", "pnl": 1500.0, "symbol": "MTXF"},
+    {"date": "2025-11-25", "pnl": -500.0, "symbol": "MTXF"},
+    {"date": "2025-11-24", "pnl": 800.0, "symbol": "MTXF"},
+    {"date": "2025-11-22", "pnl": -300.0, "symbol": "MTXF"},
+    {"date": "2025-11-21", "pnl": 2000.0, "symbol": "MTXF"}
+  ],
+  "order_response": {
+    "filled": {
+      "status": "filled",
+      "order_id": "12345678",
+      "filled_qty": 1,
+      "filled_price": 20000.0
+    },
+    "rejected": {
+      "status": "rejected",
+      "order_id": "00000000",
+      "reason": "Insufficient margin"
+    }
+  },
+  "signal_scenarios": {
+    "long_high_confidence": {
+      "current_price": 20000.0,
+      "direction": "LONG",
+      "confidence": 0.85,
+      "exit_signal": false,
+      "momentum_3min": 0.05,
+      "momentum_5min": 0.04,
+      "volume_ratio": 1.8
+    },
+    "short_high_confidence": {
+      "current_price": 20000.0,
+      "direction": "SHORT",
+      "confidence": 0.78,
+      "exit_signal": false,
+      "momentum_3min": -0.04,
+      "momentum_5min": -0.03,
+      "volume_ratio": 1.5
+    },
+    "neutral_low_confidence": {
+      "current_price": 20000.0,
+      "direction": "NEUTRAL",
+      "confidence": 0.35,
+      "exit_signal": false,
+      "momentum_3min": 0.01,
+      "momentum_5min": -0.01,
+      "volume_ratio": 0.9
+    },
+    "exit_signal": {
+      "current_price": 20050.0,
+      "direction": "NEUTRAL",
+      "confidence": 0.5,
+      "exit_signal": true,
+      "momentum_3min": -0.03,
+      "momentum_5min": 0.01,
+      "volume_ratio": 1.2
+    }
+  }
+}

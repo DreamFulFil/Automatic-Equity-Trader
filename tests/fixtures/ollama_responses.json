@@ -1,0 +1,51 @@
+{
+  "neutral": {
+    "veto": false,
+    "score": 0.5,
+    "reason": "Market conditions normal, no significant news affecting Taiwan futures"
+  },
+  "veto_crisis": {
+    "veto": true,
+    "score": 0.1,
+    "reason": "Geopolitical crisis detected - Taiwan Strait tensions escalating"
+  },
+  "veto_crash": {
+    "veto": true,
+    "score": 0.05,
+    "reason": "Major market crash - TSMC down 10% on earnings miss"
+  },
+  "veto_regulatory": {
+    "veto": true,
+    "score": 0.15,
+    "reason": "Trading halt announced - regulatory investigation pending"
+  },
+  "bullish": {
+    "veto": false,
+    "score": 0.8,
+    "reason": "Positive earnings sentiment - TSMC beats expectations"
+  },
+  "mildly_bullish": {
+    "veto": false,
+    "score": 0.65,
+    "reason": "Tech sector showing strength, foreign institutional buying"
+  },
+  "mildly_bearish": {
+    "veto": false,
+    "score": 0.35,
+    "reason": "Profit-taking after recent rally, volume declining"
+  },
+  "analysis_failed": {
+    "veto": false,
+    "score": 0.5,
+    "reason": "Analysis failed - using default values"
+  },
+  "invalid_json_response": {
+    "raw_response": "I think the market looks okay but I'm not sure",
+    "parsed_result": {
+      "veto": false,
+      "score": 0.5,
+      "reason": "Analysis failed"
+    }
+  },
+  "prompt_template": "You are a Taiwan stock market news analyst. Analyze these headlines and decide if trading should be VETOED due to major negative news.\n\nHeadlines:\n{headlines}\n\nRespond ONLY with valid JSON:\n{\"veto\": true/false, \"score\": 0.0-1.0, \"reason\": \"brief explanation\"}\n\nVeto if: geopolitical crisis, major crash, regulatory halt, war.\nScore: 0.0=very bearish, 0.5=neutral, 1.0=very bullish"
+}
