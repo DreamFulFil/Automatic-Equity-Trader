@@ -3,6 +3,7 @@
 # MTXF Lunch Bot - Complete Test Suite Runner
 #
 # Usage: ./run-tests.sh <jasypt-password>
+#        ./run-tests.sh help
 #
 # This script runs all tests:
 # - Java unit tests (JUnit 5)
@@ -28,6 +29,93 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+###############################################################################
+# Help Function
+###############################################################################
+
+show_help() {
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║         MTXF Lunch Bot - Test Suite Runner                    ║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${GREEN}USAGE:${NC}"
+    echo "    ./run-tests.sh <jasypt-password>    Run all tests"
+    echo "    ./run-tests.sh help                 Show this help message"
+    echo ""
+    echo -e "${GREEN}DESCRIPTION:${NC}"
+    echo "    Runs the complete test suite for the MTXF Lunch Bot project."
+    echo "    The Jasypt password is required to decrypt credentials for"
+    echo "    integration tests that connect to real services."
+    echo ""
+    echo -e "${GREEN}TEST PHASES:${NC}"
+    echo "    1. Java Unit Tests        - Core trading logic (no services needed)"
+    echo "    2. Python Unit Tests      - Bridge logic, contract validation"
+    echo "    3. Fish Shell Tests       - Environment and script validation"
+    echo "    4. Integration Setup      - Starts Ollama and Python bridge"
+    echo "    5. Java Integration Tests - Java-Python communication"
+    echo "    6. Python Integration     - Real endpoint testing"
+    echo "    7. E2E Tests              - Full trading session simulation"
+    echo ""
+    echo -e "${GREEN}PREREQUISITES:${NC}"
+    echo "    - Java 21                 (brew install openjdk@21)"
+    echo "    - Maven                   (brew install maven)"
+    echo "    - Python 3.10+ with venv  (python/venv must exist)"
+    echo "    - Fish shell              (brew install fish)"
+    echo "    - Ollama                  (brew install ollama)"
+    echo ""
+    echo -e "${GREEN}EXAMPLES:${NC}"
+    echo "    ./run-tests.sh mypassword           # Run all tests"
+    echo "    ./run-tests.sh help                 # Show this help"
+    echo ""
+    echo -e "${GREEN}OUTPUT:${NC}"
+    echo "    The script displays progress for each phase and provides a"
+    echo "    comprehensive summary table at the end showing:"
+    echo "    - Tests passed, failed, and skipped for each category"
+    echo "    - Grand total across all test suites"
+    echo ""
+    echo -e "${GREEN}EXIT CODES:${NC}"
+    echo "    0    All tests passed"
+    echo "    1    One or more tests failed, or missing password argument"
+    echo ""
+    echo -e "${GREEN}NOTES:${NC}"
+    echo "    - The script auto-starts Ollama and Python bridge if not running"
+    echo "    - Services started by the script are stopped after tests complete"
+    echo "    - Services already running are left untouched"
+    echo "    - Test results are also logged to /tmp/mtxf-test-*.log"
+    echo ""
+    echo -e "${GREEN}SEE ALSO:${NC}"
+    echo "    docs/TESTING.md    - Complete testing documentation"
+    echo "    README.md          - Project overview and setup"
+    echo ""
+}
+
+###############################################################################
+# Check for help argument or missing password
+###############################################################################
+
+if [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_help
+    exit 0
+fi
+
+if [ -z "$1" ]; then
+    echo -e "${RED}❌ Error: Missing Jasypt password${NC}"
+    echo ""
+    echo "Usage: ./run-tests.sh <jasypt-password>"
+    echo "       ./run-tests.sh help"
+    echo ""
+    echo "Run './run-tests.sh help' for more information."
+    exit 1
+fi
+
+JASYPT_PASSWORD="$1"
+export JASYPT_PASSWORD
+
+cd "$SCRIPT_DIR"
+
 # Counters
 JAVA_UNIT_PASSED=0
 JAVA_UNIT_FAILED=0
@@ -47,20 +135,6 @@ E2E_SKIPPED=0
 FISH_PASSED=0
 FISH_FAILED=0
 FISH_SKIPPED=0
-
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-# Check for required password argument
-if [ -z "$1" ]; then
-    echo -e "${RED}❌ Usage: ./run-tests.sh <jasypt-password>${NC}"
-    echo "   The Jasypt password is required to decrypt credentials for integration tests."
-    exit 1
-fi
-
-JASYPT_PASSWORD="$1"
-export JASYPT_PASSWORD
 
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║         MTXF Lunch Bot - Complete Test Suite                  ║${NC}"
