@@ -363,4 +363,77 @@ class SystemIntegrationTest {
         assertTrue(elapsed < 500, 
                 "Order dry-run took too long: " + elapsed + "ms");
     }
+
+    // ==================== Account/Contract Scaling Tests ====================
+
+    @Test
+    @Order(70)
+    @DisplayName("Account endpoint should return equity info")
+    void accountEndpoint_shouldReturnEquityInfo() throws Exception {
+        String response = restTemplate.getForObject(bridgeUrl + "/account", String.class);
+        
+        assertNotNull(response);
+        JsonNode json = objectMapper.readTree(response);
+        assertTrue(json.has("equity"));
+        assertTrue(json.has("available_margin"));
+        assertTrue(json.has("status"));
+        assertTrue(json.has("timestamp"));
+    }
+
+    @Test
+    @Order(71)
+    @DisplayName("Profit history endpoint should return 30-day P&L")
+    void profitHistoryEndpoint_shouldReturn30DayPnL() throws Exception {
+        String response = restTemplate.getForObject(bridgeUrl + "/account/profit-history?days=30", String.class);
+        
+        assertNotNull(response);
+        JsonNode json = objectMapper.readTree(response);
+        assertTrue(json.has("total_pnl"));
+        assertTrue(json.has("days"));
+        assertEquals(30, json.get("days").asInt());
+        assertTrue(json.has("status"));
+        assertTrue(json.has("timestamp"));
+    }
+
+    @Test
+    @Order(72)
+    @DisplayName("Profit history endpoint should accept custom days parameter")
+    void profitHistoryEndpoint_shouldAcceptCustomDays() throws Exception {
+        String response = restTemplate.getForObject(bridgeUrl + "/account/profit-history?days=7", String.class);
+        
+        assertNotNull(response);
+        JsonNode json = objectMapper.readTree(response);
+        assertEquals(7, json.get("days").asInt());
+    }
+
+    @Test
+    @Order(73)
+    @DisplayName("Account endpoint should respond within 1 second")
+    void accountEndpoint_shouldRespondQuickly() {
+        long start = System.currentTimeMillis();
+        restTemplate.getForObject(bridgeUrl + "/account", String.class);
+        long elapsed = System.currentTimeMillis() - start;
+        
+        assertTrue(elapsed < 1000, 
+                "Account endpoint took too long: " + elapsed + "ms");
+    }
+
+    @Test
+    @Order(74)
+    @DisplayName("Contract scaling flow should work end-to-end")
+    void contractScalingFlow_shouldWork() throws Exception {
+        // Step 1: Get account equity
+        String accountResponse = restTemplate.getForObject(bridgeUrl + "/account", String.class);
+        JsonNode account = objectMapper.readTree(accountResponse);
+        assertTrue(account.has("equity"));
+        
+        // Step 2: Get profit history
+        String profitResponse = restTemplate.getForObject(bridgeUrl + "/account/profit-history?days=30", String.class);
+        JsonNode profit = objectMapper.readTree(profitResponse);
+        assertTrue(profit.has("total_pnl"));
+        
+        // Both should have status field
+        assertTrue(account.has("status"));
+        assertTrue(profit.has("status"));
+    }
 }

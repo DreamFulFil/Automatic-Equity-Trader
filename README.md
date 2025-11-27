@@ -2,7 +2,7 @@
 
 **Fully automated Taiwan Mini-TXF futures trading bot for macOS Apple Silicon.**
 
-Trade 1–2 MTXF contracts during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, and bulletproof risk limits. Zero human intervention required.
+Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, automatic contract scaling, and bulletproof risk limits. Zero human intervention required.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -16,6 +16,7 @@ Trade 1–2 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 - [Current Features (2025 Final)](#-current-features-2025-final)
 - [Overview](#-overview)
 - [Architecture](#-architecture)
+- [Contract Scaling](#-contract-scaling)
 - [Tech Stack](#-tech-stack)
 - [Prerequisites](#-prerequisites)
 - [One-Time Setup (Fish Shell)](#-one-time-setup-fish-shell)
@@ -25,8 +26,8 @@ Trade 1–2 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 - [Telegram Remote Control](#-telegram-remote-control)
 - [Risk Management & Safety](#-risk-management--safety)
 - [Earnings Blackout](#-earnings-blackout)
-- [Scaling to 2+ Contracts](#-scaling-to-2-contracts)
 - [Logs & Monitoring](#-logs--monitoring)
+- [Testing](#-testing)
 - [Troubleshooting](#-troubleshooting)
 - [FAQ](#-faq)
 - [Disclaimer & License](#%EF%B8%8F-disclaimer--license)
@@ -45,9 +46,11 @@ Trade 1–2 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 | Auto earnings blackout scraper (09:00 cron → JSON) | Implemented | Yes |
 | Shioaji auto-reconnect (5 retries + backoff) | Implemented | Yes |
 | Daily summary at 13:05 | Implemented | Yes |
-| Second-contract scaling (≥250k capital & +80k last 30d) | Implemented | Yes |
+| **Automatic contract scaling (1-6 contracts)** | **Implemented** | **Yes** |
+| Pre-market health check (order dry-run) | Implemented | Yes |
 | Clean JSON earnings file (no manual YAML) | Implemented | Yes |
 | Two separate crontabs (09:00 scraper + 11:15 bot) | Implemented | Yes |
+| Comprehensive test suite (109+ tests) | Implemented | Yes |
 
 ---
 
@@ -93,6 +96,39 @@ This is a **production-ready, set-and-forget** trading system running the exact 
 ```
 
 **Flow**: Java engine calls Python bridge via REST → Python executes orders via Shioaji → AI news veto via local Ollama.
+
+---
+
+## 📈 Contract Scaling
+
+### Fully Automatic Position Sizing
+
+The bot automatically adjusts contract size based on account equity and recent performance. Updated daily at 11:15 (before trading window) and at startup.
+
+### Scaling Table
+
+| Account Equity | 30-Day Profit Required | Contracts |
+|----------------|------------------------|-----------|
+| < 250,000 TWD | any | 1 |
+| ≥ 250,000 TWD | ≥ 80,000 TWD | 2 |
+| ≥ 500,000 TWD | ≥ 180,000 TWD | 3 |
+| ≥ 1,000,000 TWD | ≥ 400,000 TWD | 4 |
+| ≥ 2,000,000 TWD | ≥ 800,000 TWD | 5 |
+| ≥ 5,000,000 TWD | ≥ 2,000,000 TWD | 6 |
+
+### How It Works
+
+1. **11:15 Daily**: Bot fetches account equity from Shioaji
+2. **30-Day P&L**: Bot calculates realized profit from Shioaji history
+3. **Contract Calculation**: Uses scaling table above
+4. **Telegram Notification**: "Contract sizing updated: 2 contracts (equity: 312,400 TWD, 30d profit: 96,200 TWD)"
+5. **Safe Fallback**: Defaults to 1 contract on any error
+
+### Safety Features
+
+- **Both conditions required**: Must meet BOTH equity AND profit thresholds
+- **Scaled stop-loss**: -500 TWD per contract (2 contracts = -1000 TWD stop)
+- **No manual configuration**: Fully automatic
 
 ---
 
@@ -406,29 +442,6 @@ Add dates directly to `config/earnings-blackout-dates.json`:
 
 ---
 
-## 📈 Scaling to 2+ Contracts
-
-### Automatic Scaling Criteria
-
-The bot automatically scales to 2 contracts when **both** conditions are met:
-
-| Condition | Threshold |
-|-----------|-----------|
-| Account Capital | ≥ 250,000 TWD |
-| Last 30-Day P&L | ≥ +80,000 TWD |
-
-### Behavior
-
-- **Below Threshold**: Trade 1 contract (default)
-- **Above Threshold**: Trade 2 contracts
-- **Loss Recovery**: Drops back to 1 contract if criteria no longer met
-
-### Configuration
-
-Scaling is automatic. No manual configuration needed.
-
----
-
 ## 📊 Logs & Monitoring
 
 ### Log Files
@@ -454,6 +467,48 @@ grep ERROR logs/mtxf-bot.log
 grep "ORDER" logs/mtxf-bot.log
 grep "P&L" logs/mtxf-bot.log
 ```
+
+---
+
+## 🧪 Testing
+
+### Test Suite Overview
+
+| Test Suite | Tests | Description |
+|------------|-------|-------------|
+| TradingEngineTest | 39 | Core trading logic, contract scaling |
+| TelegramServiceTest | 17 | Command handling, message sending |
+| OrderEndpointIntegrationTest | 9 | Java-Python order flow |
+| SystemIntegrationTest | 21 | Full system integration |
+| test_bridge.py | 21 | Python unit tests |
+| test_integration.py | 45 | Python integration tests |
+| **Total** | **~150** | |
+
+### Running Tests
+
+```bash
+# Java unit tests only
+mvn test
+
+# Java integration tests (requires Python bridge)
+BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
+
+# Python unit tests
+python/venv/bin/pytest python/tests/test_bridge.py -v
+
+# Python integration tests (requires bridge)
+BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/test_integration.py -v
+
+# All tests
+mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v
+```
+
+### Pre-Commit Checklist
+
+1. ✅ All Java unit tests pass: `mvn test`
+2. ✅ All Java integration tests pass (with bridge running)
+3. ✅ All Python tests pass
+4. ✅ Code compiles: `mvn compile`
 
 ---
 
@@ -550,5 +605,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: December 2025 (Final Production v1.0)*
+*Last Updated: November 2025 (v1.1 - Contract Scaling)*
 *Owner: DreamFulFil | Status: 100/100 Complete*

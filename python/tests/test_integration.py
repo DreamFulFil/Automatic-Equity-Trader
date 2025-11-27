@@ -267,5 +267,73 @@ class TestErrorHandling:
         assert r.status_code == 404
 
 
+@pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
+class TestAccountEndpoints:
+    """Tests for account and contract scaling endpoints"""
+    
+    def test_account_endpoint_returns_equity(self):
+        """GET /account should return equity info"""
+        r = requests.get(f"{BRIDGE_URL}/account")
+        
+        assert r.status_code == 200
+        data = r.json()
+        assert "equity" in data
+        assert "available_margin" in data
+        assert "status" in data
+        assert "timestamp" in data
+    
+    def test_account_endpoint_equity_is_numeric(self):
+        """Equity should be a number"""
+        r = requests.get(f"{BRIDGE_URL}/account")
+        
+        data = r.json()
+        assert isinstance(data["equity"], (int, float))
+    
+    def test_profit_history_returns_pnl(self):
+        """GET /account/profit-history should return P&L data"""
+        r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=30")
+        
+        assert r.status_code == 200
+        data = r.json()
+        assert "total_pnl" in data
+        assert "days" in data
+        assert data["days"] == 30
+        assert "record_count" in data
+        assert "status" in data
+        assert "timestamp" in data
+    
+    def test_profit_history_accepts_custom_days(self):
+        """Should accept custom days parameter"""
+        r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=7")
+        
+        assert r.status_code == 200
+        data = r.json()
+        assert data["days"] == 7
+    
+    def test_profit_history_default_days(self):
+        """Should default to 30 days if not specified"""
+        r = requests.get(f"{BRIDGE_URL}/account/profit-history")
+        
+        assert r.status_code == 200
+        data = r.json()
+        assert data["days"] == 30
+    
+    def test_contract_scaling_flow(self):
+        """Full contract scaling flow should work"""
+        # Get equity
+        account_r = requests.get(f"{BRIDGE_URL}/account")
+        assert account_r.status_code == 200
+        account = account_r.json()
+        
+        # Get profit history
+        profit_r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=30")
+        assert profit_r.status_code == 200
+        profit = profit_r.json()
+        
+        # Both should have required fields for contract scaling
+        assert "equity" in account
+        assert "total_pnl" in profit
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

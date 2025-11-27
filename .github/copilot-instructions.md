@@ -37,6 +37,8 @@ Java (Spring Boot :16350) ◄──REST──► Python (FastAPI :8888) ──�
 
 ### ⚠️ CRITICAL: Always check all unit and integration tests pass before you commit
 
+### ⚠️ CRITICAL: Always protect newly added code with unit test and integration test if possible
+
 ### Running Tests
 ```bash
 # Java unit tests
@@ -60,6 +62,7 @@ mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests
 - All Python functions must have unit tests
 - All Java-Python interactions must have integration tests
 - All Ollama interactions must have integration tests
+- **NEW CODE MUST HAVE TESTS** - No exceptions
 
 ---
 
