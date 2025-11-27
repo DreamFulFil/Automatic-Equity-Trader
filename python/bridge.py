@@ -461,11 +461,13 @@ def place_order(order: dict):
 
 def scrape_earnings_dates():
     """
-    Scrape Yahoo Finance for earnings dates of major Taiwan stocks.
+    Scrape earnings dates using yfinance library (handles Yahoo auth automatically).
     Saves sorted dates to config/earnings-blackout-dates.json
     
     Run standalone: python3 bridge.py --scrape-earnings
     """
+    import yfinance as yf
+    
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     config_dir = os.path.join(project_root, 'config')
@@ -488,7 +490,7 @@ def scrape_earnings_dates():
         '2002.TW',  # China Steel
     ]
     
-    print(f"📅 Scraping earnings dates for {len(TICKERS)} stocks...")
+    print(f"📅 Scraping earnings dates for {len(TICKERS)} stocks (using yfinance)...")
     
     earnings_dates = set()
     today = datetime.now().date()
@@ -496,32 +498,26 @@ def scrape_earnings_dates():
     
     for ticker in TICKERS:
         try:
-            # Yahoo Finance earnings calendar API
-            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=calendarEvents"
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            stock = yf.Ticker(ticker)
+            calendar = stock.calendar
             
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code != 200:
-                print(f"  ⚠️ {ticker}: HTTP {response.status_code}")
+            if calendar is None or 'Earnings Date' not in calendar:
+                print(f"  ⚠️ {ticker}: No earnings date available")
                 continue
             
-            data = response.json()
-            calendar = data.get('quoteSummary', {}).get('result', [{}])[0].get('calendarEvents', {})
-            earnings = calendar.get('earnings', {})
+            earnings_list = calendar.get('Earnings Date', [])
+            if not isinstance(earnings_list, list):
+                earnings_list = [earnings_list]
             
-            # Get earnings date(s)
-            earnings_date_raw = earnings.get('earningsDate', [])
-            for ed in earnings_date_raw:
-                if 'raw' in ed:
-                    ts = ed['raw']
-                    dt = datetime.fromtimestamp(ts).date()
-                    # Only include dates within next 365 days
-                    if today <= dt <= one_year_later:
-                        earnings_dates.add(dt.isoformat())
-                        print(f"  ✅ {ticker}: {dt.isoformat()}")
+            for dt in earnings_list:
+                if hasattr(dt, 'date'):
+                    dt = dt if isinstance(dt, type(today)) else dt.date() if hasattr(dt, 'date') else dt
+                if isinstance(dt, type(today)) and today <= dt <= one_year_later:
+                    earnings_dates.add(dt.isoformat())
+                    print(f"  ✅ {ticker}: {dt.isoformat()}")
             
-            # Be nice to Yahoo API
-            time.sleep(0.5)
+            # Rate limit: 15 seconds between requests to avoid 429 errors
+            time.sleep(15)
             
         except Exception as e:
             print(f"  ❌ {ticker}: {e}")
@@ -547,7 +543,7 @@ def scrape_earnings_dates():
     os.makedirs(config_dir, exist_ok=True)
     result = {
         "last_updated": datetime.now().isoformat(),
-        "source": "Yahoo Finance",
+        "source": "Yahoo Finance (yfinance)",
         "tickers_checked": TICKERS,
         "dates": future_dates
     }
