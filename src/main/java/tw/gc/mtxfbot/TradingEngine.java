@@ -512,13 +512,14 @@ public class TradingEngine {
     
     private void executeOrder(String action, int quantity, double price) {
         try {
-            String orderJson = String.format(
-                    "{\"action\":\"%s\",\"quantity\":%d,\"price\":%.0f}", 
-                    action, quantity, price);
+            java.util.Map<String, Object> orderMap = new java.util.HashMap<>();
+            orderMap.put("action", action);
+            orderMap.put("quantity", quantity);
+            orderMap.put("price", price);
             
-            log.info("📤 Sending order: {}", orderJson);
+            log.info("📤 Sending order: {}", orderMap);
             String result = restTemplate.postForObject(
-                    getBridgeUrl() + "/order", orderJson, String.class);
+                    getBridgeUrl() + "/order", orderMap, String.class);
             log.debug("📥 Order response: {}", result);
             
             if ("BUY".equals(action)) {
