@@ -446,14 +446,17 @@ def get_news_veto():
         "timestamp": datetime.now().isoformat()
     }
 
+from pydantic import BaseModel
+
+class OrderRequest(BaseModel):
+    action: str
+    quantity: int
+    price: float
+
 @app.post("/order")
-def place_order(order: dict):
+def place_order(order: OrderRequest):
     """Execute order via Shioaji with auto-reconnect"""
-    action = order['action']
-    quantity = order['quantity']
-    price = order['price']
-    
-    return shioaji.place_order(action, quantity, price)
+    return shioaji.place_order(order.action, order.quantity, order.price)
 
 # ============================================================================
 # EARNINGS BLACKOUT SCRAPER
