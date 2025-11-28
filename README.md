@@ -320,9 +320,8 @@ crontab -e
 ### Add These Lines
 
 ```cron
-# 1. Scrape earnings blackout dates at 09:00 (Mon-Fri)
-# No JASYPT_PASSWORD needed - scraper skips Shioaji initialization
-0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/mtxf-bot && /Users/gc/Downloads/work/stock/mtxf-bot/python/venv/bin/python3 /Users/gc/Downloads/work/stock/mtxf-bot/python/bridge.py --scrape-earnings >> /tmp/earnings-scrape.log 2>&1
+# 1. Scrape earnings blackout dates at 09:00 (Mon-Fri) with Telegram notifications
+0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/mtxf-bot && /Users/gc/Downloads/work/stock/mtxf-bot/python/venv/bin/python3 /Users/gc/Downloads/work/stock/mtxf-bot/python/bridge.py --scrape-earnings --jasypt-password YOUR_JASYPT_PASSWORD >> /tmp/earnings-scrape.log 2>&1
 
 # 2. Start trading bot at 11:15 (Mon-Fri)
 # 15 minutes before trading window for warmup
@@ -331,10 +330,10 @@ crontab -e
 
 ### Crontab Breakdown
 
-| Schedule | Purpose |
-|----------|---------|
-| `0 9 * * 1-5` | 09:00 Mon-Fri: Scrape earnings dates from Yahoo Finance |
-| `15 11 * * 1-5` | 11:15 Mon-Fri: Start bot 15 min before trading window |
+| Schedule | Purpose | Telegram |
+|----------|---------|----------|
+| `0 9 * * 1-5` | 09:00 Mon-Fri: Scrape earnings dates from Yahoo Finance | ✅ Start/End messages |
+| `15 11 * * 1-5` | 11:15 Mon-Fri: Start bot 15 min before trading window | ✅ Full notifications |
 
 ### Grant Cron Permissions (macOS)
 
@@ -347,6 +346,87 @@ crontab -e
 ```fish
 crontab -l
 ```
+
+---
+
+## 😴 macOS Sleep & Wake Management
+
+**⚠️ CRITICAL: Cron jobs do NOT run when your Mac is asleep!**
+
+If your Mac is sleeping at 09:00 or 11:15, the cron jobs will be **skipped entirely** — they won't run when the Mac wakes up.
+
+### Solution: Auto-Wake with `pmset`
+
+Configure your Mac to automatically wake before the cron jobs run:
+
+```bash
+# Wake at 08:55 every weekday (5 min before 09:00 scraper)
+sudo pmset repeat wakeorpoweron MTWRF 08:55:00
+```
+
+### `pmset` Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `pmset -g sched` | List all scheduled wake/sleep events |
+| `pmset -g` | View all current power settings |
+| `sudo pmset repeat wakeorpoweron MTWRF 08:55:00` | Wake at 08:55 Mon-Fri |
+| `sudo pmset repeat cancel` | Cancel all scheduled wake events |
+| `sudo pmset repeat wake MTWRF 08:55:00` | Wake only (not power on) |
+| `sudo pmset repeat poweron MTWRF 08:55:00` | Power on only (if shutdown) |
+| `sudo pmset repeat wakeorpoweron MTWRFSU 08:55:00` | Wake every day including weekends |
+
+### Day Codes
+
+| Code | Day |
+|------|-----|
+| M | Monday |
+| T | Tuesday |
+| W | Wednesday |
+| R | Thursday |
+| F | Friday |
+| S | Saturday |
+| U | Sunday |
+
+### Recommended Setup
+
+```bash
+# Set wake schedule (5 min before first cron job)
+sudo pmset repeat wakeorpoweron MTWRF 08:55:00
+
+# Verify it's set
+pmset -g sched
+```
+
+Expected output:
+```
+Repeating power events:
+  wakepoweron at 8:55AM Monday Tuesday Wednesday Thursday Friday
+```
+
+### Alternative: Prevent Sleep During Trading Hours
+
+If you prefer to keep your Mac awake during market hours:
+
+```bash
+# Keep awake while a command runs
+caffeinate -i -w $PID
+
+# Keep awake for 6 hours (21600 seconds)
+caffeinate -t 21600 &
+
+# Prevent sleep entirely (not recommended)
+sudo pmset -a disablesleep 1
+
+# Re-enable sleep
+sudo pmset -a disablesleep 0
+```
+
+### Troubleshooting Wake Issues
+
+1. **Wake not working?** Check System Settings → Battery → Options → "Wake for network access"
+2. **Verify schedule is set:** `pmset -g sched`
+3. **Check power logs:** `pmset -g log | grep -i wake`
 
 ---
 
@@ -626,5 +706,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: November 2025 (v1.2 - Comprehensive Test Suite)*
+*Last Updated: November 2025 (v1.3 - Telegram Scraper + Wake Management)*
 *Owner: DreamFulFil | Status: 100/100 Complete*

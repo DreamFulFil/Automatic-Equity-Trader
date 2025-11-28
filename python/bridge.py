@@ -584,7 +584,50 @@ def place_order_dry_run(order: OrderRequest):
 # EARNINGS BLACKOUT SCRAPER
 # ============================================================================
 
-def scrape_earnings_dates():
+def send_telegram_message(message: str, password: str):
+    """
+    Send a Telegram message using credentials from application.yml
+    Requires Jasypt password to decrypt bot-token and chat-id
+    """
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        config_path = os.path.join(project_root, 'src/main/resources/application.yml')
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if 'telegram' not in config:
+            print("⚠️ Telegram config not found")
+            return False
+        
+        bot_token = decrypt_config_value(config['telegram'].get('bot-token'), password)
+        chat_id = decrypt_config_value(config['telegram'].get('chat-id'), password)
+        
+        if not bot_token or not chat_id:
+            print("⚠️ Telegram credentials missing")
+            return False
+        
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            print(f"📱 Telegram: {message[:50]}...")
+            return True
+        else:
+            print(f"⚠️ Telegram failed: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"⚠️ Telegram error: {e}")
+        return False
+
+
+def scrape_earnings_dates(jasypt_password: str = None):
     """
     Scrape earnings dates using yfinance library (handles Yahoo auth automatically).
     Saves sorted dates to config/earnings-blackout-dates.json
@@ -616,6 +659,14 @@ def scrape_earnings_dates():
     ]
     
     print(f"📅 Scraping earnings dates for {len(TICKERS)} stocks (using yfinance)...")
+    
+    # Send Telegram start notification if password provided
+    if jasypt_password:
+        send_telegram_message(
+            f"📅 <b>Earnings Scraper Started</b>\n"
+            f"Checking {len(TICKERS)} Taiwan stocks for earnings dates...",
+            jasypt_password
+        )
     
     earnings_dates = set()
     today = datetime.now().date()
@@ -679,6 +730,16 @@ def scrape_earnings_dates():
     print(f"\n✅ Saved {len(future_dates)} blackout dates to {output_file}")
     print(f"   Next dates: {future_dates[:5]}...")
     
+    # Send Telegram completion notification if password provided
+    if jasypt_password:
+        next_dates_str = ", ".join(future_dates[:3]) if future_dates else "None"
+        send_telegram_message(
+            f"✅ <b>Earnings Scraper Completed</b>\n"
+            f"Found {len(future_dates)} blackout dates\n"
+            f"Next: {next_dates_str}",
+            jasypt_password
+        )
+    
     return future_dates
 
 
@@ -686,11 +747,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='MTXF Trading Bridge')
     parser.add_argument('--scrape-earnings', action='store_true', 
                         help='Scrape Yahoo Finance for earnings dates and exit')
+    parser.add_argument('--jasypt-password', type=str, default=None,
+                        help='Jasypt password for Telegram notifications (optional)')
     args = parser.parse_args()
     
+    # Also check environment variable for password
+    jasypt_password = args.jasypt_password or os.environ.get('JASYPT_PASSWORD')
+    
     if args.scrape_earnings:
-        # Standalone scraper mode - no FastAPI, no Shioaji, no credentials needed
-        scrape_earnings_dates()
+        # Standalone scraper mode - no FastAPI, no Shioaji needed
+        # Telegram notifications sent if password provided
+        scrape_earnings_dates(jasypt_password)
         sys.exit(0)
     
     # Normal FastAPI server mode - initialize trading components
