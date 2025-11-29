@@ -57,3 +57,6 @@ logs/
 *.swo
 *~*.pyc
 __pycache__/
+
+# Auto-generated files — never commit
+config/earnings-blackout-dates.json
