@@ -9,14 +9,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ─────────────────────────────────────────────────────────────
-      # Java 21 Setup
-      # ─────────────────────────────────────────────────────────────
       - name: Set up Java 21 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -24,15 +20,37 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build Java project
-        run: mvn clean compile -DskipTests --batch-mode --quiet
+      - name: Build Java (compile & package)
+        run: mvn clean package -DskipTests --batch-mode --quiet
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-target
+          path: target/**
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: maven-target
+
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
 
       - name: Run Java unit tests
         run: mvn test -DexcludedGroups=integration --batch-mode
 
-      # ─────────────────────────────────────────────────────────────
-      # Python 3.11 Setup
-      # ─────────────────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -54,9 +72,6 @@ jobs:
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
 
-      # ─────────────────────────────────────────────────────────────
-      # Fish Shell Validation
-      # ─────────────────────────────────────────────────────────────
       - name: Install Fish shell
         run: sudo apt-get update && sudo apt-get install -y fish
 
@@ -65,33 +80,25 @@ jobs:
           fish -n start-lunch-bot.fish
           fish -n tests/fish/test_start_script.fish
 
-      # ─────────────────────────────────────────────────────────────
-      # Full test suite (skip on fork PRs - no secrets)
-      # ─────────────────────────────────────────────────────────────
       - name: Start Ollama Docker with model
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          # Use official ollama/ollama image if available, otherwise pull latest
           docker run --rm -d --name ollama -p 11434:11434 ollama/ollama:latest || true
-          # Pull and load model into Ollama (model name as used in README)
-          # Wait for Ollama to be ready
           for i in {1..30}; do
             if curl -sS "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
-          # Pull model (this may be a no-op if model preloaded in image)
           curl -sS -X POST "http://127.0.0.1:11434/api/models/pull" -H "Content-Type: application/json" -d '{"model":"llama3.1:8b-instruct-q5_K_M"}' || true
         env:
-          # Allow this step to run in forks without secrets
           OLLAMA_HOST: "http://127.0.0.1:11434"
 
       - name: Run full test suite
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           chmod +x run-tests.sh
-          ./run-tests.sh "$JASYPT_PASSWORD"
+          SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
           OLLAMA_HOST: "http://127.0.0.1:11434"
