@@ -151,11 +151,24 @@ echo ""
 parse_maven_results() {
     local output="$1"
     # Extract from line like: "Tests run: 138, Failures: 0, Errors: 0, Skipped: 30"
-    local summary_line=$(echo "$output" | grep "Tests run:" | tail -1)
-    local passed=$(echo "$summary_line" | sed -E 's/.*Tests run: ([0-9]+).*/\1/')
-    local failed=$(echo "$summary_line" | sed -E 's/.*Failures: ([0-9]+).*/\1/')
-    local skipped=$(echo "$summary_line" | sed -E 's/.*Skipped: ([0-9]+).*/\1/')
-    echo "${passed:-0} ${failed:-0} ${skipped:-0}"
+    local summary_line=$(echo "$output" | grep -E "Tests run[: ]" | tail -1)
+    # Fallback: try lines with 'Tests run' in different formats
+    if [ -z "$summary_line" ]; then
+        summary_line=$(echo "$output" | rg --no-ignore -n "Tests run" -S 2>/dev/null | tail -n1 || true)
+    fi
+    local passed=0
+    local failed=0
+    local skipped=0
+    if [ -n "$summary_line" ]; then
+        passed=$(echo "$summary_line" | sed -E 's/.*Tests run[: ]+([0-9]+).*/\1/' || echo 0)
+        failed=$(echo "$summary_line" | sed -E 's/.*Failures[: ]+([0-9]+).*/\1/' || echo 0)
+        skipped=$(echo "$summary_line" | sed -E 's/.*Skipped[: ]+([0-9]+).*/\1/' || echo 0)
+    fi
+    # Ensure numeric
+    if ! echo "$passed" | grep -qE '^[0-9]+$'; then passed=0; fi
+    if ! echo "$failed" | grep -qE '^[0-9]+$'; then failed=0; fi
+    if ! echo "$skipped" | grep -qE '^[0-9]+$'; then skipped=0; fi
+    echo "${passed} ${failed} ${skipped}"
 }
 
 parse_pytest_results() {
