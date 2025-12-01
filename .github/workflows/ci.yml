@@ -109,7 +109,10 @@ jobs:
               break
             fi
             echo "Waiting for bridge... ($i)"
-            sleep 1
+            echo "--- bridge log tail ---"
+            tail -n 50 /tmp/mtxf-bridge.log || true
+            echo "--- end log tail ---"
+            sleep 3
           done
           SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
         env:
