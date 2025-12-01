@@ -66,6 +66,25 @@ jobs:
       # ─────────────────────────────────────────────────────────────
       # Full test suite (skip on fork PRs - no secrets)
       # ─────────────────────────────────────────────────────────────
+      - name: Start Ollama Docker with model
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          # Use official ollama/ollama image if available, otherwise pull latest
+          docker run --rm -d --name ollama -p 11434:11434 ollama/ollama:latest || true
+          # Pull and load model into Ollama (model name as used in README)
+          # Wait for Ollama to be ready
+          for i in {1..30}; do
+            if curl -sS "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          # Pull model (this may be a no-op if model preloaded in image)
+          curl -sS -X POST "http://127.0.0.1:11434/api/models/pull" -H "Content-Type: application/json" -d '{"model":"llama3.1:8b-instruct-q5_K_M"}' || true
+        env:
+          # Allow this step to run in forks without secrets
+          OLLAMA_HOST: "http://127.0.0.1:11434"
+
       - name: Run full test suite
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -73,5 +92,4 @@ jobs:
           ./run-tests.sh "$JASYPT_PASSWORD"
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
-          # Ensure Ollama isn't required on CI by default; tests will skip integration if not available
           OLLAMA_HOST: "http://127.0.0.1:11434"
