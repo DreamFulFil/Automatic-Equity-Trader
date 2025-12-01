@@ -323,18 +323,31 @@ def init_trading_mode():
     JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
     if not JASYPT_PASSWORD:
         print("❌ JASYPT_PASSWORD environment variable not set!")
-        sys.exit(1)
+        return
     
     config = load_config_with_decryption(JASYPT_PASSWORD)
     print("✅ Configuration loaded and decrypted")
     
     shioaji = ShioajiWrapper(config)
     if not shioaji.connect():
-        print("❌ Failed to connect to Shioaji after all retries!")
-        sys.exit(1)
+        print("⚠️ Failed to connect to Shioaji after all retries; running in degraded mode")
+        return
     
     OLLAMA_URL = config['ollama']['url']
     OLLAMA_MODEL = config['ollama']['model']
+
+
+# Run trading init in background on startup so FastAPI binds quickly
+@app.on_event("startup")
+def _startup_event():
+    import threading
+    def _init_bg():
+        try:
+            init_trading_mode()
+        except Exception as e:
+            print(f"⚠️ Background init error: {e}")
+    t = threading.Thread(target=_init_bg, daemon=True)
+    t.start()
 
 # ============================================================================
 # NEWS ANALYSIS
