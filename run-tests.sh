@@ -287,6 +287,9 @@ start_bridge() {
     done
     
     echo -e "${RED}❌ Failed to start Python bridge${NC}"
+    echo "--- /tmp/mtxf-bridge.log ---"
+    sed -n '1,200p' /tmp/mtxf-bridge.log || true
+    echo "--- /tmp/mtxf-bridge.log (end) ---"
     return 1
 }
 
