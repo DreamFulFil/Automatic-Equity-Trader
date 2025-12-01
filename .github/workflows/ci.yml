@@ -103,16 +103,13 @@ jobs:
           # Debug JASYPT_PASSWORD present (print length only)
           echo -n "$JASYPT_PASSWORD" | wc -c && echo " (JASYPT_PASSWORD length; value masked)"
           python/venv/bin/python python/bridge.py > /tmp/mtxf-bridge.log 2>&1 &
-          for i in {1..60}; do
+          for i in {1..30}; do
             if curl -sS "http://127.0.0.1:8888/health" >/dev/null 2>&1; then
               echo "Python bridge is up"
               break
             fi
             echo "Waiting for bridge... ($i)"
-            echo "--- bridge log tail ---"
-            tail -n 50 /tmp/mtxf-bridge.log || true
-            echo "--- end log tail ---"
-            sleep 3
+            sleep 1
           done
           SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
         env:
