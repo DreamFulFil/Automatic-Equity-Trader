@@ -100,12 +100,13 @@ jobs:
         run: |
           chmod +x run-tests.sh
           # start bridge in background
-          python/venv/bin/python python/bridge.py --port 8888 --no-reload > /tmp/mtxf-bridge.log 2>&1 &
-          for i in {1..30}; do
+          python/venv/bin/python python/bridge.py > /tmp/mtxf-bridge.log 2>&1 &
+          for i in {1..60}; do
             if curl -sS "http://127.0.0.1:8888/health" >/dev/null 2>&1; then
               echo "Python bridge is up"
               break
             fi
+            echo "Waiting for bridge... ($i)"
             sleep 1
           done
           SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
