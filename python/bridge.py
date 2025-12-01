@@ -18,6 +18,7 @@ Bulletproof Features:
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import sys
+import os
 # Ensure local compat shims are importable (for Python 3.14 compat)
 compat_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'compat')
 if compat_dir not in sys.path:
@@ -26,8 +27,6 @@ if compat_dir not in sys.path:
 import shioaji as sj
 import requests
 import yaml
-import sys
-import os
 import re
 import time
 import base64
