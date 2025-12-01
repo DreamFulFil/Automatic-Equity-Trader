@@ -276,6 +276,19 @@ echo ""
 # Phase 2: Python Unit Tests
 ###############################################################################
 
+# Verify shioaji availability on PyPI to fail fast if a required binary version is removed
+SHIOAJI_SPEC=$(grep -E '^\s*shioaji' python/requirements.txt | head -1 | awk -F'==' '{print $1"=="$2}')
+if [ -n "$SHIOAJI_SPEC" ]; then
+    echo -e "${YELLOW}🔎 Checking PyPI for ${SHIOAJI_SPEC}...${NC}"
+    if ! python3 -m pip download --no-deps --dest /tmp "$SHIOAJI_SPEC" > /dev/null 2>&1; then
+        echo -e "${RED}❌ Required Python package not available on PyPI: ${SHIOAJI_SPEC}${NC}"
+        echo "Please update python/requirements.txt to a supported version or provide a local wheel."
+        exit 1
+    fi
+    # cleanup downloaded artifact
+    rm -f /tmp/$(echo "$SHIOAJI_SPEC" | sed 's/==/-/g')* || true
+fi
+
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}🐍 Phase 2: Python Unit Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
