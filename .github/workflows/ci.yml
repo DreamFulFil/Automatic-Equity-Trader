@@ -100,6 +100,8 @@ jobs:
         run: |
           chmod +x run-tests.sh
           # start bridge in background
+          # Debug JASYPT_PASSWORD present (print length only)
+          echo -n "$JASYPT_PASSWORD" | wc -c && echo " (JASYPT_PASSWORD length; value masked)"
           python/venv/bin/python python/bridge.py > /tmp/mtxf-bridge.log 2>&1 &
           for i in {1..60}; do
             if curl -sS "http://127.0.0.1:8888/health" >/dev/null 2>&1; then
