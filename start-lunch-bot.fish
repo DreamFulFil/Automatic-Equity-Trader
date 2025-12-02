@@ -4,6 +4,27 @@
 # Usage: fish start-lunch-bot.fish <jasypt-secret>
 ###############################################################################
 
+# --- Robust Cleanup of previous runs ---
+echo "🧹 Cleaning up leftover processes from previous runs..."
+# Use absolute paths for pkill for cron robustness
+# Kill Python bridge processes (matching the full command line)
+for pid in (/usr/bin/pgrep -f "python3 bridge.py")
+    echo "  Killing old Python bridge process: $pid"
+    /usr/bin/kill -9 $pid > /dev/null 2>&1
+end
+
+# Kill Ollama server processes (matching the executable name)
+for pid in (/usr/bin/pgrep -x ollama)
+    echo "  Killing old Ollama process: $pid"
+    /usr/bin/kill -9 $pid > /dev/null 2>&1
+end
+echo "🧹 Cleanup complete."
+# --- End Cleanup ---
+
+# Set a higher resource limit for file descriptors
+ulimit -n 16384
+echo "🔧 Set file descriptor limit to 16384."
+
 # Check for required secret parameter
 if test (count $argv) -lt 1
     echo "❌ Usage: fish start-lunch-bot.fish <jasypt-secret>"
@@ -152,22 +173,45 @@ set JAVA_EXIT_CODE $status
 echo ""
 echo "☕ Java application exited with code: $JAVA_EXIT_CODE"
 
-# Cleanup: Stop Python bridge
-echo "🐍 Stopping Python bridge (PID: $PYTHON_PID)..."
-kill $PYTHON_PID 2>/dev/null
-sleep 2
+# --- START: New and improved shutdown logic ---
 
-# Verify Python stopped
-if kill -0 $PYTHON_PID 2>/dev/null
-    echo "Force killing Python bridge..."
-    kill -9 $PYTHON_PID 2>/dev/null
+# Cleanup: Stop Python bridge via its own API
+echo "🐍 Requesting graceful shutdown of Python bridge via API..."
+# Use absolute path for curl for cron robustness
+set -l response_code (/usr/bin/curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8888/shutdown)
+
+if test $response_code -eq 200
+    echo "✅ Python bridge accepted shutdown request. Waiting for it to exit..."
+    # Wait up to 10 seconds for the process to terminate
+    set -l wait_time 0
+    while kill -0 $PYTHON_PID 2>/dev/null
+        if test $wait_time -ge 10
+            echo "⚠️ Python bridge did not exit after 10s. Force killing..."
+            # Use absolute path for kill for cron robustness
+            /usr/bin/kill -9 $PYTHON_PID 2>/dev/null
+            break
+        end
+        sleep 1
+        set wait_time (math $wait_time + 1)
+    end
+else
+    echo "⚠️ Python bridge did not respond to shutdown command (HTTP: $response_code). Force killing..."
+    # Use absolute path for kill for cron robustness
+    /usr/bin/kill -9 $PYTHON_PID 2>/dev/null
 end
 
-# Stop Ollama service (optional - keeps system clean)
+if not kill -0 $PYTHON_PID 2>/dev/null
+    echo "✅ Python bridge has stopped."
+end
+
+# Stop Ollama service
 echo "🦙 Stopping Ollama service..."
-pkill -x ollama 2>/dev/null
+# Use absolute path for pkill for cron robustness
+/usr/bin/pkill -x ollama 2>/dev/null
 
 echo "✅ All services stopped. Goodbye!"
+
+# --- END: New and improved shutdown logic ---
 
 # Cleanup on manual interrupt (Ctrl+C)
 function cleanup --on-signal INT --on-signal TERM

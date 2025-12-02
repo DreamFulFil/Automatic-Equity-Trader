@@ -429,17 +429,8 @@ public class TradingEngine {
         log.info("Trading window ended - shutting down application");
         telegramService.sendMessage("Trading window ended - Bot shutting down");
         
-        shutdownPythonBridge();
-        
-        new Thread(() -> {
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            int exitCode = SpringApplication.exit(applicationContext, () -> 0);
-            System.exit(exitCode);
-        }).start();
+        // Exit the Spring context, which will then trigger @PreDestroy
+        System.exit(SpringApplication.exit(applicationContext));
     }
     
     private void shutdownPythonBridge() {
@@ -481,7 +472,7 @@ public class TradingEngine {
     public void shutdown() {
         log.info("Shutting down - flattening positions");
         flattenPosition("System shutdown");
-        shutdownPythonBridge();
+        // The shutdownPythonBridge() call is removed.
         telegramService.sendMessage("Bot stopped");
     }
 }
