@@ -1,0 +1,8 @@
+# CI Profile - Disable Telegram to prevent spam during automated testing
+telegram:
+  enabled: false
+
+# Keep other settings same as default but disable notifications
+logging:
+  level:
+    '[tw.gc.mtxfbot]': WARN  # Reduce log noise in CI
