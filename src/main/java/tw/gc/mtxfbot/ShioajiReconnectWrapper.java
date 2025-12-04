@@ -61,8 +61,12 @@ public class ShioajiReconnectWrapper {
             } catch (Exception e) {
                 log.error("❌ Shioaji API call failed (attempt {}): {}", attempt, e.getMessage());
                 
-                if (attempt >= maxRetries) {
+                // Mark as disconnected on first failure
+                if (attempt == 1 && isConnected) {
                     isConnected = false;
+                }
+                
+                if (attempt >= maxRetries) {
                     telegramService.sendMessage("🚨 Shioaji connection failed after " + maxRetries + " attempts: " + e.getMessage());
                     throw e;
                 }

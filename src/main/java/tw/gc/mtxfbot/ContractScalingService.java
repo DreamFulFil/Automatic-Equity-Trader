@@ -19,15 +19,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * Responsible for determining the optimal number of contracts to trade
  * based on account equity and 30-day profit history.
  * 
- * Scaling Table:
+ * Scaling Table (December 2025 Production):
  * | Account Equity    | 30-day Profit    | Contracts |
  * |-------------------|------------------|-----------|
  * | < 250,000 TWD     | any              | 1         |
  * | >= 250,000 TWD    | >= 80,000 TWD    | 2         |
  * | >= 500,000 TWD    | >= 180,000 TWD   | 3         |
  * | >= 1,000,000 TWD  | >= 400,000 TWD   | 4         |
- * | >= 2,000,000 TWD  | >= 800,000 TWD   | 5         |
- * | >= 5,000,000 TWD  | >= 2,000,000 TWD | 6         |
  */
 @Service
 @Slf4j

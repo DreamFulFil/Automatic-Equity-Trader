@@ -321,7 +321,7 @@ class TradingEngineTest {
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrder", "BUY", 1, 20000.0);
+        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "BUY", 1, 20000.0);
 
         // Then
         AtomicInteger position = getAtomicIntField(tradingEngine, "currentPosition");
@@ -336,7 +336,7 @@ class TradingEngineTest {
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrder", "SELL", 1, 20000.0);
+        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "SELL", 1, 20000.0);
 
         // Then
         AtomicInteger position = getAtomicIntField(tradingEngine, "currentPosition");
@@ -350,10 +350,10 @@ class TradingEngineTest {
                 .thenThrow(new RuntimeException("Order rejected"));
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrder", "BUY", 1, 20000.0);
+        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "BUY", 1, 20000.0);
 
         // Then
-        verify(telegramService).sendMessage(contains("Order failed"));
+        verify(telegramService).sendMessage(contains("Order failed after 3 attempts"));
     }
 
     // ==================== flattenPosition() tests ====================
