@@ -49,19 +49,19 @@ public class TradingEngine {
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
     
-    // Position tracking
-    private final AtomicInteger currentPosition = new AtomicInteger(0);
-    private final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
-    private final AtomicReference<LocalDateTime> positionEntryTime = new AtomicReference<>(null);
+    // Position tracking (package-private for testing)
+    final AtomicInteger currentPosition = new AtomicInteger(0);
+    final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
+    final AtomicReference<LocalDateTime> positionEntryTime = new AtomicReference<>(null);
     
-    // State flags
-    private volatile boolean emergencyShutdown = false;
-    private volatile boolean marketDataConnected = false;
-    private volatile boolean tradingPaused = false;
+    // State flags (package-private for testing)
+    volatile boolean emergencyShutdown = false;
+    volatile boolean marketDataConnected = false;
+    volatile boolean tradingPaused = false;
     
-    // News veto cache
-    private final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
-    private final AtomicReference<String> cachedNewsReason = new AtomicReference<>("");
+    // News veto cache (package-private for testing)
+    final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
+    final AtomicReference<String> cachedNewsReason = new AtomicReference<>("");
     
     @PostConstruct
     public void initialize() {
@@ -136,7 +136,7 @@ public class TradingEngine {
         );
     }
     
-    private void handleStatusCommand() {
+    void handleStatusCommand() { // package-private for testing
         String state = "🟢 ACTIVE";
         if (emergencyShutdown) state = "🔴 EMERGENCY SHUTDOWN";
         else if (riskManagementService.isWeeklyLimitHit()) state = "🟡 WEEKLY LIMIT PAUSED";
@@ -178,7 +178,7 @@ public class TradingEngine {
         telegramService.sendMessage("⏸️ Trading PAUSED\\nNo new entries until /resume\\nExisting positions will still flatten at 13:00");
     }
     
-    private void handleResumeCommand() {
+    void handleResumeCommand() { // package-private for testing
         if (riskManagementService.isWeeklyLimitHit()) {
             telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\\nWait until next Monday");
             return;
@@ -250,7 +250,7 @@ public class TradingEngine {
         }
     }
     
-    private void check45MinuteHardExit() {
+    void check45MinuteHardExit() { // package-private for testing
         if (currentPosition.get() == 0) return;
         
         LocalDateTime entryTime = positionEntryTime.get();
@@ -296,7 +296,7 @@ public class TradingEngine {
         }
     }
     
-    private void checkRiskLimits() {
+    void checkRiskLimits() { // package-private for testing
         if (riskManagementService.isDailyLimitExceeded(tradingProperties.getRisk().getDailyLossLimit())) {
             log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(
@@ -307,7 +307,7 @@ public class TradingEngine {
         }
     }
     
-    private void evaluateEntry() throws Exception {
+    void evaluateEntry() throws Exception { // package-private for testing
         if (cachedNewsVeto.get()) {
             log.debug("🚨 News veto active (cached) - no entry. Reason: {}", cachedNewsReason.get());
             return;
@@ -334,7 +334,7 @@ public class TradingEngine {
         }
     }
     
-    private void evaluateExit() throws Exception {
+    void evaluateExit() throws Exception { // package-private for testing
         String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
         JsonNode signal = objectMapper.readTree(signalJson);
         
