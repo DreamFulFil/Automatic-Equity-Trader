@@ -15,9 +15,9 @@ trading:
   
   # Risk limits - NO PROFIT CAPS, unlimited upside
   risk:
-    max-position: 1
-    daily-loss-limit: 4500
-    weekly-loss-limit: 15000  # Pause trading if weekly loss exceeds this
+    max-position: 4           # Auto-scaling: 1-4 contracts based on equity + 30d profit
+    daily-loss-limit: 4500    # Emergency shutdown at -4500 TWD daily loss
+    weekly-loss-limit: 15000  # Pause trading if weekly loss exceeds -15000 TWD
     max-hold-minutes: 45      # Force-flatten positions older than 45 min
     # NO daily-profit-cap - let winners run!
     # NO monthly-profit-cap - unlimited upside!

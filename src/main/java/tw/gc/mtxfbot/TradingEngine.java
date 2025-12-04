@@ -21,17 +21,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * MTXF Lunch-Break Trading Engine
+ * MTXF Lunch-Break Trading Engine (December 2025 Production Version)
  * 
  * Core trading orchestrator responsible for:
- * - Signal polling and trade execution
- * - Position management
- * - Trading window enforcement
+ * - Signal polling and trade execution with auto-scaling contracts (1-4)
+ * - Position management with 45-minute hard exit
+ * - Trading window enforcement with weekly loss breaker
+ * - Shioaji auto-reconnect wrapper with retry logic
  * 
  * Delegates to:
- * - ContractScalingService: Contract sizing logic
- * - RiskManagementService: P&L tracking and limits
- * - TelegramService: Notifications and commands
+ * - ContractScalingService: Auto contract sizing (1-4 based on equity + 30d profit)
+ * - RiskManagementService: P&L tracking and weekly -15k TWD limit
+ * - TelegramService: Notifications and remote commands (/status /pause /resume /close)
  */
 @Service
 @Slf4j
@@ -64,18 +65,18 @@ public class TradingEngine {
     
     @PostConstruct
     public void initialize() {
-        log.info("MTXF Lunch Bot initializing...");
+        log.info("🚀 MTXF Lunch Bot initializing (December 2025 Production)...");
         
         registerTelegramCommands();
         
         String startupMessage = String.format(
-            "MTXF Lunch Bot started\n" +
-            "Trading window: %s - %s\n" +
-            "Max position: %d contract(s)\n" +
-            "Daily loss limit: %d TWD\n" +
-            "Weekly loss limit: %d TWD\n" +
-            "Max hold time: %d min\n" +
-            "Signal: 30s | News: 10min\n" +
+            "🤖 MTXF Lunch Bot started\\n" +
+            "Trading window: %s - %s\\n" +
+            "Max contracts: %d (auto-scaling)\\n" +
+            "Daily loss limit: %d TWD\\n" +
+            "Weekly loss limit: %d TWD\\n" +
+            "Max hold time: %d min\\n" +
+            "Signal: 30s | News: 10min\\n" +
             "Weekly P&L: %.0f TWD%s%s",
             tradingProperties.getWindow().getStart(),
             tradingProperties.getWindow().getEnd(),
@@ -84,22 +85,22 @@ public class TradingEngine {
             tradingProperties.getRisk().getWeeklyLossLimit(),
             tradingProperties.getRisk().getMaxHoldMinutes(),
             riskManagementService.getWeeklyPnL(),
-            riskManagementService.isWeeklyLimitHit() ? "\nWEEKLY LIMIT HIT - Paused until Monday" : "",
-            riskManagementService.isEarningsBlackout() ? String.format("\nEARNINGS BLACKOUT (%s) - No trading today", 
+            riskManagementService.isWeeklyLimitHit() ? "\\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
+            riskManagementService.isEarningsBlackout() ? String.format("\\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
                 riskManagementService.getEarningsBlackoutStock()) : ""
         );
         telegramService.sendMessage(startupMessage);
         
         try {
             String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
-            log.info("Python bridge connected: {}", response);
+            log.info("✅ Python bridge connected: {}", response);
             marketDataConnected = true;
             
             runPreMarketHealthCheck();
             contractScalingService.updateContractSizing();
         } catch (Exception e) {
-            log.error("Failed to connect to Python bridge", e);
-            telegramService.sendMessage("Python bridge connection failed!");
+            log.error("❌ Failed to connect to Python bridge", e);
+            telegramService.sendMessage("🚨 Python bridge connection failed!");
         }
     }
     
@@ -107,22 +108,22 @@ public class TradingEngine {
         try {
             java.util.Map<String, Object> testOrder = new java.util.HashMap<>();
             testOrder.put("action", "BUY");
-            testOrder.put("quantity", 1);
+            testOrder.put("quantity", "1"); // Fix: Always use string for quantity
             testOrder.put("price", 20000.0);
             
             String result = restTemplate.postForObject(
                     getBridgeUrl() + "/order/dry-run", testOrder, String.class);
             
             if (result != null && result.contains("validated")) {
-                log.info("Pre-market health check PASSED: order endpoint working");
+                log.info("✅ Pre-market health check PASSED: order endpoint working");
             } else {
-                log.warn("Pre-market health check: unexpected response: {}", result);
-                telegramService.sendMessage("Pre-market health check: order endpoint returned unexpected response");
+                log.warn("⚠️ Pre-market health check: unexpected response: {}", result);
+                telegramService.sendMessage("⚠️ Pre-market health check: order endpoint returned unexpected response");
             }
         } catch (Exception e) {
-            log.error("Pre-market health check FAILED: order endpoint broken", e);
-            telegramService.sendMessage("PRE-MARKET CHECK FAILED!\nOrder endpoint error: " + e.getMessage() + 
-                    "\nOrders may fail during trading session!");
+            log.error("❌ Pre-market health check FAILED: order endpoint broken", e);
+            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\\nOrder endpoint error: " + e.getMessage() + 
+                    "\\nOrders may fail during trading session!");
         }
     }
     
@@ -136,11 +137,11 @@ public class TradingEngine {
     }
     
     private void handleStatusCommand() {
-        String state = "ACTIVE";
-        if (emergencyShutdown) state = "EMERGENCY SHUTDOWN";
-        else if (riskManagementService.isWeeklyLimitHit()) state = "WEEKLY LIMIT PAUSED";
-        else if (riskManagementService.isEarningsBlackout()) state = "EARNINGS BLACKOUT";
-        else if (tradingPaused) state = "PAUSED BY USER";
+        String state = "🟢 ACTIVE";
+        if (emergencyShutdown) state = "🔴 EMERGENCY SHUTDOWN";
+        else if (riskManagementService.isWeeklyLimitHit()) state = "🟡 WEEKLY LIMIT PAUSED";
+        else if (riskManagementService.isEarningsBlackout()) state = "📅 EARNINGS BLACKOUT";
+        else if (tradingPaused) state = "⏸️ PAUSED BY USER";
         
         String positionInfo = currentPosition.get() == 0 ? "No position" :
             String.format("%d @ %.0f (held %d min)",
@@ -151,52 +152,54 @@ public class TradingEngine {
             );
         
         String message = String.format(
-            "BOT STATUS\n" +
-            "State: %s\n" +
-            "Position: %s\n" +
-            "Max Contracts: %d\n" +
-            "Equity: %.0f TWD\n" +
-            "30d Profit: %.0f TWD\n" +
-            "Today P&L: %.0f TWD\n" +
-            "Week P&L: %.0f TWD\n" +
-            "News Veto: %s\n" +
+            "📊 BOT STATUS\\n" +
+            "━━━━━━━━━━━━━━━━\\n" +
+            "State: %s\\n" +
+            "Position: %s\\n" +
+            "Max Contracts: %d\\n" +
+            "Equity: %.0f TWD\\n" +
+            "30d Profit: %.0f TWD\\n" +
+            "Today P&L: %.0f TWD\\n" +
+            "Week P&L: %.0f TWD\\n" +
+            "News Veto: %s\\n" +
+            "━━━━━━━━━━━━━━━━\\n" +
             "Commands: /pause /resume /close",
             state, positionInfo, contractScalingService.getMaxContracts(), 
             contractScalingService.getLastEquity(), contractScalingService.getLast30DayProfit(),
             riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL(),
-            cachedNewsVeto.get() ? "ACTIVE" : "Clear"
+            cachedNewsVeto.get() ? "🚨 ACTIVE" : "✅ Clear"
         );
         telegramService.sendMessage(message);
     }
     
     private void handlePauseCommand() {
         tradingPaused = true;
-        log.info("Trading paused by user command");
-        telegramService.sendMessage("Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:00");
+        log.info("⏸️ Trading paused by user command");
+        telegramService.sendMessage("⏸️ Trading PAUSED\\nNo new entries until /resume\\nExisting positions will still flatten at 13:00");
     }
     
     private void handleResumeCommand() {
         if (riskManagementService.isWeeklyLimitHit()) {
-            telegramService.sendMessage("Cannot resume - Weekly loss limit hit\nWait until next Monday");
+            telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\\nWait until next Monday");
             return;
         }
         if (riskManagementService.isEarningsBlackout()) {
-            telegramService.sendMessage("Cannot resume - Earnings blackout day\nNo trading today");
+            telegramService.sendMessage("❌ Cannot resume - Earnings blackout day\\nNo trading today");
             return;
         }
         tradingPaused = false;
-        log.info("Trading resumed by user command");
-        telegramService.sendMessage("Trading RESUMED\nBot is active");
+        log.info("▶️ Trading resumed by user command");
+        telegramService.sendMessage("▶️ Trading RESUMED\\nBot is active");
     }
     
     private void handleCloseCommand() {
         if (currentPosition.get() == 0) {
-            telegramService.sendMessage("No position to close");
+            telegramService.sendMessage("ℹ️ No position to close");
             return;
         }
-        log.info("Close command received from user");
+        log.info("🔒 Close command received from user");
         flattenPosition("Closed by user");
-        telegramService.sendMessage("Position closed by user command");
+        telegramService.sendMessage("✅ Position closed by user command");
     }
     
     private String getBridgeUrl() {
@@ -208,12 +211,12 @@ public class TradingEngine {
         if (emergencyShutdown || !marketDataConnected) return;
         
         if (riskManagementService.isEarningsBlackout()) {
-            log.debug("Earnings blackout day - no trading");
+            log.debug("📅 Earnings blackout day - no trading");
             return;
         }
         
         if (riskManagementService.isWeeklyLimitHit() && currentPosition.get() == 0) {
-            log.debug("Weekly limit hit - waiting until next Monday");
+            log.debug("🟡 Weekly limit hit - waiting until next Monday");
             return;
         }
         
@@ -242,8 +245,8 @@ public class TradingEngine {
             }
             
         } catch (Exception e) {
-            log.error("Trading loop error", e);
-            telegramService.sendMessage("Trading loop error: " + e.getMessage());
+            log.error("🚨 Trading loop error", e);
+            telegramService.sendMessage("🚨 Trading loop error: " + e.getMessage());
         }
     }
     
@@ -257,9 +260,9 @@ public class TradingEngine {
         int maxHold = tradingProperties.getRisk().getMaxHoldMinutes();
         
         if (minutesHeld >= maxHold) {
-            log.warn("45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
+            log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
             telegramService.sendMessage(String.format(
-                "45-MIN HARD EXIT\nPosition held %d minutes\nForce-flattening now!",
+                "⏰ 45-MIN HARD EXIT\\nPosition held %d minutes\\nForce-flattening now!",
                 minutesHeld
             ));
             flattenPosition("45-minute time limit");
@@ -268,7 +271,7 @@ public class TradingEngine {
     
     private void updateNewsVetoCache() {
         try {
-            log.info("Checking news veto (10-min interval)...");
+            log.info("📰 Checking news veto (10-min interval)...");
             String newsJson = restTemplate.getForObject(getBridgeUrl() + "/signal/news", String.class);
             JsonNode newsData = objectMapper.readTree(newsJson);
             
@@ -280,24 +283,24 @@ public class TradingEngine {
             cachedNewsReason.set(reason);
             
             if (veto) {
-                log.warn("News veto ACTIVE: {} (score: {})", reason, score);
+                log.warn("🚨 News veto ACTIVE: {} (score: {})", reason, score);
                 telegramService.sendMessage(String.format(
-                        "NEWS VETO ACTIVE\nReason: %s\nScore: %.2f\nNo new entries until next check",
+                        "🚨 NEWS VETO ACTIVE\\nReason: %s\\nScore: %.2f\\nNo new entries until next check",
                         reason, score));
             } else {
-                log.info("News check passed (score: {})", score);
+                log.info("✅ News check passed (score: {})", score);
             }
             
         } catch (Exception e) {
-            log.error("News veto check failed: {}", e.getMessage());
+            log.error("❌ News veto check failed: {}", e.getMessage());
         }
     }
     
     private void checkRiskLimits() {
         if (riskManagementService.isDailyLimitExceeded(tradingProperties.getRisk().getDailyLossLimit())) {
-            log.error("DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
+            log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(
-                    "EMERGENCY SHUTDOWN\nDaily loss: %.0f TWD\nFlattening all positions!", 
+                    "🚨 EMERGENCY SHUTDOWN\\nDaily loss: %.0f TWD\\nFlattening all positions!", 
                     riskManagementService.getDailyPnL()));
             flattenPosition("Daily loss limit");
             emergencyShutdown = true;
@@ -306,7 +309,7 @@ public class TradingEngine {
     
     private void evaluateEntry() throws Exception {
         if (cachedNewsVeto.get()) {
-            log.debug("News veto active (cached) - no entry. Reason: {}", cachedNewsReason.get());
+            log.debug("🚨 News veto active (cached) - no entry. Reason: {}", cachedNewsReason.get());
             return;
         }
         
@@ -318,16 +321,16 @@ public class TradingEngine {
         double currentPrice = signal.path("current_price").asDouble(0.0);
         
         if (confidence < 0.65) {
-            log.debug("Low confidence: {}", confidence);
+            log.debug("📉 Low confidence: {}", confidence);
             return;
         }
         
         int quantity = contractScalingService.getMaxContracts();
         
         if ("LONG".equals(direction)) {
-            executeOrder("BUY", quantity, currentPrice);
+            executeOrderWithRetry("BUY", quantity, currentPrice);
         } else if ("SHORT".equals(direction)) {
-            executeOrder("SELL", quantity, currentPrice);
+            executeOrderWithRetry("SELL", quantity, currentPrice);
         }
     }
     
@@ -345,43 +348,69 @@ public class TradingEngine {
         boolean exitSignal = signal.path("exit_signal").asBoolean(false);
         
         if (stopLoss) {
-            log.warn("Stop-loss hit: {} TWD (threshold: {})", unrealizedPnL, stopLossThreshold);
+            log.warn("🛑 Stop-loss hit: {} TWD (threshold: {})", unrealizedPnL, stopLossThreshold);
             flattenPosition("Stop-loss");
         } else if (exitSignal) {
-            log.info("Exit signal (trend reversal): {} TWD", unrealizedPnL);
+            log.info("📈 Exit signal (trend reversal): {} TWD", unrealizedPnL);
             flattenPosition("Trend reversal");
         } else if (unrealizedPnL > 0) {
-            log.debug("Position running: +{} TWD (no cap, letting it run)", unrealizedPnL);
+            log.debug("💰 Position running: +{} TWD (no cap, letting it run)", unrealizedPnL);
         }
     }
     
-    private void executeOrder(String action, int quantity, double price) {
-        try {
-            java.util.Map<String, Object> orderMap = new java.util.HashMap<>();
-            orderMap.put("action", action);
-            orderMap.put("quantity", quantity);
-            orderMap.put("price", price);
-            
-            log.info("Sending order: {}", orderMap);
-            String result = restTemplate.postForObject(
-                    getBridgeUrl() + "/order", orderMap, String.class);
-            log.debug("Order response: {}", result);
-            
-            if ("BUY".equals(action)) {
-                currentPosition.addAndGet(quantity);
-            } else {
-                currentPosition.addAndGet(-quantity);
+    /**
+     * Execute order with retry wrapper and quantity bug fix
+     * Fixes the 422 error by ensuring quantity is always sent as string
+     */
+    private void executeOrderWithRetry(String action, int quantity, double price) {
+        int maxRetries = 3;
+        int attempt = 0;
+        
+        while (attempt < maxRetries) {
+            try {
+                attempt++;
+                
+                java.util.Map<String, Object> orderMap = new java.util.HashMap<>();
+                orderMap.put("action", action);
+                orderMap.put("quantity", String.valueOf(quantity)); // Fix: Force string conversion
+                orderMap.put("price", price);
+                
+                log.info("📤 Sending order (attempt {}): {}", attempt, orderMap);
+                String result = restTemplate.postForObject(
+                        getBridgeUrl() + "/order", orderMap, String.class);
+                log.debug("📥 Order response: {}", result);
+                
+                // Success - update position
+                if ("BUY".equals(action)) {
+                    currentPosition.addAndGet(quantity);
+                } else {
+                    currentPosition.addAndGet(-quantity);
+                }
+                entryPrice.set(price);
+                positionEntryTime.set(LocalDateTime.now(TAIPEI_ZONE));
+                
+                telegramService.sendMessage(String.format(
+                        "✅ ORDER FILLED\\n%s %d MTXF @ %.0f\\nPosition: %d", 
+                        action, quantity, price, currentPosition.get()));
+                
+                return; // Success - exit retry loop
+                
+            } catch (Exception e) {
+                log.error("❌ Order execution failed (attempt {}): {}", attempt, e.getMessage());
+                
+                if (attempt >= maxRetries) {
+                    telegramService.sendMessage("🚨 Order failed after " + maxRetries + " attempts: " + e.getMessage());
+                    return;
+                }
+                
+                // Exponential backoff: 1s, 2s, 4s
+                try {
+                    Thread.sleep(1000 * (1L << (attempt - 1)));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
-            entryPrice.set(price);
-            positionEntryTime.set(LocalDateTime.now(TAIPEI_ZONE));
-            
-            telegramService.sendMessage(String.format(
-                    "ORDER FILLED\n%s %d MTXF @ %.0f\nPosition: %d", 
-                    action, quantity, price, currentPosition.get()));
-            
-        } catch (Exception e) {
-            log.error("Order execution failed", e);
-            telegramService.sendMessage("Order failed: " + e.getMessage());
         }
     }
     
@@ -395,7 +424,7 @@ public class TradingEngine {
             JsonNode signal = objectMapper.readTree(signalJson);
             double currentPrice = signal.path("current_price").asDouble(0.0);
             
-            executeOrder(action, Math.abs(pos), currentPrice);
+            executeOrderWithRetry(action, Math.abs(pos), currentPrice);
             
             double pnl = (currentPrice - entryPrice.get()) * pos * 50;
             riskManagementService.recordPnL(pnl, tradingProperties.getRisk().getWeeklyLossLimit());
@@ -403,31 +432,31 @@ public class TradingEngine {
             currentPosition.set(0);
             positionEntryTime.set(null);
             
-            log.info("Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
+            log.info("🔒 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
             telegramService.sendMessage(String.format(
-                    "POSITION CLOSED\nReason: %s\nP&L: %.0f TWD\nDaily P&L: %.0f TWD\nWeekly P&L: %.0f TWD", 
+                    "🔒 POSITION CLOSED\\nReason: %s\\nP&L: %.0f TWD\\nDaily P&L: %.0f TWD\\nWeekly P&L: %.0f TWD", 
                     reason, pnl, riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL()));
             
             if (riskManagementService.isWeeklyLimitHit()) {
                 telegramService.sendMessage(String.format(
-                    "WEEKLY LOSS LIMIT HIT\nWeekly P&L: %.0f TWD\nTrading paused until next Monday!",
+                    "🚨 WEEKLY LOSS LIMIT HIT\\nWeekly P&L: %.0f TWD\\nTrading paused until next Monday!",
                     riskManagementService.getWeeklyPnL()
                 ));
             }
             
         } catch (Exception e) {
-            log.error("Flatten failed", e);
+            log.error("❌ Flatten failed", e);
         }
     }
     
     @Scheduled(cron = "0 0 13 * * MON-FRI", zone = "Asia/Taipei")
     public void autoFlatten() {
-        log.info("13:00 Auto-flatten triggered");
+        log.info("🕐 13:00 Auto-flatten triggered");
         flattenPosition("End of trading window");
         sendDailySummary();
         
-        log.info("Trading window ended - shutting down application");
-        telegramService.sendMessage("Trading window ended - Bot shutting down");
+        log.info("🛑 Trading window ended - shutting down application");
+        telegramService.sendMessage("🛑 Trading window ended - Bot shutting down");
         
         // Exit the Spring context, which will then trigger @PreDestroy
         System.exit(SpringApplication.exit(applicationContext));
@@ -435,34 +464,36 @@ public class TradingEngine {
     
     private void sendDailySummary() {
         double pnl = riskManagementService.getDailyPnL();
-        String status = pnl > 0 ? "Profitable" : "Loss";
+        String status = pnl > 0 ? "💰 Profitable" : "📉 Loss";
         String comment = "";
         
         if (pnl > 3000) {
-            comment = "\nEXCEPTIONAL DAY! Let winners run!";
+            comment = "\\n🚀 EXCEPTIONAL DAY! Let winners run!";
         } else if (pnl > 2000) {
-            comment = "\nGreat performance!";
+            comment = "\\n🎯 Great performance!";
         } else if (pnl > 1000) {
-            comment = "\nSolid day!";
+            comment = "\\n✅ Solid day!";
         }
         
         telegramService.sendMessage(String.format(
-                "DAILY SUMMARY\n" +
-                "Today P&L: %.0f TWD\n" +
-                "Week P&L: %.0f TWD\n" +
-                "Contracts: %d\n" +
-                "Equity: %.0f TWD\n" +
-                "Status: %s%s\n" +
-                "NO PROFIT CAPS - Unlimited upside!",
+                "📊 DAILY SUMMARY\\n" +
+                "━━━━━━━━━━━━━━━━\\n" +
+                "Today P&L: %.0f TWD\\n" +
+                "Week P&L: %.0f TWD\\n" +
+                "Contracts: %d\\n" +
+                "Equity: %.0f TWD\\n" +
+                "Status: %s%s\\n" +
+                "━━━━━━━━━━━━━━━━\\n" +
+                "🚀 NO PROFIT CAPS - Unlimited upside!",
                 pnl, riskManagementService.getWeeklyPnL(), contractScalingService.getMaxContracts(), 
                 contractScalingService.getLastEquity(), status, comment));
     }
     
     @PreDestroy
     public void shutdown() {
-        log.info("Shutting down - flattening positions");
+        log.info("🛑 Shutting down - flattening positions");
         flattenPosition("System shutdown");
         // Daily summary already sent by autoFlatten() - don't send twice
-        telegramService.sendMessage("Bot stopped");
+        telegramService.sendMessage("🛑 Bot stopped");
     }
 }
