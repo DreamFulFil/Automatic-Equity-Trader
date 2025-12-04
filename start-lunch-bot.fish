@@ -104,27 +104,40 @@ if not eval $JAVA_CMD -version 2>&1 | grep -q "version \"21"
 end
 echo -e "$GREEN✅ Java 21 detected (using: $JAVA_CMD)$NC"
 
-# Step 2: Check Python 3.10+
-echo "2️⃣ Checking Python..."
-if not command -v python3 > /dev/null
-    echo -e "$RED❌ Python3 not found!$NC"
+# Step 2: Force Python 3.12 via brew (skip pyenv)
+echo "2️⃣ Installing Python 3.12 via brew..."
+
+# Install Python 3.12 directly via brew
+if not command -v python3.12 > /dev/null
+    echo "Installing python@3.12..."
+    brew install python@3.12
+end
+
+# Verify Python 3.12 is available
+if command -v python3.12 > /dev/null
+    echo "Python 3.12: "(python3.12 --version)
+    echo "Python 3.12 path: "(which python3.12)
+else
+    echo -e "$RED❌ Python 3.12 not found after install!$NC"
     exit 1
 end
-set PYTHON_VERSION (python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-echo -e "$GREEN✅ Python $PYTHON_VERSION detected$NC"
+echo -e "$GREEN✅ Python 3.12 ready$NC"
 
-# Step 3: Setup Python venv (Fish-specific)
-if not test -d "python/venv"
-    echo "3️⃣ Creating Python virtual environment..."
-    cd python
-    python3 -m venv venv
-    source venv/bin/activate.fish  # Fish-specific activation
-    pip install --upgrade pip --quiet
-    pip install -r requirements.txt --quiet
-    cd ..
-else
-    echo -e "$GREEN3️⃣ Python venv exists$NC"
-end
+# Step 3: Force rebuild venv with Python 3.12
+echo "3️⃣ Creating venv with Python 3.12..."
+cd python
+rm -rf venv
+
+# Create venv with explicit Python 3.12
+echo "Creating venv with python3.12..."
+python3.12 -m venv venv
+source venv/bin/activate.fish
+echo "Venv Python: "(python --version)
+echo "Venv path: "(which python)
+pip install --upgrade pip --quiet
+pip install -r requirements.txt --quiet
+cd ..
+echo -e "$GREEN✅ Venv created with Python 3.12$NC"
 
 # Step 4: Check Ollama
 echo "4️⃣ Checking Ollama..."
@@ -183,8 +196,8 @@ mkdir -p $BOT_DIR_ABS/logs
 if not test -f "config/earnings-blackout-dates.json"
     echo "📅 Scraping initial earnings blackout dates..."
     cd python
-    source venv/bin/activate.fish
-    python3 bridge.py --scrape-earnings
+    # Use venv Python directly
+    venv/bin/python bridge.py --scrape-earnings
     cd ..
 else
     echo -e "$GREEN📅 Earnings blackout dates loaded$NC"
@@ -214,7 +227,8 @@ function supervise_python_bridge
         echo "🔄 [Supervisor] Starting Python bridge (attempt "(math $restart_count + 1)")..." >> $BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD $JASYPT_SECRET
-        $BOT_DIR/python/venv/bin/python3 bridge.py >> $BOT_DIR/logs/python-bridge.log 2>&1
+        # Use venv Python explicitly
+        $BOT_DIR/python/venv/bin/python bridge.py >> $BOT_DIR/logs/python-bridge.log 2>&1
         set -l exit_code $status
         
         # Check if stop was requested
@@ -251,7 +265,8 @@ nohup fish -c "
         echo '🔄 [Supervisor] Starting Python bridge (attempt '(math \$restart_count + 1)')...' >> \$BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD \$JASYPT_SECRET
-        \$BOT_DIR/python/venv/bin/python3 bridge.py >> \$BOT_DIR/logs/python-bridge.log 2>&1
+        # Use venv Python explicitly
+        \$BOT_DIR/python/venv/bin/python bridge.py >> \$BOT_DIR/logs/python-bridge.log 2>&1
         set exit_code \$status
         
         if test -f \$STOP_FILE
