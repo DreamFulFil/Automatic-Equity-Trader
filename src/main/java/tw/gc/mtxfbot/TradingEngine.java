@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Dual-Mode Lunch-Break Trading Engine (December 2025 Production Version)
  * 
  * Supports two trading modes via -Dtrading.mode system property:
- * - "stock" (default): Trades 2330.TW odd lots (67 shares base, +33 per 100k equity)
+ * - "stock" (default): Trades 2330.TW odd lots (55 shares base, +27 per 20k equity)
  * - "futures": Trades MTXF with full scaling (1→2→3→4 contracts)
  * 
  * Core trading orchestrator responsible for:
@@ -86,7 +86,9 @@ public class TradingEngine {
             : "Mode: FUTURES (MTXF)";
         
         String scalingInfo = "stock".equals(tradingMode)
-            ? String.format("Base shares: %d (+33 per 100k equity)", getBaseStockQuantity())
+            ? String.format("Base shares: %d (+%d per 20k equity)", 
+                tradingProperties.getStock().getInitialShares(),
+                tradingProperties.getStock().getShareIncrement())
             : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
         
         String startupMessage = String.format(
@@ -129,14 +131,23 @@ public class TradingEngine {
     
     /**
      * Get base stock quantity for stock mode (2330.TW odd lots)
-     * Returns 67 shares base + 33 per 100k equity above 100k
+     * Base: 55 shares (≈79k NTD at NT$1,445/share, perfect for 80k capital)
+     * Auto-scale: +27 shares for every additional 20k equity above 80k base
      */
     int getBaseStockQuantity() {
         double equity = contractScalingService.getLastEquity();
-        if (equity <= 0) equity = 100000; // Default if not yet fetched
-        int baseShares = 67;
-        int additionalShares = (int) ((equity / 100000) - 1) * 33;
-        return Math.max(baseShares, baseShares + additionalShares);
+        if (equity <= 0) equity = 80000; // Default if not yet fetched
+        int baseShares = tradingProperties.getStock().getInitialShares();
+        int increment = tradingProperties.getStock().getShareIncrement();
+        int baseCapital = 80000; // Base capital for 55 shares
+        int incrementCapital = 20000; // +27 shares per 20k equity
+        
+        // Calculate additional shares based on equity above base
+        int additionalShares = 0;
+        if (equity > baseCapital) {
+            additionalShares = (int) ((equity - baseCapital) / incrementCapital) * increment;
+        }
+        return baseShares + additionalShares;
     }
     
     /**
@@ -202,7 +213,10 @@ public class TradingEngine {
             );
         
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK (2330.TW)\\nShares: %d", getBaseStockQuantity())
+            ? String.format("Mode: STOCK (2330.TW)\\nShares: %d (base %d +%d/20k)", 
+                getBaseStockQuantity(),
+                tradingProperties.getStock().getInitialShares(),
+                tradingProperties.getStock().getShareIncrement())
             : String.format("Mode: FUTURES (MTXF)\\nContracts: %d", contractScalingService.getMaxContracts());
         
         String message = String.format(
@@ -540,7 +554,10 @@ public class TradingEngine {
         }
         
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK\\nShares: %d", getBaseStockQuantity())
+            ? String.format("Mode: STOCK\\nShares: %d (base %d +%d/20k)",
+                getBaseStockQuantity(),
+                tradingProperties.getStock().getInitialShares(),
+                tradingProperties.getStock().getShareIncrement())
             : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
         
         telegramService.sendMessage(String.format(

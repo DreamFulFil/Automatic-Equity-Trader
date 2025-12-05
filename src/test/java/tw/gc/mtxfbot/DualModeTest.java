@@ -42,6 +42,8 @@ class DualModeTest {
         tradingProperties = new TradingProperties();
         tradingProperties.getWindow().setStart("11:30");
         tradingProperties.getWindow().setEnd("13:00");
+        tradingProperties.getStock().setInitialShares(55);
+        tradingProperties.getStock().setShareIncrement(27);
         tradingProperties.getRisk().setDailyLossLimit(4500);
         tradingProperties.getRisk().setWeeklyLossLimit(15000);
         tradingProperties.getRisk().setMaxHoldMinutes(45);
@@ -106,9 +108,9 @@ class DualModeTest {
 
     @Test
     void testStockMode_UsesBaseStockQuantity() {
-        // Given: Stock mode with 100k equity
+        // Given: Stock mode with 80k equity (base)
         System.setProperty("trading.mode", "stock");
-        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
@@ -119,16 +121,16 @@ class DualModeTest {
             .thenReturn("{\"status\":\"ok\"}");
         tradingEngine.initialize();
         
-        // Then: Base quantity should be 67 shares
-        assertEquals(67, tradingEngine.getBaseStockQuantity());
-        assertEquals(67, tradingEngine.getTradingQuantity());
+        // Then: Base quantity should be 55 shares (for 80k capital)
+        assertEquals(55, tradingEngine.getBaseStockQuantity());
+        assertEquals(55, tradingEngine.getTradingQuantity());
     }
 
     @Test
     void testStockMode_ScalesWithEquity() {
-        // Given: Stock mode with 300k equity
+        // Given: Stock mode with 120k equity (+40k above base 80k = 2 increments)
         System.setProperty("trading.mode", "stock");
-        when(contractScalingService.getLastEquity()).thenReturn(300000.0);
+        when(contractScalingService.getLastEquity()).thenReturn(120000.0);
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
@@ -139,8 +141,8 @@ class DualModeTest {
             .thenReturn("{\"status\":\"ok\"}");
         tradingEngine.initialize();
         
-        // Then: Quantity should be 67 + (3-1)*33 = 67 + 66 = 133 shares
-        assertEquals(133, tradingEngine.getBaseStockQuantity());
+        // Then: Quantity should be 55 + (40k / 20k) * 27 = 55 + 54 = 109 shares
+        assertEquals(109, tradingEngine.getBaseStockQuantity());
     }
 
     @Test
@@ -166,7 +168,7 @@ class DualModeTest {
     void testStockMode_OrderMessageShowsCorrectInstrument() throws Exception {
         // Given: Stock mode
         System.setProperty("trading.mode", "stock");
-        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
@@ -236,7 +238,7 @@ class DualModeTest {
     void testStockMode_PnLMultiplierIsOne() throws Exception {
         // Given: Stock mode with position
         System.setProperty("trading.mode", "stock");
-        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
