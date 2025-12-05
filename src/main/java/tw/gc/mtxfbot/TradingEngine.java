@@ -92,13 +92,13 @@ public class TradingEngine {
             : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
         
         String startupMessage = String.format(
-            "🤖 Bot started — %s\\n" +
-            "Trading window: %s - %s\\n" +
-            "%s\\n" +
-            "Daily loss limit: %d TWD\\n" +
-            "Weekly loss limit: %d TWD\\n" +
-            "Max hold time: %d min\\n" +
-            "Signal: 30s | News: 10min\\n" +
+            "🤖 Bot started — %s\n" +
+            "Trading window: %s - %s\n" +
+            "%s\n" +
+            "Daily loss limit: %d TWD\n" +
+            "Weekly loss limit: %d TWD\n" +
+            "Max hold time: %d min\n" +
+            "Signal: 30s | News: 10min\n" +
             "Weekly P&L: %.0f TWD%s%s",
             modeDescription,
             tradingProperties.getWindow().getStart(),
@@ -108,8 +108,8 @@ public class TradingEngine {
             tradingProperties.getRisk().getWeeklyLossLimit(),
             tradingProperties.getRisk().getMaxHoldMinutes(),
             riskManagementService.getWeeklyPnL(),
-            riskManagementService.isWeeklyLimitHit() ? "\\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
-            riskManagementService.isEarningsBlackout() ? String.format("\\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
+            riskManagementService.isWeeklyLimitHit() ? "\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
+            riskManagementService.isEarningsBlackout() ? String.format("\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
                 riskManagementService.getEarningsBlackoutStock()) : ""
         );
         telegramService.sendMessage(startupMessage);
@@ -183,8 +183,8 @@ public class TradingEngine {
             }
         } catch (Exception e) {
             log.error("❌ Pre-market health check FAILED: order endpoint broken", e);
-            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\\nOrder endpoint error: " + e.getMessage() + 
-                    "\\nOrders may fail during trading session!");
+            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\nOrder endpoint error: " + e.getMessage() + 
+                    "\nOrders may fail during trading session!");
         }
     }
     
@@ -213,24 +213,24 @@ public class TradingEngine {
             );
         
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK (2330.TW)\\nShares: %d (base %d +%d/20k)", 
+            ? String.format("Mode: STOCK (2330.TW)\nShares: %d (base %d +%d/20k)", 
                 getBaseStockQuantity(),
                 tradingProperties.getStock().getInitialShares(),
                 tradingProperties.getStock().getShareIncrement())
-            : String.format("Mode: FUTURES (MTXF)\\nContracts: %d", contractScalingService.getMaxContracts());
+            : String.format("Mode: FUTURES (MTXF)\nContracts: %d", contractScalingService.getMaxContracts());
         
         String message = String.format(
-            "📊 BOT STATUS\\n" +
-            "━━━━━━━━━━━━━━━━\\n" +
-            "State: %s\\n" +
-            "%s\\n" +
-            "Position: %s\\n" +
-            "Equity: %.0f TWD\\n" +
-            "30d Profit: %.0f TWD\\n" +
-            "Today P&L: %.0f TWD\\n" +
-            "Week P&L: %.0f TWD\\n" +
-            "News Veto: %s\\n" +
-            "━━━━━━━━━━━━━━━━\\n" +
+            "📊 BOT STATUS\n" +
+            "━━━━━━━━━━━━━━━━\n" +
+            "State: %s\n" +
+            "%s\n" +
+            "Position: %s\n" +
+            "Equity: %.0f TWD\n" +
+            "30d Profit: %.0f TWD\n" +
+            "Today P&L: %.0f TWD\n" +
+            "Week P&L: %.0f TWD\n" +
+            "News Veto: %s\n" +
+            "━━━━━━━━━━━━━━━━\n" +
             "Commands: /pause /resume /close",
             state, modeInfo, positionInfo,
             contractScalingService.getLastEquity(), contractScalingService.getLast30DayProfit(),
@@ -243,21 +243,21 @@ public class TradingEngine {
     private void handlePauseCommand() {
         tradingPaused = true;
         log.info("⏸️ Trading paused by user command");
-        telegramService.sendMessage("⏸️ Trading PAUSED\\nNo new entries until /resume\\nExisting positions will still flatten at 13:00");
+        telegramService.sendMessage("⏸️ Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:00");
     }
     
     void handleResumeCommand() { // package-private for testing
         if (riskManagementService.isWeeklyLimitHit()) {
-            telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\\nWait until next Monday");
+            telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\nWait until next Monday");
             return;
         }
         if (riskManagementService.isEarningsBlackout()) {
-            telegramService.sendMessage("❌ Cannot resume - Earnings blackout day\\nNo trading today");
+            telegramService.sendMessage("❌ Cannot resume - Earnings blackout day\nNo trading today");
             return;
         }
         tradingPaused = false;
         log.info("▶️ Trading resumed by user command");
-        telegramService.sendMessage("▶️ Trading RESUMED\\nBot is active");
+        telegramService.sendMessage("▶️ Trading RESUMED\nBot is active");
     }
     
     private void handleCloseCommand() {
