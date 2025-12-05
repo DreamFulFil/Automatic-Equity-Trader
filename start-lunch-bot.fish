@@ -1,7 +1,15 @@
 #!/usr/bin/env fish
 ###############################################################################
-# MTXF Lunch Bot Startup Script (Fish Shell)
-# Usage: fish start-lunch-bot.fish <jasypt-secret>
+# Lunch Investor Bot Startup Script (Fish Shell)
+# Usage: fish start-lunch-bot.fish <jasypt-secret> [mode]
+#
+# Arguments:
+#   jasypt-secret  (required) - Jasypt encryption password
+#   mode           (optional) - "stock" (default) or "futures"
+#
+# Examples:
+#   ./start-lunch-bot.fish secret123            → stock mode (2330.TW odd lots)
+#   ./start-lunch-bot.fish secret123 futures    → futures mode (MTXF)
 ###############################################################################
 
 # --- ROBUST Cleanup: Only use POSIX-compliant kill commands ---
@@ -40,12 +48,32 @@ echo "🔧 Set file descriptor limit to 16384."
 
 # Check for required secret parameter
 if test (count $argv) -lt 1
-    echo "❌ Usage: fish start-lunch-bot.fish <jasypt-secret>"
-    echo "   The secret is required to decrypt application properties."
+    echo "❌ Usage: fish start-lunch-bot.fish <jasypt-secret> [mode]"
+    echo "   jasypt-secret  - Required: Jasypt encryption password"
+    echo "   mode           - Optional: 'stock' (default) or 'futures'"
+    echo ""
+    echo "Examples:"
+    echo "   ./start-lunch-bot.fish secret123            → stock mode (2330.TW odd lots)"
+    echo "   ./start-lunch-bot.fish secret123 futures    → futures mode (MTXF)"
     exit 1
 end
 
 set JASYPT_SECRET $argv[1]
+
+# Parse trading mode (default: stock)
+set TRADING_MODE "stock"
+if test (count $argv) -ge 2
+    if test "$argv[2]" = "futures"
+        set TRADING_MODE "futures"
+    else if test "$argv[2]" = "stock"
+        set TRADING_MODE "stock"
+    else
+        echo "❌ Invalid mode: $argv[2]. Use 'stock' or 'futures'."
+        exit 1
+    end
+end
+
+echo "📈 Trading Mode: $TRADING_MODE"
 
 set BOT_DIR (cd (dirname (status --current-filename)) && pwd)
 cd $BOT_DIR
@@ -76,9 +104,10 @@ end
 # Ensure Java is in PATH
 set -x PATH $JAVA_HOME/bin $PATH
 
-echo "🚀 MTXF Lunch Bot Launcher (Fish Shell)"
+echo "🚀 Lunch Investor Bot Launcher (Fish Shell)"
 echo "========================================"
 echo "Directory: $BOT_DIR"
+echo "Mode: $TRADING_MODE"
 echo ""
 
 # Colors for Fish
@@ -254,6 +283,7 @@ end
 nohup fish -c "
     set BOT_DIR '$BOT_DIR_ABS'
     set JASYPT_SECRET '$JASYPT_SECRET'
+    set TRADING_MODE '$TRADING_MODE'
     set STOP_FILE '\$BOT_DIR/logs/supervisor.stop'
     
     mkdir -p \$BOT_DIR/logs
@@ -265,6 +295,7 @@ nohup fish -c "
         echo '🔄 [Supervisor] Starting Python bridge (attempt '(math \$restart_count + 1)')...' >> \$BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD \$JASYPT_SECRET
+        set -x TRADING_MODE \$TRADING_MODE
         # Use venv Python explicitly
         \$BOT_DIR/python/venv/bin/python bridge.py >> \$BOT_DIR/logs/python-bridge.log 2>&1
         set exit_code \$status
@@ -308,13 +339,14 @@ echo "7️⃣ Starting Java trading engine..."
 echo ""
 echo "📊 Bot is running! Press Ctrl+C to stop."
 echo "📱 Check your Telegram for alerts."
+echo "📈 Mode: $TRADING_MODE"
 echo ""
 
 # Use jenv exec for cron reliability, fallback to java otherwise
 if command -v jenv > /dev/null
-    jenv exec java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 else
-    java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    java -Dtrading.mode="$TRADING_MODE" -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 end
 set JAVA_EXIT_CODE $status
 

@@ -16,21 +16,27 @@ import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * MTXF Lunch-Break Trading Engine (December 2025 Production Version)
+ * Dual-Mode Lunch-Break Trading Engine (December 2025 Production Version)
+ * 
+ * Supports two trading modes via -Dtrading.mode system property:
+ * - "stock" (default): Trades 2330.TW odd lots (67 shares base, +33 per 100k equity)
+ * - "futures": Trades MTXF with full scaling (1→2→3→4 contracts)
  * 
  * Core trading orchestrator responsible for:
- * - Signal polling and trade execution with auto-scaling contracts (1-4)
+ * - Signal polling and trade execution with auto-scaling
  * - Position management with 45-minute hard exit
  * - Trading window enforcement with weekly loss breaker
  * - Shioaji auto-reconnect wrapper with retry logic
  * 
  * Delegates to:
- * - ContractScalingService: Auto contract sizing (1-4 based on equity + 30d profit)
+ * - ContractScalingService: Auto sizing based on equity + 30d profit
  * - RiskManagementService: P&L tracking and weekly -15k TWD limit
  * - TelegramService: Notifications and remote commands (/status /pause /resume /close)
  */
@@ -49,6 +55,9 @@ public class TradingEngine {
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
     
+    // Trading mode: "stock" or "futures"
+    private String tradingMode;
+    
     // Position tracking (package-private for testing)
     final AtomicInteger currentPosition = new AtomicInteger(0);
     final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
@@ -65,22 +74,34 @@ public class TradingEngine {
     
     @PostConstruct
     public void initialize() {
-        log.info("🚀 MTXF Lunch Bot initializing (December 2025 Production)...");
+        tradingMode = System.getProperty("trading.mode", "stock");
+        log.info("🚀 Lunch Investor Bot initializing (December 2025 Production)...");
+        log.info("📈 Trading Mode: {} ({})", tradingMode.toUpperCase(), 
+            "stock".equals(tradingMode) ? "2330.TW odd lots" : "MTXF futures");
         
         registerTelegramCommands();
         
+        String modeDescription = "stock".equals(tradingMode) 
+            ? "Mode: STOCK (2330.TW odd lots)" 
+            : "Mode: FUTURES (MTXF)";
+        
+        String scalingInfo = "stock".equals(tradingMode)
+            ? String.format("Base shares: %d (+33 per 100k equity)", getBaseStockQuantity())
+            : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
+        
         String startupMessage = String.format(
-            "🤖 MTXF Lunch Bot started\\n" +
+            "🤖 Bot started — %s\\n" +
             "Trading window: %s - %s\\n" +
-            "Max contracts: %d (auto-scaling)\\n" +
+            "%s\\n" +
             "Daily loss limit: %d TWD\\n" +
             "Weekly loss limit: %d TWD\\n" +
             "Max hold time: %d min\\n" +
             "Signal: 30s | News: 10min\\n" +
             "Weekly P&L: %.0f TWD%s%s",
+            modeDescription,
             tradingProperties.getWindow().getStart(),
             tradingProperties.getWindow().getEnd(),
-            contractScalingService.getMaxContracts(),
+            scalingInfo,
             tradingProperties.getRisk().getDailyLossLimit(),
             tradingProperties.getRisk().getWeeklyLossLimit(),
             tradingProperties.getRisk().getMaxHoldMinutes(),
@@ -97,18 +118,47 @@ public class TradingEngine {
             marketDataConnected = true;
             
             runPreMarketHealthCheck();
-            contractScalingService.updateContractSizing();
+            if ("futures".equals(tradingMode)) {
+                contractScalingService.updateContractSizing();
+            }
         } catch (Exception e) {
             log.error("❌ Failed to connect to Python bridge", e);
             telegramService.sendMessage("🚨 Python bridge connection failed!");
         }
     }
     
+    /**
+     * Get base stock quantity for stock mode (2330.TW odd lots)
+     * Returns 67 shares base + 33 per 100k equity above 100k
+     */
+    int getBaseStockQuantity() {
+        double equity = contractScalingService.getLastEquity();
+        if (equity <= 0) equity = 100000; // Default if not yet fetched
+        int baseShares = 67;
+        int additionalShares = (int) ((equity / 100000) - 1) * 33;
+        return Math.max(baseShares, baseShares + additionalShares);
+    }
+    
+    /**
+     * Get trading quantity based on mode
+     */
+    int getTradingQuantity() {
+        if ("stock".equals(tradingMode)) {
+            return getBaseStockQuantity();
+        } else {
+            return contractScalingService.getMaxContracts();
+        }
+    }
+    
+    public String getTradingMode() {
+        return tradingMode;
+    }
+    
     private void runPreMarketHealthCheck() {
         try {
-            java.util.Map<String, Object> testOrder = new java.util.HashMap<>();
+            Map<String, Object> testOrder = new HashMap<>();
             testOrder.put("action", "BUY");
-            testOrder.put("quantity", "1"); // Fix: Always use string for quantity
+            testOrder.put("quantity", String.valueOf(1));
             testOrder.put("price", 20000.0);
             
             String result = restTemplate.postForObject(
@@ -151,12 +201,16 @@ public class TradingEngine {
                     java.time.Duration.between(positionEntryTime.get(), LocalDateTime.now(TAIPEI_ZONE)).toMinutes() : 0
             );
         
+        String modeInfo = "stock".equals(tradingMode) 
+            ? String.format("Mode: STOCK (2330.TW)\\nShares: %d", getBaseStockQuantity())
+            : String.format("Mode: FUTURES (MTXF)\\nContracts: %d", contractScalingService.getMaxContracts());
+        
         String message = String.format(
             "📊 BOT STATUS\\n" +
             "━━━━━━━━━━━━━━━━\\n" +
             "State: %s\\n" +
+            "%s\\n" +
             "Position: %s\\n" +
-            "Max Contracts: %d\\n" +
             "Equity: %.0f TWD\\n" +
             "30d Profit: %.0f TWD\\n" +
             "Today P&L: %.0f TWD\\n" +
@@ -164,7 +218,7 @@ public class TradingEngine {
             "News Veto: %s\\n" +
             "━━━━━━━━━━━━━━━━\\n" +
             "Commands: /pause /resume /close",
-            state, positionInfo, contractScalingService.getMaxContracts(), 
+            state, modeInfo, positionInfo,
             contractScalingService.getLastEquity(), contractScalingService.getLast30DayProfit(),
             riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL(),
             cachedNewsVeto.get() ? "🚨 ACTIVE" : "✅ Clear"
@@ -325,7 +379,7 @@ public class TradingEngine {
             return;
         }
         
-        int quantity = contractScalingService.getMaxContracts();
+        int quantity = getTradingQuantity();
         
         if ("LONG".equals(direction)) {
             executeOrderWithRetry("BUY", quantity, currentPrice);
@@ -341,9 +395,14 @@ public class TradingEngine {
         double currentPrice = signal.path("current_price").asDouble(0.0);
         int pos = currentPosition.get();
         double entry = entryPrice.get();
-        double unrealizedPnL = (currentPrice - entry) * pos * 50;
         
-        double stopLossThreshold = -500 * Math.abs(pos);
+        // P&L calculation differs by mode
+        double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0; // MTXF = 50 TWD per point
+        double unrealizedPnL = (currentPrice - entry) * pos * multiplier;
+        
+        double stopLossThreshold = "stock".equals(tradingMode) 
+            ? -500 * Math.abs(pos)  // Stock: -500 TWD per unit
+            : -500 * Math.abs(pos); // Futures: -500 TWD per contract
         boolean stopLoss = unrealizedPnL < stopLossThreshold;
         boolean exitSignal = signal.path("exit_signal").asBoolean(false);
         
@@ -370,12 +429,13 @@ public class TradingEngine {
             try {
                 attempt++;
                 
-                java.util.Map<String, Object> orderMap = new java.util.HashMap<>();
+                Map<String, Object> orderMap = new HashMap<>();
                 orderMap.put("action", action);
                 orderMap.put("quantity", String.valueOf(quantity)); // Fix: Force string conversion
                 orderMap.put("price", price);
                 
-                log.info("📤 Sending order (attempt {}): {}", attempt, orderMap);
+                String instrument = "stock".equals(tradingMode) ? "2330.TW" : "MTXF";
+                log.info("📤 Sending {} order (attempt {}): {}", instrument, attempt, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
                 log.debug("📥 Order response: {}", result);
@@ -390,8 +450,8 @@ public class TradingEngine {
                 positionEntryTime.set(LocalDateTime.now(TAIPEI_ZONE));
                 
                 telegramService.sendMessage(String.format(
-                        "✅ ORDER FILLED\\n%s %d MTXF @ %.0f\\nPosition: %d", 
-                        action, quantity, price, currentPosition.get()));
+                        "✅ ORDER FILLED\\n%s %d %s @ %.0f\\nPosition: %d", 
+                        action, quantity, instrument, price, currentPosition.get()));
                 
                 return; // Success - exit retry loop
                 
@@ -424,9 +484,13 @@ public class TradingEngine {
             JsonNode signal = objectMapper.readTree(signalJson);
             double currentPrice = signal.path("current_price").asDouble(0.0);
             
+            // Store entry price before executeOrderWithRetry overwrites it
+            double originalEntryPrice = entryPrice.get();
+            
             executeOrderWithRetry(action, Math.abs(pos), currentPrice);
             
-            double pnl = (currentPrice - entryPrice.get()) * pos * 50;
+            double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
+            double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
             riskManagementService.recordPnL(pnl, tradingProperties.getRisk().getWeeklyLossLimit());
             
             currentPosition.set(0);
@@ -475,17 +539,21 @@ public class TradingEngine {
             comment = "\\n✅ Solid day!";
         }
         
+        String modeInfo = "stock".equals(tradingMode) 
+            ? String.format("Mode: STOCK\\nShares: %d", getBaseStockQuantity())
+            : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
+        
         telegramService.sendMessage(String.format(
                 "📊 DAILY SUMMARY\\n" +
                 "━━━━━━━━━━━━━━━━\\n" +
+                "%s\\n" +
                 "Today P&L: %.0f TWD\\n" +
                 "Week P&L: %.0f TWD\\n" +
-                "Contracts: %d\\n" +
                 "Equity: %.0f TWD\\n" +
                 "Status: %s%s\\n" +
                 "━━━━━━━━━━━━━━━━\\n" +
                 "🚀 NO PROFIT CAPS - Unlimited upside!",
-                pnl, riskManagementService.getWeeklyPnL(), contractScalingService.getMaxContracts(), 
+                modeInfo, pnl, riskManagementService.getWeeklyPnL(),
                 contractScalingService.getLastEquity(), status, comment));
     }
     

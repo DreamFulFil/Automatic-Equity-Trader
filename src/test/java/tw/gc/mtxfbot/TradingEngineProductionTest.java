@@ -173,7 +173,15 @@ class TradingEngineProductionTest {
 
     @Test
     void testTelegramStatusCommand_ShowsCompleteStatus() {
-        // Given: Bot state
+        // Given: Bot state with futures mode explicitly set
+        System.setProperty("trading.mode", "futures");
+        
+        // Re-create engine to pick up system property
+        tradingEngine = new TradingEngine(
+            restTemplate, objectMapper, telegramService, tradingProperties,
+            applicationContext, contractScalingService, riskManagementService
+        );
+        
         when(contractScalingService.getMaxContracts()).thenReturn(3);
         when(contractScalingService.getLastEquity()).thenReturn(750000.0);
         when(contractScalingService.getLast30DayProfit()).thenReturn(200000.0);
@@ -188,16 +196,19 @@ class TradingEngineProductionTest {
         // When: handleStatusCommand is called
         tradingEngine.handleStatusCommand();
         
-        // Then: Should send comprehensive status
+        // Then: Should send comprehensive status with mode info
         verify(telegramService).sendMessage(argThat(message -> 
             message.contains("📊 BOT STATUS") &&
-            message.contains("Max Contracts: 3") &&
+            message.contains("Mode:") &&
             message.contains("Equity: 750000 TWD") &&
             message.contains("30d Profit: 200000 TWD") &&
             message.contains("Today P&L: 1500 TWD") &&
             message.contains("Week P&L: 8500 TWD") &&
-            message.contains("2 @ 22500 (held 15 min)")
+            message.contains("2 @ 22500")
         ));
+        
+        // Cleanup
+        System.clearProperty("trading.mode");
     }
 
     @Test

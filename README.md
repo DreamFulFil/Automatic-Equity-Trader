@@ -1,10 +1,10 @@
 [![CI](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml)
 
-# 🤖 MTXF Lunch Bot – Final Production Version (December 2025)
+# 🤖 Lunch Investor Bot – Dual-Mode Production Version (December 2025)
 
-**Fully automated Taiwan Mini-TXF futures trading bot for macOS Apple Silicon.**
+**Fully automated Taiwan trading bot for macOS Apple Silicon supporting BOTH stock (2330.TW) and futures (MTXF) trading.**
 
-Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, automatic contract scaling, and bulletproof risk limits. Zero human intervention required.
+Trade during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, automatic scaling, and bulletproof risk limits. Switch between stock and futures mode with a single command-line argument.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -13,9 +13,38 @@ Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 
 ---
 
+## 🔥 NEW: Dual-Mode Trading (December 2025)
+
+The bot now supports **two trading modes** via command-line, with **zero config changes** required:
+
+| Mode | Instrument | Default Quantity | Scaling |
+|------|------------|------------------|---------|
+| **stock** (default) | 2330.TW (TSMC odd lots) | 67 shares | +33 per 100k equity |
+| **futures** | MTXF (Mini-TXF) | 1-4 contracts | Based on equity + 30d profit |
+
+### Usage
+
+```bash
+# Stock mode (default) - trades 2330.TW odd lots
+./start-lunch-bot.fish YOUR_PASSWORD
+
+# Futures mode - trades MTXF contracts
+./start-lunch-bot.fish YOUR_PASSWORD futures
+```
+
+### Key Features
+- **One command switches everything** - no config edits, no rebuild
+- **Strict mode separation** - NO futures calls in stock mode and vice versa
+- **Same signals, veto, risk limits** - identical strategy for both modes
+- **Mode shown in Telegram** - "Bot started — Mode: STOCK (2330.TW odd lots)"
+- **Crontab stays safe** - default (no argument) = stock mode
+
+---
+
 ## 📑 Table of Contents
 
 - [Current Features (2025 Final)](#-current-features-2025-final)
+- [Dual-Mode Trading](#-new-dual-mode-trading-december-2025)
 - [Overview](#-overview)
 - [Architecture](#-architecture)
 - [Contract Scaling](#-contract-scaling)
@@ -40,6 +69,7 @@ Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 
 | Feature | Status | Confirmed |
 |---------|--------|-----------|
+| **Dual-mode trading (stock/futures via CLI)** | **Implemented** | **Yes** |
 | 30-second signal checks | Implemented | Yes |
 | 10-minute Llama 3.1 news veto | Implemented | Yes |
 | 45-minute hard exit | Implemented | Yes |
@@ -814,5 +844,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: November 2025 (v1.3 - Telegram Scraper + Wake Management)*
+*Last Updated: December 2025 (v2.0 - Dual-Mode Stock/Futures + All Elite Upgrades)*
 *Owner: DreamFulFil | Status: 100/100 Complete*

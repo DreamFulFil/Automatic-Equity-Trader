@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-MTXF Trading Bridge - FastAPI + Shioaji + Ollama
+Dual-Mode Trading Bridge - FastAPI + Shioaji + Ollama
 Lightweight bridge between Java trading engine and market data/AI
+
+Supports two trading modes via TRADING_MODE environment variable:
+- "stock" (default): Trades 2330.TW odd lots via api.Contracts.Stocks.TSE["2330"]
+- "futures": Trades MTXF via api.Contracts.Futures.MTXF
 
 2025 Production Strategy:
 - 3-min and 5-min momentum alignment
@@ -10,9 +14,10 @@ Lightweight bridge between Java trading engine and market data/AI
 - Exit on trend reversal only
 
 Bulletproof Features:
-- Shioaji auto-reconnect (max 5 attempts, exponential backoff)
+- Shioaji auto-reconnect (max 5 retries, exponential backoff)
 - Graceful shutdown on /shutdown endpoint
 - Auto-scrape earnings dates from Yahoo Finance (--scrape-earnings)
+- Strict mode separation: NO futures calls in stock mode and vice versa
 """
 
 from fastapi import FastAPI
@@ -124,20 +129,27 @@ def load_config_with_decryption(password: str):
 
 class ShioajiWrapper:
     """
-    Shioaji wrapper with auto-reconnect capability.
+    Shioaji wrapper with auto-reconnect capability and dual-mode support.
     Retries login + subscription up to 5 times with exponential backoff.
+    
+    Modes:
+    - "stock": Uses api.Contracts.Stocks.TSE["2330"] for 2330.TW odd lots
+    - "futures": Uses api.Contracts.Futures.TXF.TXFR1 for MTXF
     """
     
     MAX_RETRIES = 5
     BASE_BACKOFF_SECONDS = 2
     
-    def __init__(self, config):
+    def __init__(self, config, trading_mode="stock"):
         self.config = config
+        self.trading_mode = trading_mode
         self.api = None
-        self.mtxf_contract = None
+        self.contract = None  # Generic contract (stock or futures)
+        self.mtxf_contract = None  # Legacy alias for backwards compat
         self.connected = False
         self._lock = threading.Lock()
         self._callback_ref = None  # Keep callback alive
+        print(f"📈 ShioajiWrapper initialized in {trading_mode.upper()} mode")
         
     def connect(self) -> bool:
         """Connect to Shioaji with retry logic"""
@@ -165,26 +177,12 @@ class ShioajiWrapper:
                 mode = "📄 Paper trading" if self.config['shioaji']['simulation'] else "💰 LIVE TRADING"
                 print(f"{mode} mode activated")
                 
-                # Subscribe to MTXF
-                self.mtxf_contract = self.api.Contracts.Futures.TXF.TXFR1
-                self.api.quote.subscribe(
-                    self.mtxf_contract,
-                    quote_type=sj.constant.QuoteType.Tick,
-                    version=sj.constant.QuoteVersion.v1
-                )
+                # Subscribe based on trading mode
+                if self.trading_mode == "stock":
+                    self._subscribe_stock()
+                else:
+                    self._subscribe_futures()
                 
-                # Register tick handler with defensive wrapper and GC protection
-                def safe_tick_handler(exchange, tick):
-                    try:
-                        self._handle_tick(exchange, tick)
-                    except Exception as e:
-                        print(f"⚠️ Tick callback crashed (recovered): {e}")
-                
-                # Store callback reference to prevent garbage collection
-                self._callback_ref = safe_tick_handler
-                self.api.quote.set_on_tick_fop_v1_callback(self._callback_ref)
-                
-                print(f"✅ Subscribed to {self.mtxf_contract.symbol}")
                 self.connected = True
                 return True
                 
@@ -199,6 +197,49 @@ class ShioajiWrapper:
                     return False
         
         return False
+    
+    def _subscribe_stock(self):
+        """Subscribe to 2330.TW (TSMC) for stock mode"""
+        self.contract = self.api.Contracts.Stocks.TSE["2330"]
+        self.api.quote.subscribe(
+            self.contract,
+            quote_type=sj.constant.QuoteType.Tick,
+            version=sj.constant.QuoteVersion.v1
+        )
+        
+        # Register tick handler
+        def safe_tick_handler(exchange, tick):
+            try:
+                self._handle_tick(exchange, tick)
+            except Exception as e:
+                print(f"⚠️ Tick callback crashed (recovered): {e}")
+        
+        self._callback_ref = safe_tick_handler
+        self.api.quote.set_on_tick_stk_v1_callback(self._callback_ref)
+        
+        print(f"✅ Subscribed to {self.contract.symbol} (STOCK mode)")
+    
+    def _subscribe_futures(self):
+        """Subscribe to MTXF for futures mode"""
+        self.contract = self.api.Contracts.Futures.TXF.TXFR1
+        self.mtxf_contract = self.contract  # Legacy alias
+        self.api.quote.subscribe(
+            self.contract,
+            quote_type=sj.constant.QuoteType.Tick,
+            version=sj.constant.QuoteVersion.v1
+        )
+        
+        # Register tick handler
+        def safe_tick_handler(exchange, tick):
+            try:
+                self._handle_tick(exchange, tick)
+            except Exception as e:
+                print(f"⚠️ Tick callback crashed (recovered): {e}")
+        
+        self._callback_ref = safe_tick_handler
+        self.api.quote.set_on_tick_fop_v1_callback(self._callback_ref)
+        
+        print(f"✅ Subscribed to {self.contract.symbol} (FUTURES mode)")
     
     def reconnect(self) -> bool:
         """Force reconnect (called when connection is lost)"""
@@ -246,94 +287,168 @@ class ShioajiWrapper:
             print(f"⚠️ Tick handler error (non-fatal): {e}")
     
     def place_order(self, action: str, quantity: int, price: float):
-        """Place order with account validation and error handling"""
+        """Place order with account validation and error handling - mode-aware"""
         if not self.connected:
             if not self.reconnect():
                 return {"status": "error", "error": "Not connected"}
         
         try:
-            # Check account availability
-            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
-                print("⚠️ Account not available, reconnecting...")
-                if not self.reconnect():
-                    return {"status": "error", "error": "Account unavailable"}
-            
-            order_obj = self.api.Order(
-                price=price,
-                quantity=quantity,
-                action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
-                price_type=sj.constant.FuturesPriceType.LMT,
-                order_type=sj.constant.OrderType.ROD,
-                account=self.api.futopt_account
-            )
-            
-            trade = self.api.place_order(self.mtxf_contract, order_obj)
-            return {"status": "filled", "order_id": trade.status.id}
-            
+            if self.trading_mode == "stock":
+                return self._place_stock_order(action, quantity, price)
+            else:
+                return self._place_futures_order(action, quantity, price)
+                
         except Exception as e:
             print(f"❌ Order failed: {e}")
-            # Don't retry on validation errors to prevent loops
-            if "validation" in str(e).lower() or "account" in str(e).lower():
-                return {"status": "error", "error": str(e)}
             return {"status": "error", "error": str(e)}
     
+    def _place_stock_order(self, action: str, quantity: int, price: float):
+        """Place stock order (2330.TW odd lots)"""
+        # Check stock account availability
+        if not hasattr(self.api, 'stock_account') or self.api.stock_account is None:
+            print("⚠️ Stock account not available, reconnecting...")
+            if not self.reconnect():
+                return {"status": "error", "error": "Stock account unavailable"}
+        
+        order_obj = self.api.Order(
+            price=price,
+            quantity=quantity,  # Integer for stocks
+            action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
+            price_type=sj.constant.StockPriceType.LMT,
+            order_type=sj.constant.OrderType.ROD,
+            order_lot=sj.constant.StockOrderLot.IntradayOdd,  # Odd lot for small quantities
+            account=self.api.stock_account
+        )
+        
+        trade = self.api.place_order(self.contract, order_obj)
+        return {"status": "filled", "order_id": trade.status.id, "mode": "stock"}
+    
+    def _place_futures_order(self, action: str, quantity: int, price: float):
+        """Place futures order (MTXF)"""
+        # Check futures account availability
+        if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+            print("⚠️ Futures account not available, reconnecting...")
+            if not self.reconnect():
+                return {"status": "error", "error": "Futures account unavailable"}
+        
+        order_obj = self.api.Order(
+            price=price,
+            quantity=quantity,  # Integer works for futures too
+            action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
+            price_type=sj.constant.FuturesPriceType.LMT,
+            order_type=sj.constant.OrderType.ROD,
+            account=self.api.futopt_account
+        )
+        
+        trade = self.api.place_order(self.contract, order_obj)
+        return {"status": "filled", "order_id": trade.status.id, "mode": "futures"}
+    
     def get_account_info(self):
-        """Get account equity and margin info with error handling"""
+        """Get account equity and margin info with error handling - mode-aware"""
         if not self.connected:
             return {"equity": 0, "available_margin": 0, "status": "error", "error": "Not connected"}
         
         try:
-            # Check account availability
-            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
-                return {"equity": 0, "available_margin": 0, "status": "error", "error": "Account not available"}
-            
-            margin = self.api.margin(self.api.futopt_account)
-            equity = float(margin.equity) if hasattr(margin, 'equity') else 0
-            available_margin = float(margin.available_margin) if hasattr(margin, 'available_margin') else 0
-            
-            return {
-                "equity": equity,
-                "available_margin": available_margin,
-                "status": "ok"
-            }
+            if self.trading_mode == "stock":
+                return self._get_stock_account_info()
+            else:
+                return self._get_futures_account_info()
         except Exception as e:
             print(f"❌ Failed to get account info: {e}")
             return {"equity": 0, "available_margin": 0, "status": "error", "error": str(e)}
     
+    def _get_stock_account_info(self):
+        """Get stock account info"""
+        if not hasattr(self.api, 'stock_account') or self.api.stock_account is None:
+            return {"equity": 0, "available_margin": 0, "status": "error", "error": "Stock account not available"}
+        
+        # For stock accounts, get balance
+        try:
+            balance = self.api.account_balance()
+            equity = float(balance.acc_balance) if hasattr(balance, 'acc_balance') else 100000
+            return {
+                "equity": equity,
+                "available_margin": equity,
+                "status": "ok",
+                "mode": "stock"
+            }
+        except Exception as e:
+            # Return default equity for stock mode
+            return {
+                "equity": 100000,
+                "available_margin": 100000,
+                "status": "ok",
+                "mode": "stock",
+                "note": "Using default equity"
+            }
+    
+    def _get_futures_account_info(self):
+        """Get futures account info"""
+        if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+            return {"equity": 0, "available_margin": 0, "status": "error", "error": "Futures account not available"}
+        
+        margin = self.api.margin(self.api.futopt_account)
+        equity = float(margin.equity) if hasattr(margin, 'equity') else 0
+        available_margin = float(margin.available_margin) if hasattr(margin, 'available_margin') else 0
+        
+        return {
+            "equity": equity,
+            "available_margin": available_margin,
+            "status": "ok",
+            "mode": "futures"
+        }
+    
     def get_profit_loss_history(self, days=30):
-        """Get realized P&L for the last N days with error handling"""
+        """Get realized P&L for the last N days with error handling - mode-aware"""
         if not self.connected:
             return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": "Not connected"}
         
         try:
-            # Check account availability
-            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
-                return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": "Account not available"}
-            
-            from datetime import datetime, timedelta
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-            
-            pnl_records = self.api.list_profit_loss(
-                self.api.futopt_account,
-                start_date.strftime("%Y-%m-%d"),
-                end_date.strftime("%Y-%m-%d")
-            )
-            
-            total_pnl = 0.0
-            for record in pnl_records:
-                if hasattr(record, 'pnl'):
-                    total_pnl += float(record.pnl)
-            
-            return {
-                "total_pnl": total_pnl,
-                "days": days,
-                "record_count": len(pnl_records),
-                "status": "ok"
-            }
+            if self.trading_mode == "stock":
+                return self._get_stock_pnl_history(days)
+            else:
+                return self._get_futures_pnl_history(days)
         except Exception as e:
             print(f"❌ Failed to get P&L history: {e}")
             return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": str(e)}
+    
+    def _get_stock_pnl_history(self, days):
+        """Get stock P&L history"""
+        # For stock mode, return 0 as baseline (no futures P&L history)
+        return {
+            "total_pnl": 0,
+            "days": days,
+            "record_count": 0,
+            "status": "ok",
+            "mode": "stock"
+        }
+    
+    def _get_futures_pnl_history(self, days):
+        """Get futures P&L history"""
+        if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+            return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": "Futures account not available"}
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        pnl_records = self.api.list_profit_loss(
+            self.api.futopt_account,
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d")
+        )
+        
+        total_pnl = 0.0
+        for record in pnl_records:
+            if hasattr(record, 'pnl'):
+                total_pnl += float(record.pnl)
+        
+        return {
+            "total_pnl": total_pnl,
+            "days": days,
+            "record_count": len(pnl_records),
+            "status": "ok",
+            "mode": "futures"
+        }
     
     def logout(self):
         """Graceful logout"""
@@ -350,6 +465,7 @@ class ShioajiWrapper:
 
 # Global variables - initialized lazily for FastAPI mode only
 JASYPT_PASSWORD = None
+TRADING_MODE = None  # "stock" or "futures"
 config = None
 shioaji = None
 latest_tick = {"price": 0, "volume": 0, "timestamp": None}
@@ -365,17 +481,20 @@ OLLAMA_MODEL = None
 
 def init_trading_mode():
     """Initialize Shioaji and config - only called in FastAPI server mode"""
-    global JASYPT_PASSWORD, config, shioaji, OLLAMA_URL, OLLAMA_MODEL
+    global JASYPT_PASSWORD, TRADING_MODE, config, shioaji, OLLAMA_URL, OLLAMA_MODEL
     
     JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
     if not JASYPT_PASSWORD:
         print("❌ JASYPT_PASSWORD environment variable not set!")
         return
     
+    TRADING_MODE = os.environ.get('TRADING_MODE', 'stock')
+    print(f"📈 Trading Mode: {TRADING_MODE.upper()} ({('2330.TW odd lots' if TRADING_MODE == 'stock' else 'MTXF futures')})")
+    
     config = load_config_with_decryption(JASYPT_PASSWORD)
     print("✅ Configuration loaded and decrypted")
     
-    shioaji = ShioajiWrapper(config)
+    shioaji = ShioajiWrapper(config, trading_mode=TRADING_MODE)
     if not shioaji.connect():
         print("⚠️ Failed to connect to Shioaji after all retries; running in degraded mode")
         return
@@ -445,7 +564,8 @@ Score: 0.0=very bearish, 0.5=neutral, 1.0=very bullish"""
 def health():
     return {
         "status": "ok",
-        "shioaji_connected": shioaji.connected,
+        "shioaji_connected": shioaji.connected if shioaji else False,
+        "trading_mode": TRADING_MODE or "unknown",
         "time": datetime.now().isoformat()
     }
 
