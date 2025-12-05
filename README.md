@@ -382,7 +382,7 @@ Add these lines (replace `YOUR_ACTUAL_PATH` and `YOUR_JASYPT_PASSWORD`):
 0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/Lunch-Investor-Bot && /Users/gc/Downloads/work/stock/Lunch-Investor-Bot/python/venv/bin/python3 /Users/gc/Downloads/work/stock/Lunch-Investor-Bot/python/bridge.py --scrape-earnings --jasypt-password YOUR_JASYPT_PASSWORD >> /tmp/earnings-scrape.log 2>&1
 
 # 2. Start trading bot at 11:15 (Mon-Fri) - 15 minutes before trading window for warmup
-15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/Lunch-Investor-Bot && ./start-lunch-bot.fish YOUR_JASYPT_PASSWORD >> /tmp/mtxf-bot-cron.log 2>&1'
+15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/Lunch-Investor-Bot && ./start-lunch-bot.fish YOUR_JASYPT_PASSWORD stock >> /tmp/mtxf-bot-cron.log 2>&1'
 ```
 
 ### ⚠️ Critical Crontab Requirements
