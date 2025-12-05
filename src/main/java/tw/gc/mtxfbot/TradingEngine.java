@@ -410,6 +410,29 @@ public class TradingEngine {
         int pos = currentPosition.get();
         double entry = entryPrice.get();
         
+        // ========================================================================
+        // MINIMUM HOLD TIME CHECK (Anti-Whipsaw)
+        // Prevent exiting too quickly after entry - give position time to develop
+        // ========================================================================
+        LocalDateTime entryTime = positionEntryTime.get();
+        if (entryTime != null) {
+            long holdMinutes = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
+            if (holdMinutes < 3) {  // 3-minute minimum hold time
+                log.debug("⏳ Hold time: {} min (min 3 min required before exit evaluation)", holdMinutes);
+                // Only allow stop-loss during minimum hold period
+                double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
+                double unrealizedPnL = (currentPrice - entry) * pos * multiplier;
+                double stopLossThreshold = "stock".equals(tradingMode) 
+                    ? -500 * Math.abs(pos)
+                    : -500 * Math.abs(pos);
+                if (unrealizedPnL < stopLossThreshold) {
+                    log.warn("🛑 Stop-loss hit during hold period: {} TWD", unrealizedPnL);
+                    flattenPosition("Stop-loss");
+                }
+                return;  // Skip normal exit evaluation during minimum hold period
+            }
+        }
+        
         // P&L calculation differs by mode
         double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0; // MTXF = 50 TWD per point
         double unrealizedPnL = (currentPrice - entry) * pos * multiplier;
@@ -436,6 +459,14 @@ public class TradingEngine {
      * Fixes the 422 error by ensuring quantity is always sent as string
      */
     private void executeOrderWithRetry(String action, int quantity, double price) {
+        executeOrderWithRetry(action, quantity, price, false);
+    }
+    
+    /**
+     * Execute order with retry wrapper, optional exit flag for cooldown tracking
+     * @param isExit true if this is an exit/close position order (triggers cooldown on bridge)
+     */
+    private void executeOrderWithRetry(String action, int quantity, double price, boolean isExit) {
         int maxRetries = 3;
         int attempt = 0;
         
@@ -447,9 +478,10 @@ public class TradingEngine {
                 orderMap.put("action", action);
                 orderMap.put("quantity", String.valueOf(quantity)); // Fix: Force string conversion
                 orderMap.put("price", price);
+                orderMap.put("is_exit", isExit); // Signal to bridge to start cooldown
                 
                 String instrument = "stock".equals(tradingMode) ? "2330.TW" : "MTXF";
-                log.info("📤 Sending {} order (attempt {}): {}", instrument, attempt, orderMap);
+                log.info("📤 Sending {} order (attempt {}, exit={}): {}", instrument, attempt, isExit, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
                 log.debug("📥 Order response: {}", result);
@@ -501,7 +533,7 @@ public class TradingEngine {
             // Store entry price before executeOrderWithRetry overwrites it
             double originalEntryPrice = entryPrice.get();
             
-            executeOrderWithRetry(action, Math.abs(pos), currentPrice);
+            executeOrderWithRetry(action, Math.abs(pos), currentPrice, true); // isExit=true triggers cooldown
             
             double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
             double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;

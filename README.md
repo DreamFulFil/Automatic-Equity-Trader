@@ -60,6 +60,7 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 - [Running the Bot](#-running-the-bot)
 - [Crontab Setup](#-crontab-setup)
 - [Telegram Remote Control](#-telegram-remote-control)
+- [Signal Strategy (Anti-Whipsaw)](#-signal-strategy-anti-whipsaw-v2---december-2025)
 - [Risk Management & Safety](#-risk-management--safety)
 - [Earnings Blackout](#-earnings-blackout)
 - [Logs & Monitoring](#-logs--monitoring)
@@ -607,6 +608,70 @@ The bot includes a **process supervisor** that automatically restarts the Python
      ├─ Wait for supervisor exit
      └─ Kill Ollama
 ```
+
+---
+
+## 📊 Signal Strategy (Anti-Whipsaw v2 - December 2025)
+
+### Problem Solved
+
+The original strategy had **0.02% momentum thresholds** that triggered on tiny price movements, causing:
+- **9+ consecutive losing trades** from entering/exiting on noise
+- **Whipsaw losses** of ~275 TWD per trade as positions closed immediately after entry
+- **Daily losses** of 2,475+ TWD due to over-trading
+
+### Solution: Multi-Layer Anti-Whipsaw Filters
+
+| Filter | Old Value | New Value | Purpose |
+|--------|-----------|-----------|---------|
+| **Entry Momentum** | 0.02% | **0.05%** | 2.5x higher threshold filters noise |
+| **Exit Momentum** | 0.02% | **0.06%** | Exit requires *stronger* reversal than entry |
+| **Volume Confirmation** | 1.3x | **1.5x** | Stricter volume surge requirement |
+| **Consecutive Signals** | 1 | **3** | Need 3 aligned signals before entry |
+| **Post-Exit Cooldown** | None | **3 min** | No re-entry immediately after closing |
+| **Min Hold Time** | None | **3 min** | Position must mature before exit evaluation |
+
+### RSI Filter (New)
+
+- **RSI < 70**: Allow LONG entry (avoid buying overbought)
+- **RSI > 30**: Allow SHORT entry (avoid selling oversold)
+- **Calculated**: 60-period RSI from 3-min price history
+
+### Multi-Timeframe Momentum Alignment
+
+Entry requires **all three timeframes to agree**:
+
+| Timeframe | LONG Condition | SHORT Condition |
+|-----------|----------------|-----------------|
+| 3-minute | momentum > 0.05% | momentum < -0.05% |
+| 5-minute | momentum > 0.04% | momentum < -0.04% |
+| 10-minute | momentum > 0 | momentum < 0 |
+
+### Signal Response Fields (New)
+
+```json
+{
+  "direction": "LONG|SHORT|NEUTRAL",
+  "confidence": 0.75,
+  "exit_signal": false,
+  "momentum_3min": 0.0012,
+  "momentum_5min": 0.0008,
+  "momentum_10min": 0.0004,
+  "volume_ratio": 1.62,
+  "rsi": 45.3,
+  "consecutive_signals": 3,
+  "in_cooldown": false,
+  "cooldown_remaining": 0,
+  "raw_direction": "LONG"
+}
+```
+
+### Exit Signal Logic
+
+Exits require **stronger reversal** than entry:
+- Must breach 0.06% reversal (vs 0.05% entry)
+- Both 3-min AND 5-min must confirm reversal direction
+- Still respects 3-min minimum hold time on Java side
 
 ---
 
