@@ -1,0 +1,51 @@
+# Test configuration - uses H2 in-memory database
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+server:
+  port: 0
+
+telegram:
+  enabled: false
+  bot-token: "test-token"
+  chat-id: "test-chat"
+
+trading:
+  window:
+    start: "11:30"
+    end: "13:00"
+  stock:
+    initial-shares: 55
+    share-increment: 27
+  risk:
+    max-position: 4
+    daily-loss-limit: 4500
+    weekly-loss-limit: 15000
+    max-hold-minutes: 45
+  bridge:
+    url: "http://localhost:8888"
+    timeout-ms: 3000
+
+shioaji:
+  api-key: "test-api-key"
+  secret-key: "test-secret-key"
+  ca-path: "Sinopac.pfx"
+  ca-password: "test-password"
+  person-id: "test-person-id"
+  simulation: true
+
+ollama:
+  url: "http://localhost:11434"
+  model: "llama3.1:8b-instruct-q5_K_M"
+
+logging:
+  level:
+    root: WARN
+    '[tw.gc.mtxfbot]': INFO
