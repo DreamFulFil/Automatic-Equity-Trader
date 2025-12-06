@@ -42,6 +42,9 @@ jobs:
           name: maven-target
           path: target
 
+      - name: Create data directory
+        run: mkdir -p data
+
       - name: Set up Java 21 (Temurin)
         uses: actions/setup-java@v4
         with:
