@@ -8,7 +8,7 @@ Trade during the 11:30–13:00 lunch window with AI news filtering, Telegram rem
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 
 ---
@@ -71,25 +71,58 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 
 ---
 
-## ✅ Current Features (2025 Final)
+## ✅ Current Features (December 2025)
 
-| Feature | Status | Confirmed |
-|---------|--------|-----------|
-| **Dual-mode trading (stock/futures via CLI)** | **Implemented** | **Yes** |
-| 30-second signal checks | Implemented | Yes |
-| 10-minute Llama 3.1 news veto | Implemented | Yes |
-| 45-minute hard exit | Implemented | Yes |
-| Telegram remote control (`/status` `/pause` `/resume` `/close`) | Implemented | Yes |
-| Weekly loss breaker –15,000 TWD | Implemented | Yes |
-| Auto earnings blackout scraper (09:00 cron → JSON) | Implemented | Yes |
-| Shioaji auto-reconnect (5 retries + backoff) | Implemented | Yes |
-| Daily summary at 13:05 | Implemented | Yes |
-| **Automatic contract scaling (1-6 contracts)** | **Implemented** | **Yes** |
-| Pre-market health check (order dry-run) | Implemented | Yes |
-| Clean JSON earnings file (no manual YAML) | Implemented | Yes |
-| Two separate crontabs (09:00 scraper + 11:15 bot) | Implemented | Yes |
-| **Intra-day self-healing supervisor (Phase 2)** | **Implemented** | **Yes** |
-| Comprehensive test suite (403 tests) | Implemented | Yes |
+| Feature | Status |
+|---------|--------|
+| **Dual-mode trading (stock/futures via CLI)** | **Implemented** |
+| 30-second signal checks | Implemented |
+| 10-minute Llama 3.1 news veto | Implemented |
+| 45-minute hard exit | Implemented |
+| Telegram remote control (`/status` `/pause` `/resume` `/close`) | Implemented |
+| Weekly loss breaker –15,000 TWD | Implemented |
+| Auto earnings blackout scraper (09:00 cron → JSON) | Implemented |
+| Shioaji auto-reconnect (5 retries + backoff) | Implemented |
+| Daily summary at 13:05 | Implemented |
+| **Automatic contract scaling (1-6 contracts)** | **Implemented** |
+| Pre-market health check (order dry-run) | Implemented |
+| Clean JSON earnings file (no manual YAML) | Implemented |
+| Two separate crontabs (09:00 scraper + 11:15 bot) | Implemented |
+| **Intra-day self-healing supervisor (Phase 2)** | **Implemented** |
+| **Agent framework with simulation mode** | **Implemented** |
+| AI agents (News, Tutor, Signal, Risk) | Implemented |
+| Database layer (SQLite + JPA) | Implemented |
+| Bot mode management (simulation/live) | Implemented |
+| Extended Telegram commands (/agent, /talk, /insight, /golive, /backtosim) | Implemented |
+| Comprehensive test suite (202 tests) | Implemented |
+
+---
+
+## 🤖 Agent Framework and Simulation Mode (December 2025)
+
+The bot now includes a comprehensive AI agent framework with built-in simulation mode for safe testing and development.
+
+### Key Components
+
+- **AI Agents**: Modular agents for news analysis, tutoring, signal generation, and risk management
+- **Database Layer**: SQLite-based persistence for agent metadata, bot settings, trades, and interactions
+- **Simulation Mode**: Bot starts in simulation by default, with eligibility checks for live mode transition
+- **Telegram Integration**: New commands for agent interaction and mode switching
+
+### New Telegram Commands
+
+- `/agent` - List available agents with status
+- `/talk <question>` - Ask trading questions (rate limited)
+- `/insight` - Get daily trading insight
+- `/golive` - Check and switch to live trading mode
+- `/backtosim` - Switch back to simulation mode
+
+### Simulation to Live Transition
+
+- Requires >55% win rate, <5% drawdown, 20+ trades
+- Automatic eligibility checks via `/golive` command
+
+This framework enables phased development and safe deployment of new features.
 
 ---
 
@@ -175,7 +208,7 @@ The bot automatically adjusts contract size based on account equity and recent p
 
 | Component | Technology | Version |
 |-----------|------------|---------|
-| Trading Engine | Java Spring Boot | 3.3+ |
+| Trading Engine | Java Spring Boot | 3.4.0 |
 | Order Execution | Python FastAPI + Shioaji | 1.1.5 |
 | AI News Filter | Ollama + Llama 3.1 8B | Q5_K_M |
 | Notifications | Telegram Bot API | MarkdownV2 |
@@ -192,6 +225,7 @@ The bot automatically adjusts contract size based on account equity and recent p
 | **RAM** | 8GB minimum, 16GB recommended |
 | **Disk** | 15GB free (Ollama model ~5GB) |
 | **Shell** | Fish 3.0+ (must be default shell) |
+| **Python** | 3.12 (Apple Silicon) |
 | **Account** | Sinopac futures account with API access |
 
 ### Install Dependencies
