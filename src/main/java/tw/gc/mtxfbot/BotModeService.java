@@ -19,6 +19,7 @@ public class BotModeService {
     private final BotSettingsRepository settingsRepo;
     private final ShioajiSettingsService shioajiSettingsService;
     private final RestTemplate restTemplate;
+    private final BridgeManager bridgeManager;
     
     @PostConstruct
     public void initialize() {
@@ -75,14 +76,30 @@ public class BotModeService {
     }
     
     /**
-     * Shutdown the Python bridge to force config reload
+     * Shutdown and restart the Python bridge to force config reload
      */
     private void shutdownBridge() {
+        String jasyptPassword = System.getProperty("jasypt.encryptor.password");
+        if (jasyptPassword == null) {
+            jasyptPassword = System.getenv("JASYPT_PASSWORD");
+        }
+        if (jasyptPassword == null) {
+            log.error("Cannot restart bridge: JASYPT_PASSWORD not found");
+            return;
+        }
+        
         try {
             restTemplate.postForObject("http://localhost:8888/shutdown", null, String.class);
             log.info("🛑 Bridge shutdown requested for config reload");
+            
+            // Wait a bit for shutdown
+            Thread.sleep(2000);
+            
+            // Restart bridge
+            bridgeManager.restartBridge(jasyptPassword);
+            
         } catch (Exception e) {
-            log.warn("Failed to shutdown bridge: {}", e.getMessage());
+            log.warn("Failed to restart bridge: {}", e.getMessage());
         }
     }
     public Optional<String> getSetting(String key) {
