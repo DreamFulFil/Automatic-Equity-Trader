@@ -90,3 +90,9 @@ target/
 # OS files
 .DS_Store
 .java-version
+
+### Database files ###
+data/
+*.db
+*.sqlite
+*.sqlite3

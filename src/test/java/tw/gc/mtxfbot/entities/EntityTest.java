@@ -58,7 +58,7 @@ class EntityTest {
                 .action(Trade.TradeAction.BUY)
                 .quantity(55)
                 .entryPrice(1445.0)
-                .symbol("2330.TW")
+                .symbol("2454.TW")
                 .reason("Momentum signal")
                 .signalConfidence(0.85)
                 .build();
@@ -67,7 +67,7 @@ class EntityTest {
         assertEquals(Trade.TradeAction.BUY, trade.getAction());
         assertEquals(55, trade.getQuantity());
         assertEquals(1445.0, trade.getEntryPrice());
-        assertEquals("2330.TW", trade.getSymbol());
+        assertEquals("2454.TW", trade.getSymbol());
         assertEquals(Trade.TradingMode.SIMULATION, trade.getMode()); // Default
         assertEquals(Trade.TradeStatus.OPEN, trade.getStatus()); // Default
     }

@@ -4,7 +4,7 @@ Dual-Mode Trading Bridge - FastAPI + Shioaji + Ollama
 Lightweight bridge between Java trading engine and market data/AI
 
 Supports two trading modes via TRADING_MODE environment variable:
-- "stock" (default): Trades 2330.TW odd lots via api.Contracts.Stocks.TSE["2330"]
+- "stock" (default): Trades 2454.TW odd lots via api.Contracts.Stocks.TSE["2454"]
 - "futures": Trades MTXF via api.Contracts.Futures.MTXF
 
 2025 Production Strategy:
@@ -133,7 +133,7 @@ class ShioajiWrapper:
     Retries login + subscription up to 5 times with exponential backoff.
     
     Modes:
-    - "stock": Uses api.Contracts.Stocks.TSE["2330"] for 2330.TW odd lots
+    - "stock": Uses api.Contracts.Stocks.TSE["2454"] for 2454.TW odd lots
     - "futures": Uses api.Contracts.Futures.TXF.TXFR1 for MTXF
     """
     
@@ -199,8 +199,8 @@ class ShioajiWrapper:
         return False
     
     def _subscribe_stock(self):
-        """Subscribe to 2330.TW (TSMC) for stock mode"""
-        self.contract = self.api.Contracts.Stocks.TSE["2330"]
+        """Subscribe to 2454.TW (MediaTek) for stock mode"""
+        self.contract = self.api.Contracts.Stocks.TSE["2454"]
         self.api.quote.subscribe(
             self.contract,
             quote_type=sj.constant.QuoteType.Tick,
@@ -303,7 +303,7 @@ class ShioajiWrapper:
             return {"status": "error", "error": str(e)}
     
     def _place_stock_order(self, action: str, quantity: int, price: float):
-        """Place stock order (2330.TW odd lots)"""
+        """Place stock order (2454.TW odd lots)"""
         # Check stock account availability
         if not hasattr(self.api, 'stock_account') or self.api.stock_account is None:
             print("⚠️ Stock account not available, reconnecting...")
@@ -498,7 +498,7 @@ def init_trading_mode():
         return
     
     TRADING_MODE = os.environ.get('TRADING_MODE', 'stock')
-    print(f"📈 Trading Mode: {TRADING_MODE.upper()} ({('2330.TW odd lots' if TRADING_MODE == 'stock' else 'MTXF futures')})")
+    print(f"📈 Trading Mode: {TRADING_MODE.upper()} ({('2454.TW odd lots' if TRADING_MODE == 'stock' else 'MTXF futures')})")
     
     config = load_config_with_decryption(JASYPT_PASSWORD)
     print("✅ Configuration loaded and decrypted")
@@ -962,7 +962,7 @@ def scrape_earnings_dates(jasypt_password: str = None):
     # Major Taiwan stocks to track (Yahoo Finance tickers)
     TICKERS = [
         'TSM',      # TSMC (ADR)
-        '2330.TW',  # TSMC (Taiwan)
+        '2454.TW',  # MediaTek (Taiwan)
         '2454.TW',  # MediaTek
         '2317.TW',  # Hon Hai (Foxconn)
         'UMC',      # UMC (ADR)

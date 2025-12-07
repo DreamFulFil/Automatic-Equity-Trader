@@ -12,6 +12,8 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
+import tw.gc.mtxfbot.entities.StockSettings;
+import tw.gc.mtxfbot.entities.RiskSettings;
 
 import java.util.Map;
 
@@ -31,7 +33,9 @@ class DualModeTest {
     @Mock private ContractScalingService contractScalingService;
     @Mock private RiskManagementService riskManagementService;
     @Mock private ApplicationContext applicationContext;
-    
+    @Mock private StockSettingsService stockSettingsService;
+    @Mock private RiskSettingsService riskSettingsService;
+
     private TradingEngine tradingEngine;
     private TradingProperties tradingProperties;
     private ObjectMapper objectMapper;
@@ -42,13 +46,33 @@ class DualModeTest {
         tradingProperties = new TradingProperties();
         tradingProperties.getWindow().setStart("11:30");
         tradingProperties.getWindow().setEnd("13:00");
-        tradingProperties.getStock().setInitialShares(55);
-        tradingProperties.getStock().setShareIncrement(27);
-        tradingProperties.getRisk().setDailyLossLimit(4500);
-        tradingProperties.getRisk().setWeeklyLossLimit(15000);
-        tradingProperties.getRisk().setMaxHoldMinutes(45);
         tradingProperties.getBridge().setUrl("http://localhost:8888");
-        
+
+        // Mock stock settings
+        StockSettings stockSettings = StockSettings.builder()
+                .initialShares(55)
+                .shareIncrement(27)
+                .build();
+        when(stockSettingsService.getSettings()).thenReturn(stockSettings);
+        when(stockSettingsService.getBaseStockQuantity(anyDouble())).thenAnswer(invocation -> {
+            double equity = invocation.getArgument(0);
+            // Base quantity = 55 + ((equity - 80000) / 20000) * 27
+            int baseQuantity = 55 + (int) Math.round(((equity - 80000) / 20000) * 27);
+            return Math.max(55, baseQuantity); // Ensure minimum of 55
+        });
+
+        // Mock risk settings
+        RiskSettings riskSettings = RiskSettings.builder()
+                .maxPosition(1)
+                .dailyLossLimit(4500)
+                .weeklyLossLimit(15000)
+                .maxHoldMinutes(45)
+                .build();
+        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
+        when(riskSettingsService.getDailyLossLimit()).thenReturn(4500);
+        when(riskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
+        when(riskSettingsService.getMaxHoldMinutes()).thenReturn(45);
+
         when(riskManagementService.isEarningsBlackout()).thenReturn(false);
         when(riskManagementService.isWeeklyLimitHit()).thenReturn(false);
         when(riskManagementService.getWeeklyPnL()).thenReturn(0.0);
@@ -68,7 +92,8 @@ class DualModeTest {
         // When: Create engine
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         // Initialize to read the property
@@ -80,7 +105,7 @@ class DualModeTest {
         assertEquals("stock", tradingEngine.getTradingMode());
         
         // And: Startup message should show stock mode
-        verify(telegramService).sendMessage(contains("STOCK (2330.TW odd lots)"));
+        verify(telegramService).sendMessage(contains("STOCK (2454.TW odd lots)"));
     }
 
     @Test
@@ -91,7 +116,8 @@ class DualModeTest {
         // When: Create engine
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
@@ -114,7 +140,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
@@ -134,7 +161,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
@@ -153,7 +181,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
@@ -172,7 +201,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
@@ -195,8 +225,8 @@ class DualModeTest {
         // When: Execute entry
         tradingEngine.evaluateEntry();
         
-        // Then: Order message should show 2330.TW
-        verify(telegramService).sendMessage(contains("2330.TW"));
+        // Then: Order message should show 2454.TW
+        verify(telegramService).sendMessage(contains("2454.TW"));
     }
 
     @Test
@@ -207,7 +237,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
@@ -242,7 +273,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
@@ -283,7 +315,8 @@ class DualModeTest {
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
