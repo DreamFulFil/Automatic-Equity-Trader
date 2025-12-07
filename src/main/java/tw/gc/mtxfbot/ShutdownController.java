@@ -2,9 +2,11 @@ package tw.gc.mtxfbot;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tw.gc.mtxfbot.entities.ShioajiSettings;
 
 /**
  * REST endpoint for triggering graceful shutdown in testing
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShutdownController {
     
     private final TradingEngine tradingEngine;
+    private final ShioajiSettingsService shioajiSettingsService;
     
     /**
      * Trigger autoFlatten shutdown for testing
@@ -36,5 +39,13 @@ public class ShutdownController {
         }).start();
         
         return "Shutdown initiated - daily summary and bot stopped messages will be sent";
+    }
+    
+    /**
+     * Get current Shioaji settings for Python bridge
+     */
+    @GetMapping("/shioaji/settings")
+    public ShioajiSettings getShioajiSettings() {
+        return shioajiSettingsService.getSettings();
     }
 }

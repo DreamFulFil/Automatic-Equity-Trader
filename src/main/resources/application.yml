@@ -62,8 +62,8 @@ shioaji:
   ca-path: "Sinopac.pfx"
   ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
   person-id: "ENC(fNJEeUmwdyu2PCWL6YfIwbpLYY3XKmmI)"
-  # Set to true for paper trading
-  simulation: false
+  # Set to true for paper trading - now managed dynamically via database
+  # simulation: false
 
 # Ollama configuration
 ollama:

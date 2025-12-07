@@ -101,7 +101,7 @@ def decrypt_config_value(value, password: str):
     return value
 
 def load_config_with_decryption(password: str):
-    """Load application.yml and decrypt ENC() values"""
+    """Load application.yml and decrypt ENC() values, and fetch dynamic settings from Java"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     config_path = os.path.join(project_root, 'src/main/resources/application.yml')
@@ -120,6 +120,18 @@ def load_config_with_decryption(password: str):
         config['shioaji']['ca-path'] = os.path.abspath(ca_path)
         
         print(f"✅ CA certificate path: {config['shioaji']['ca-path']}")
+        
+        # Fetch dynamic simulation setting from Java
+        try:
+            response = requests.get('http://localhost:16350/api/shioaji/settings', timeout=5)
+            if response.status_code == 200:
+                java_settings = response.json()
+                config['shioaji']['simulation'] = java_settings.get('simulation', True)
+                print(f"✅ Simulation mode from Java: {config['shioaji']['simulation']}")
+            else:
+                print(f"⚠️ Failed to fetch simulation from Java, using config default: {config['shioaji'].get('simulation', True)}")
+        except Exception as e:
+            print(f"⚠️ Error fetching simulation from Java: {e}, using config default: {config['shioaji'].get('simulation', True)}")
     
     return config
 
