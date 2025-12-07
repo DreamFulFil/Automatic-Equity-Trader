@@ -1,13 +1,15 @@
 server:
   port: 16350
 
-# SQLite Database (for agents, settings, trades)
+# PostgreSQL Database (for agents, settings, trades)
 spring:
   datasource:
-    url: jdbc:sqlite:data/mtxf-bot.db
-    driver-class-name: org.sqlite.JDBC
+    url: jdbc:postgresql://localhost:5432/lunchbot
+    username: lunchbotuser
+    password: ENC(9GDI62q7tkjCK3Dk7llB2qd8u4kwN5sLWTCGjxONfDuzR1gcPVwyUA==)
+    driver-class-name: org.postgresql.Driver
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -17,6 +19,16 @@ jasypt:
   encryptor:
     algorithm: PBEWithMD5AndDES
     iv-generator-classname: org.jasypt.iv.NoIvGenerator
+
+# Actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
 
 trading:
   # Trading window: 11:30 - 13:00 Taipei time

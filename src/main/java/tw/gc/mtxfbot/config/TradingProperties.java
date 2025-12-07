@@ -2,12 +2,11 @@ package tw.gc.mtxfbot.config;
 
 import lombok.Data;
 import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @Data
 @Component
+@ConfigurationProperties(prefix = "trading")
 public class TradingProperties {
 
     private Window window = new Window();
@@ -18,7 +17,6 @@ public class TradingProperties {
 
     // Note: Earnings blackout dates are now loaded from config/earnings-blackout-dates.json
     // See TradingEngine.loadEarningsBlackoutDates()
-
     @Data
     public static class Window {
         private String start = "11:30";

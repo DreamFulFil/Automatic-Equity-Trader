@@ -89,7 +89,7 @@ public class TradingEngine {
         
         String scalingInfo = "stock".equals(tradingMode)
             ? String.format("Base shares: %d (+%d per 20k equity)", 
-                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
             : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
         
@@ -205,7 +205,7 @@ public class TradingEngine {
         String modeInfo = "stock".equals(tradingMode) 
             ? String.format("Mode: STOCK (2454.TW)\nShares: %d (base %d +%d/20k)", 
                 getBaseStockQuantity(),
-                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
             : String.format("Mode: FUTURES (MTXF)\nContracts: %d", contractScalingService.getMaxContracts());
         
@@ -578,7 +578,7 @@ public class TradingEngine {
         String modeInfo = "stock".equals(tradingMode) 
             ? String.format("Mode: STOCK\\nShares: %d (base %d +%d/20k)",
                 getBaseStockQuantity(),
-                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
             : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
         
