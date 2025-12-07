@@ -219,7 +219,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}📝 Phase 1: Java Unit Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-JAVA_UNIT_OUTPUT=$($MVN_CMD test -DexcludedGroups=integration 2>&1) || true
+JAVA_UNIT_OUTPUT=$($MVN_CMD test -DexcludedGroups=integration -Dspring.profiles.active=ci 2>&1) || true
 JAVA_UNIT_SUMMARY=$(echo "$JAVA_UNIT_OUTPUT" | grep -E "Tests run:" | tail -1)
 
 if echo "$JAVA_UNIT_OUTPUT" | grep -q "BUILD SUCCESS"; then
@@ -311,7 +311,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}🔗 Phase 4: Java Integration Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=false 2>&1) || true
+JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=false -Dspring.profiles.active=ci 2>&1) || true
 JAVA_INT_SUMMARY=$(echo "$JAVA_INT_OUTPUT" | grep -E "Tests run:" | tail -1)
 
 if echo "$JAVA_INT_OUTPUT" | grep -q "BUILD SUCCESS"; then
