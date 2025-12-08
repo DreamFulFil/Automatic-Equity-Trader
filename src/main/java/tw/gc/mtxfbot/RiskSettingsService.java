@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class RiskSettingsService {
 
     private final RiskSettingsRepository riskSettingsRepo;

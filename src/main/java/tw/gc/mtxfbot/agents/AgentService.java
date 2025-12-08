@@ -16,7 +16,6 @@ import tw.gc.mtxfbot.repositories.AgentInteractionRepository;
 import tw.gc.mtxfbot.repositories.AgentRepository;
 import tw.gc.mtxfbot.repositories.TradeRepository;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class AgentService {
     
     private final AgentRepository agentRepo;

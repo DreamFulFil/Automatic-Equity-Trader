@@ -27,14 +27,6 @@ trading:
   window:
     start: "11:30"
     end: "13:00"
-  stock:
-    initial-shares: 55
-    share-increment: 27
-  risk:
-    max-position: 4
-    daily-loss-limit: 4500
-    weekly-loss-limit: 15000
-    max-hold-minutes: 45
   bridge:
     url: "http://localhost:8888"
     timeout-ms: 3000

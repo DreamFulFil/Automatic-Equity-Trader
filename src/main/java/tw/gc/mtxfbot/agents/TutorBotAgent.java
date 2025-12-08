@@ -32,6 +32,7 @@ import java.util.Map;
  * - Fallback to safe responses on API failure
  */
 @Slf4j
+@SuppressWarnings("null")
 public class TutorBotAgent extends BaseAgent {
     
     private final RestTemplate restTemplate;

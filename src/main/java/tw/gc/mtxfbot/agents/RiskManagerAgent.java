@@ -1,13 +1,11 @@
 package tw.gc.mtxfbot.agents;
 
 import lombok.extern.slf4j.Slf4j;
-import tw.gc.mtxfbot.entities.Trade;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.entities.Trade.TradeStatus;
 import tw.gc.mtxfbot.repositories.TradeRepository;
 
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.HashMap;

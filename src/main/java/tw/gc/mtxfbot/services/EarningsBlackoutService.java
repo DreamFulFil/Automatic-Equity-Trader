@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class EarningsBlackoutService {
 
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");

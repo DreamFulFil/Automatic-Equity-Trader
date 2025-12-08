@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
  * Converted from integration tests to Spring-independent unit tests.
  */
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class OrderEndpointIntegrationTest {
 
     @Mock
@@ -168,7 +169,6 @@ class OrderEndpointIntegrationTest {
      * It sends the request exactly as RestTemplate does with a Map payload.
      */
     @Test
-    @SuppressWarnings("null")
     void orderDryRun_verifiesRestTemplateCompatibility() {
         // Simulate exactly what TradingEngine.executeOrder does
         Map<String, Object> orderMap = new HashMap<>();
