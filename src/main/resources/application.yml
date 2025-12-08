@@ -40,10 +40,6 @@ trading:
   # See StockSettings and RiskSettings entities
   # Default values are set by StockSettingsService and RiskSettingsService
   
-  # Earnings blackout dates are now auto-scraped from Yahoo Finance
-  # Stored in: config/earnings-blackout-dates.json
-  # Updated daily at 09:00 via cron: python3 python/bridge.py --scrape-earnings
-  
   # Python bridge
   bridge:
     url: "http://localhost:8888"

@@ -16,7 +16,6 @@ Supports two trading modes via TRADING_MODE environment variable:
 Bulletproof Features:
 - Shioaji auto-reconnect (max 5 retries, exponential backoff)
 - Graceful shutdown on /shutdown endpoint
-- Auto-scrape earnings dates from Yahoo Finance (--scrape-earnings)
 - Strict mode separation: NO futures calls in stock mode and vice versa
 """
 
@@ -959,10 +958,9 @@ def send_telegram_message(message: str, password: str):
 
 def scrape_earnings_dates(jasypt_password: str = None):
     """
-    Scrape earnings dates using yfinance library (handles Yahoo auth automatically).
-    Saves sorted dates to config/earnings-blackout-dates.json
-    
-    Run standalone: python3 bridge.py --scrape-earnings
+    Deprecated: kept only as a one-time migration helper.
+    Prefer calling the Java admin endpoint /admin/earnings-blackout/seed or /refresh.
+    Scrapes earnings dates with yfinance and writes to legacy JSON for bootstrapping.
     """
     import yfinance as yf
     
@@ -1079,20 +1077,12 @@ if __name__ == "__main__":
     print(f"🐍 Python {sys.version} on {sys.platform}")
     
     parser = argparse.ArgumentParser(description='MTXF Trading Bridge')
-    parser.add_argument('--scrape-earnings', action='store_true', 
-                        help='Scrape Yahoo Finance for earnings dates and exit')
     parser.add_argument('--jasypt-password', type=str, default=None,
                         help='Jasypt password for Telegram notifications (optional)')
     args = parser.parse_args()
     
     # Also check environment variable for password
     jasypt_password = args.jasypt_password or os.environ.get('JASYPT_PASSWORD')
-    
-    if args.scrape_earnings:
-        # Standalone scraper mode - no FastAPI, no Shioaji needed
-        # Telegram notifications sent if password provided
-        scrape_earnings_dates(jasypt_password)
-        sys.exit(0)
     
     # Normal FastAPI server mode - initialize trading components
     init_trading_mode()

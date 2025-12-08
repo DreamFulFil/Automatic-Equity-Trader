@@ -143,6 +143,7 @@ class OrderEndpointIntegrationTest {
      * It sends the request exactly as RestTemplate does with a Map payload.
      */
     @Test
+    @SuppressWarnings("null")
     void orderDryRun_verifiesRestTemplateCompatibility() {
         // Simulate exactly what TradingEngine.executeOrder does
         Map<String, Object> orderMap = new HashMap<>();
@@ -161,6 +162,7 @@ class OrderEndpointIntegrationTest {
                 String.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
         assertTrue(response.getBody().contains("validated"),
                 "Order should be validated. Got: " + response.getBody());
     }

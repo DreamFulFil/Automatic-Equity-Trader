@@ -1,6 +1,5 @@
 package tw.gc.mtxfbot;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
 import tw.gc.mtxfbot.entities.StockSettings;
 import tw.gc.mtxfbot.entities.RiskSettings;
+import tw.gc.mtxfbot.services.DataLoggingService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
+@SuppressWarnings({"null", "unchecked"})
 class TradingEngineProductionTest {
 
     @Mock private RestTemplate restTemplate;
@@ -34,6 +35,7 @@ class TradingEngineProductionTest {
     @Mock private StockSettingsService stockSettingsService;
     @Mock private RiskSettingsService riskSettingsService;
     @Mock private ApplicationContext applicationContext;
+    @Mock private DataLoggingService dataLoggingService;
     
     private TradingEngine tradingEngine;
     private TradingProperties tradingProperties;
@@ -70,7 +72,7 @@ class TradingEngineProductionTest {
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService
+            stockSettingsService, riskSettingsService, dataLoggingService
         );
     }
 
@@ -202,7 +204,7 @@ class TradingEngineProductionTest {
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService
+            stockSettingsService, riskSettingsService, dataLoggingService
         );
         
         when(contractScalingService.getMaxContracts()).thenReturn(3);

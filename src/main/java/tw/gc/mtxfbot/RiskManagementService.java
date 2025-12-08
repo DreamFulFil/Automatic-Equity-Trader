@@ -1,13 +1,12 @@
 package tw.gc.mtxfbot;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import tw.gc.mtxfbot.entities.EarningsBlackoutMeta;
+import tw.gc.mtxfbot.services.EarningsBlackoutService;
 
 import jakarta.annotation.PostConstruct;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,13 +16,12 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Risk Management Service
- * 
+ *
  * Responsible for:
  * - Daily and weekly P&L tracking
  * - Loss limit enforcement
@@ -36,14 +34,12 @@ public class RiskManagementService {
     
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
-    private static final String EARNINGS_BLACKOUT_FILE = "config/earnings-blackout-dates.json";
     
-    private final ObjectMapper objectMapper;
+    private final EarningsBlackoutService earningsBlackoutService;
     
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
     private final AtomicReference<Double> weeklyPnL = new AtomicReference<>(0.0);
     
-    private final Set<String> earningsBlackoutDates = new HashSet<>();
     private String earningsBlackoutStock = null;
     
     private volatile boolean weeklyLimitHit = false;
@@ -52,8 +48,7 @@ public class RiskManagementService {
     @PostConstruct
     public void initialize() {
         loadWeeklyPnL();
-        loadEarningsBlackoutDates();
-        checkEarningsBlackout();
+        refreshEarningsBlackoutState();
     }
     
     public double getDailyPnL() {
@@ -69,11 +64,17 @@ public class RiskManagementService {
     }
     
     public boolean isEarningsBlackout() {
+        refreshEarningsBlackoutState();
         return earningsBlackout;
     }
     
     public String getEarningsBlackoutStock() {
+        refreshEarningsBlackoutState();
         return earningsBlackoutStock;
+    }
+
+    public boolean isEarningsBlackoutDataStale() {
+        return earningsBlackoutService.isLatestStale();
     }
     
     /**
@@ -93,46 +94,35 @@ public class RiskManagementService {
         return dailyPnL.get() <= -dailyLossLimit;
     }
     
-    /**
-     * Load earnings blackout dates from JSON file
-     */
-    public void loadEarningsBlackoutDates() {
+    private void refreshEarningsBlackoutState() {
         try {
-            File file = new File(EARNINGS_BLACKOUT_FILE);
-            if (!file.exists()) {
-                log.warn("Earnings blackout file not found: {} - no blackout dates loaded", EARNINGS_BLACKOUT_FILE);
+            // Ensure latest snapshot is loaded (seeds from legacy JSON or refreshes if empty)
+            var blackoutDates = earningsBlackoutService.getCurrentBlackoutDates();
+            EarningsBlackoutMeta latest = earningsBlackoutService.getLatestMeta().orElse(null);
+            if (latest == null || blackoutDates.isEmpty()) {
+                earningsBlackout = false;
+                earningsBlackoutStock = null;
                 return;
             }
-            
-            JsonNode root = objectMapper.readTree(file);
-            JsonNode dates = root.path("dates");
-            
-            if (dates.isArray()) {
-                earningsBlackoutDates.clear();
-                for (JsonNode dateNode : dates) {
-                    earningsBlackoutDates.add(dateNode.asText());
-                }
+            earningsBlackoutStock = deriveEarningsBlackoutStock(latest);
+            LocalDate today = LocalDate.now(TAIPEI_ZONE);
+            earningsBlackout = blackoutDates.contains(today);
+            if (earningsBlackout) {
+                log.warn("EARNINGS BLACKOUT DAY: {}", today.format(DateTimeFormatter.ISO_LOCAL_DATE));
             }
-            
-            String lastUpdated = root.path("last_updated").asText("unknown");
-            log.info("Loaded {} earnings blackout dates (last updated: {})", 
-                earningsBlackoutDates.size(), lastUpdated);
-            
         } catch (Exception e) {
-            log.error("Failed to load earnings blackout dates: {}", e.getMessage());
+            log.error("Failed to refresh earnings blackout state: {}", e.getMessage());
         }
     }
     
-    /**
-     * Check if today is an earnings blackout day
-     */
-    public void checkEarningsBlackout() {
-        String today = LocalDate.now(TAIPEI_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        if (earningsBlackoutDates.contains(today)) {
-            earningsBlackout = true;
-            earningsBlackoutStock = "TSMC/major earnings";
-            log.warn("EARNINGS BLACKOUT DAY: {}", today);
+    private String deriveEarningsBlackoutStock(EarningsBlackoutMeta latest) {
+        if (latest == null || latest.getTickersChecked() == null) {
+            return null;
         }
+        return latest.getTickersChecked().stream()
+                .filter(ticker -> ticker != null && !ticker.isBlank())
+                .limit(3)
+                .collect(Collectors.joining(", "));
     }
     
     /**

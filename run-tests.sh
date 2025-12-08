@@ -289,25 +289,8 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}🚀 Phase 3: Starting Full System${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Ensure earnings blackout file exists
-mkdir -p "$SCRIPT_DIR/config"
-
-# Run earnings scraper (Telegram messages a-b) - SKIP IN CI
-if [ "$CI" = "true" ]; then
-    echo "Skipping earnings scraper in CI (would send Telegram messages a-b)"
-    # Create empty file to prevent errors
-    echo "{}" > "$SCRIPT_DIR/config/earnings-blackout-dates.json"
-else
-    echo "Running earnings scraper (Telegram messages a-b)..."
-    cd "$SCRIPT_DIR/python"
-    if [ -x "venv/bin/python3" ]; then
-        venv/bin/python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
-    else
-        python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
-    fi
-    cd "$SCRIPT_DIR"
-fi
-sleep 3
+echo "Earnings blackout data is now managed by EarningsBlackoutService (DB-backed)."
+echo "Use /admin/earnings-blackout/seed to migrate legacy JSON if needed."
 
 start_ollama || exit 1
 start_bridge || exit 1

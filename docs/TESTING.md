@@ -487,11 +487,11 @@ mtxf-bot/
 │       ├── ollama_responses.json             # NEW
 │       └── moneydj_rss.xml                   # NEW
 ├── config/
-│   └── earnings-blackout-dates.json
+│   └── earnings-blackout-dates.json         # Legacy seed only (DB holds runtime data)
 └── pom.xml
 ```
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-11-27
+**Document Version:** 1.1  
+**Last Updated:** 2025-12-08

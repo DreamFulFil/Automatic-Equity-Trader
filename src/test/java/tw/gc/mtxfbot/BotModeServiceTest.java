@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.entities.BotSettings;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.repositories.BotSettingsRepository;
@@ -24,11 +25,20 @@ class BotModeServiceTest {
     @Mock
     private BotSettingsRepository settingsRepo;
     
+    @Mock
+    private ShioajiSettingsService shioajiSettingsService;
+    
+    @Mock
+    private RestTemplate restTemplate;
+    
+    @Mock
+    private BridgeManager bridgeManager;
+    
     private BotModeService botModeService;
     
     @BeforeEach
     void setUp() {
-        botModeService = new BotModeService(settingsRepo);
+        botModeService = new BotModeService(settingsRepo, shioajiSettingsService, restTemplate, bridgeManager);
     }
     
     @Test
