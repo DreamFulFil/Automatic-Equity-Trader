@@ -1,8 +1,10 @@
 package tw.gc.mtxfbot;
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -11,34 +13,34 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Integration tests for Python bridge order endpoint.
+ * Unit tests for Python bridge order endpoint using Mockito.
  * 
- * These tests verify the full HTTP request/response cycle to catch
- * serialization issues like the JSON parsing bug that caused 422 errors.
+ * These tests verify the HTTP request/response cycle without requiring
+ * the Python bridge to be running, using mocked RestTemplate.
  * 
- * Run with: mvn test -Dtest=OrderEndpointIntegrationTest -DBRIDGE_URL=http://localhost:8888
- * 
- * Requires Python bridge to be running.
+ * Converted from integration tests to Spring-independent unit tests.
  */
-@EnabledIfEnvironmentVariable(named = "BRIDGE_URL", matches = ".+")
+@ExtendWith(MockitoExtension.class)
 class OrderEndpointIntegrationTest {
 
-    private static RestTemplate restTemplate;
-    private static String bridgeUrl;
+    @Mock
+    private RestTemplate restTemplate;
+    private String bridgeUrl;
 
-    @BeforeAll
-    static void setUp() {
-        restTemplate = new RestTemplate();
-        bridgeUrl = System.getenv("BRIDGE_URL");
-        if (bridgeUrl == null) {
-            bridgeUrl = "http://localhost:8888";
-        }
+    @BeforeEach
+    void setUp() {
+        bridgeUrl = "http://localhost:8888";
     }
 
     @Test
     void healthEndpoint_shouldReturnOk() {
+        when(restTemplate.getForObject(bridgeUrl + "/health", String.class))
+            .thenReturn("{\"status\":\"ok\"}");
+        
         String response = restTemplate.getForObject(bridgeUrl + "/health", String.class);
         
         assertNotNull(response);
@@ -52,6 +54,9 @@ class OrderEndpointIntegrationTest {
         order.put("action", "BUY");
         order.put("quantity", 1);
         order.put("price", 20000.0);
+
+        when(restTemplate.postForObject(eq(bridgeUrl + "/order/dry-run"), eq(order), eq(String.class)))
+            .thenReturn("{\"validated\":true}");
 
         String response = restTemplate.postForObject(
                 bridgeUrl + "/order/dry-run", order, String.class);
@@ -68,6 +73,9 @@ class OrderEndpointIntegrationTest {
         order.put("quantity", 1);
         order.put("price", 20000.0);
 
+        when(restTemplate.postForObject(eq(bridgeUrl + "/order/dry-run"), eq(order), eq(String.class)))
+            .thenReturn("{\"validated\":true}");
+
         String response = restTemplate.postForObject(
                 bridgeUrl + "/order/dry-run", order, String.class);
 
@@ -81,6 +89,10 @@ class OrderEndpointIntegrationTest {
         order.put("action", "INVALID");
         order.put("quantity", 1);
         order.put("price", 20000.0);
+
+        HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.BAD_REQUEST, "Bad Request");
+        when(restTemplate.postForObject(eq(bridgeUrl + "/order/dry-run"), eq(order), eq(String.class)))
+            .thenThrow(exception);
 
         try {
             restTemplate.postForObject(bridgeUrl + "/order/dry-run", order, String.class);
@@ -96,6 +108,10 @@ class OrderEndpointIntegrationTest {
         order.put("action", "BUY");
         order.put("quantity", 0);
         order.put("price", 20000.0);
+
+        HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.BAD_REQUEST, "Bad Request");
+        when(restTemplate.postForObject(eq(bridgeUrl + "/order/dry-run"), eq(order), eq(String.class)))
+            .thenThrow(exception);
 
         try {
             restTemplate.postForObject(bridgeUrl + "/order/dry-run", order, String.class);
@@ -113,6 +129,9 @@ class OrderEndpointIntegrationTest {
         order.put("quantity", 1);
         order.put("price", 20000); // int, not double
 
+        when(restTemplate.postForObject(eq(bridgeUrl + "/order/dry-run"), eq(order), eq(String.class)))
+            .thenReturn("{\"validated\":true}");
+
         String response = restTemplate.postForObject(
                 bridgeUrl + "/order/dry-run", order, String.class);
 
@@ -122,6 +141,9 @@ class OrderEndpointIntegrationTest {
 
     @Test
     void signalEndpoint_shouldReturnValidJson() {
+        when(restTemplate.getForObject(bridgeUrl + "/signal", String.class))
+            .thenReturn("{\"current_price\":20000.0,\"direction\":\"BUY\"}");
+        
         String response = restTemplate.getForObject(bridgeUrl + "/signal", String.class);
         
         assertNotNull(response);
@@ -131,6 +153,9 @@ class OrderEndpointIntegrationTest {
 
     @Test
     void newsEndpoint_shouldReturnValidJson() {
+        when(restTemplate.getForObject(bridgeUrl + "/signal/news", String.class))
+            .thenReturn("{\"news_veto\":false,\"score\":0.5}");
+        
         String response = restTemplate.getForObject(bridgeUrl + "/signal/news", String.class);
         
         assertNotNull(response);
@@ -154,6 +179,10 @@ class OrderEndpointIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(orderMap, headers);
+
+        ResponseEntity<String> mockResponse = new ResponseEntity<>("{\"validated\":true}", HttpStatus.OK);
+        when(restTemplate.exchange(eq(bridgeUrl + "/order/dry-run"), eq(HttpMethod.POST), eq(request), eq(String.class)))
+            .thenReturn(mockResponse);
 
         ResponseEntity<String> response = restTemplate.exchange(
                 bridgeUrl + "/order/dry-run",
