@@ -181,20 +181,11 @@ class TestFullTradingSession:
 class TestEarningsBlackout:
     """Test earnings blackout day behavior via admin endpoints"""
 
-    @property
-    def admin_token(self):
-        return os.environ.get("ADMIN_TOKEN")
-
     def _status(self):
-        if not self.admin_token:
-            pytest.skip("Admin token not configured")
         r = requests.get(
             f"{JAVA_URL}/admin/earnings-blackout/status",
-            headers={"X-Admin-Token": self.admin_token},
             timeout=5,
         )
-        if r.status_code == 401:
-            pytest.skip("Admin token rejected")
         return r
 
     def test_blackout_status_endpoint_available(self):
@@ -205,8 +196,6 @@ class TestEarningsBlackout:
         assert "datesCount" in data
 
     def test_blackout_seed_accepts_payload(self):
-        if not self.admin_token:
-            pytest.skip("Admin token not configured")
         payload = {
             "dates": ["2099-01-01"],
             "tickers_checked": ["TSM", "2317.TW"],
@@ -216,12 +205,9 @@ class TestEarningsBlackout:
         }
         r = requests.post(
             f"{JAVA_URL}/admin/earnings-blackout/seed",
-            headers={"X-Admin-Token": self.admin_token},
             json=payload,
             timeout=5,
         )
-        if r.status_code == 401:
-            pytest.skip("Admin token rejected")
         assert r.status_code == 200
         data = r.json()
         assert data.get("status") in {"seeded", "ignored"}
