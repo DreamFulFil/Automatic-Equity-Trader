@@ -25,7 +25,6 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-@SuppressWarnings({"null", "unchecked"})
 class TradingEngineProductionTest {
 
     @Mock private RestTemplate restTemplate;
@@ -77,6 +76,7 @@ class TradingEngineProductionTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testQuantityBugFix_AlwaysSendsStringQuantity() throws Exception {
         // Given: Contract scaling returns 2 contracts
         when(contractScalingService.getMaxContracts()).thenReturn(2);
@@ -149,6 +149,7 @@ class TradingEngineProductionTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void test45MinuteHardExit_ForcesFlattening() throws Exception {
         // Given: Position exists for 46 minutes
         tradingEngine.currentPosition.set(2);
@@ -250,6 +251,7 @@ class TradingEngineProductionTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testContractScaling_UsesCorrectQuantity() throws Exception {
         // Given: Contract scaling returns 4 contracts (max)
         when(contractScalingService.getMaxContracts()).thenReturn(4);
@@ -324,6 +326,7 @@ class TradingEngineProductionTest {
         verify(restTemplate, never()).getForObject(contains("/signal"), eq(String.class));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void testStopLoss_TriggersAtCorrectThreshold() throws Exception {
         // Given: Position with 2 contracts at loss

@@ -27,7 +27,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-@SuppressWarnings("null")
+@SuppressWarnings("unchecked")
 class TradingEngineTest {
 
     @Mock
@@ -574,7 +574,6 @@ class TradingEngineTest {
 
     // ==================== Helper methods ====================
 
-    @SuppressWarnings("unchecked")
     private <T> T getFieldValue(Object obj, String fieldName, Class<T> type) throws Exception {
         Field field = obj.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
@@ -587,7 +586,6 @@ class TradingEngineTest {
         field.set(obj, value);
     }
 
-    @SuppressWarnings("unchecked")
     private AtomicReference<Double> getAtomicField(Object obj, String fieldName) throws Exception {
         Field field = obj.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);

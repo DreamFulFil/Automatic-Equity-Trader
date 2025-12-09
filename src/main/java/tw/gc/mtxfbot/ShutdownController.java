@@ -1,5 +1,6 @@
 package tw.gc.mtxfbot;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,7 +18,9 @@ import tw.gc.mtxfbot.entities.ShioajiSettings;
 @Slf4j
 public class ShutdownController {
     
+    @NonNull
     private final TradingEngine tradingEngine;
+    @NonNull
     private final ShioajiSettingsService shioajiSettingsService;
     
     /**

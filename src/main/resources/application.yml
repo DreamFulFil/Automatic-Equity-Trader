@@ -74,9 +74,14 @@ logging:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   logback:
     rollingpolicy:
-      file-name-pattern: "logs/mtxf-bot-%d{yyyy-MM-dd}.log"
+      file-name-pattern: "logs/mtxf-bot-%d{yyyy-MM-dd}.%i.log"
       max-file-size: 10MB
       max-history: 30
       total-size-cap: 500MB
   file:
     name: logs/mtxf-bot.log
+
+# Earnings blackout refresh configuration
+earnings:
+  refresh:
+    enabled: true

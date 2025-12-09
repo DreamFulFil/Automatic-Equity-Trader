@@ -1,5 +1,7 @@
 package tw.gc.mtxfbot;
 
+import jakarta.annotation.Nullable;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -43,19 +45,29 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class TelegramService {
 
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final TelegramProperties telegramProperties;
+    @NonNull
     private final ObjectMapper objectMapper;
+    @NonNull
     private final StockSettingsService stockSettingsService;
 
     // Command handlers - will be set by TradingEngine
+    @Nullable
     private Consumer<Void> statusHandler;
+    @Nullable
     private Consumer<Void> pauseHandler;
+    @Nullable
     private Consumer<Void> resumeHandler;
+    @Nullable
     private Consumer<Void> closeHandler;
     
     // Agent service for agent commands (set via setter to avoid circular dependency)
+    @Nullable
     private AgentService agentService;
+    @Nullable
     private BotModeService botModeService;
     
     // Track last processed update ID to avoid duplicate processing
@@ -99,7 +111,6 @@ public class TelegramService {
      * Poll for Telegram updates every 5 seconds
      */
     @Scheduled(fixedRate = 5000)
-    @SuppressWarnings("null")
     public void pollUpdates() {
         if (!telegramProperties.isEnabled()) return;
         
@@ -337,7 +348,6 @@ public class TelegramService {
         }
     }
 
-    @SuppressWarnings("null")
     public void sendMessage(String message) {
         if (!telegramProperties.isEnabled()) {
             log.info("[Telegram disabled] {}", message);

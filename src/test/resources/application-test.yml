@@ -47,3 +47,7 @@ logging:
   level:
     root: WARN
     '[tw.gc.mtxfbot]': INFO
+
+earnings:
+  refresh:
+    enabled: false

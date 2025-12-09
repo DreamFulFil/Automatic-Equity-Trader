@@ -1,6 +1,7 @@
 package tw.gc.mtxfbot.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -32,21 +33,25 @@ import java.util.Map;
  * - Fallback to safe responses on API failure
  */
 @Slf4j
-@SuppressWarnings("null")
 public class TutorBotAgent extends BaseAgent {
     
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final ObjectMapper objectMapper;
+    @NonNull
     private final String ollamaUrl;
+    @NonNull
     private final String ollamaModel;
+    @NonNull
     private final AgentInteractionRepository interactionRepo;
     
     private static final int MAX_QUESTIONS_PER_DAY = 10;
     private static final int MAX_INSIGHTS_PER_DAY = 3;
     
-    public TutorBotAgent(RestTemplate restTemplate, ObjectMapper objectMapper, 
-                         String ollamaUrl, String ollamaModel,
-                         AgentInteractionRepository interactionRepo) {
+    public TutorBotAgent(@NonNull RestTemplate restTemplate, @NonNull ObjectMapper objectMapper, 
+                         @NonNull String ollamaUrl, @NonNull String ollamaModel,
+                         @NonNull AgentInteractionRepository interactionRepo) {
         super(
             "TutorBot",
             "Provides trading lessons, Q&A, and insights (10 questions/day, 3 insights/day)",

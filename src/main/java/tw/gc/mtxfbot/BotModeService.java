@@ -1,6 +1,7 @@
 package tw.gc.mtxfbot;
 
 import jakarta.annotation.PostConstruct;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,12 +22,15 @@ import java.util.Optional;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class BotModeService {
     
+    @NonNull
     private final BotSettingsRepository settingsRepo;
+    @NonNull
     private final ShioajiSettingsService shioajiSettingsService;
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final BridgeManager bridgeManager;
     
     @PostConstruct

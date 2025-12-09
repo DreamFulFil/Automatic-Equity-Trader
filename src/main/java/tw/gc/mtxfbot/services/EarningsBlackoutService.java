@@ -2,6 +2,7 @@ package tw.gc.mtxfbot.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.TelegramService;
+import tw.gc.mtxfbot.config.EarningsProperties;
 import tw.gc.mtxfbot.entities.EarningsBlackoutDate;
 import tw.gc.mtxfbot.entities.EarningsBlackoutMeta;
 import tw.gc.mtxfbot.repositories.EarningsBlackoutMetaRepository;
@@ -44,7 +46,6 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class EarningsBlackoutService {
 
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
@@ -70,10 +71,16 @@ public class EarningsBlackoutService {
             "2002.TW"
     );
 
+    @NonNull
     private final EarningsBlackoutMetaRepository metaRepository;
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final ObjectMapper objectMapper;
+    @NonNull
     private final TelegramService telegramService;
+    @NonNull
+    private final EarningsProperties earningsProperties;
 
     private final AtomicBoolean staleAlertSent = new AtomicBoolean(false);
     private final AtomicBoolean refreshFailureAlertSent = new AtomicBoolean(false);
@@ -81,6 +88,9 @@ public class EarningsBlackoutService {
 
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
     public void scheduledRefresh() {
+        if (!earningsProperties.getRefresh().isEnabled()) {
+            return;
+        }
         refreshAndPersist("scheduled-cron");
     }
 
@@ -165,6 +175,10 @@ public class EarningsBlackoutService {
     }
 
     private Optional<EarningsBlackoutMeta> refreshAndPersist(String source) {
+        if (!earningsProperties.getRefresh().isEnabled()) {
+            log.debug("Earnings refresh disabled, skipping {}", source);
+            return Optional.empty();
+        }
         if (!refreshLock.tryLock()) {
             log.warn("Earnings blackout refresh already in progress, skipping {}", source);
             return Optional.empty();

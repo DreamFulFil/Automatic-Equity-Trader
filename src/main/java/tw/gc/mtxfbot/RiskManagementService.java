@@ -1,5 +1,6 @@
 package tw.gc.mtxfbot;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class RiskManagementService {
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
     
+    @NonNull
     private final EarningsBlackoutService earningsBlackoutService;
     
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);

@@ -2,6 +2,7 @@ package tw.gc.mtxfbot.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,12 +33,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class AgentService {
     
+    @NonNull
     private final AgentRepository agentRepo;
+    @NonNull
     private final TradeRepository tradeRepo;
+    @NonNull
     private final AgentInteractionRepository interactionRepo;
+    @NonNull
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final TradingProperties tradingProperties;
