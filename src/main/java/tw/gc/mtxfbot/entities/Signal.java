@@ -44,7 +44,7 @@ public class Signal {
     private String marketData; // JSON string with RSI, volume, etc.
 
     @Column(length = 50)
-    private String symbol; // e.g., "2330.TW", "MTXF"
+    private String symbol; // e.g., "2454.TW", "MTXF"
 
     @Column(length = 200)
     private String reason; // Signal generation reason
