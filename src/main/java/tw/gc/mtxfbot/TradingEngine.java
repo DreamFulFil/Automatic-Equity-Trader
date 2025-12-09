@@ -23,6 +23,9 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -76,10 +79,10 @@ public class TradingEngine {
     // Trading mode: "stock" or "futures"
     private String tradingMode;
     
-    // Position tracking (package-private for testing)
-    final AtomicInteger currentPosition = new AtomicInteger(0);
-    final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
-    final AtomicReference<LocalDateTime> positionEntryTime = new AtomicReference<>(null);
+    // Position tracking per symbol (package-private for testing)
+    final Map<String, AtomicInteger> positions = new ConcurrentHashMap<>();
+    final Map<String, AtomicReference<Double>> entryPrices = new ConcurrentHashMap<>();
+    final Map<String, AtomicReference<LocalDateTime>> positionEntryTimes = new ConcurrentHashMap<>();
     
     // State flags (package-private for testing)
     volatile boolean emergencyShutdown = false;
@@ -146,6 +149,35 @@ public class TradingEngine {
             telegramService.sendMessage("🚨 Python bridge connection failed!");
         }
     }
+
+    String getActiveSymbol() {
+        return "stock".equals(tradingMode) ? "2454.TW" : "MTXF";
+    }
+
+    AtomicInteger positionFor(String symbol) {
+        return positions.computeIfAbsent(symbol, k -> new AtomicInteger(0));
+    }
+
+    AtomicReference<Double> entryPriceFor(String symbol) {
+        return entryPrices.computeIfAbsent(symbol, k -> new AtomicReference<>(0.0));
+    }
+
+    AtomicReference<LocalDateTime> entryTimeFor(String symbol) {
+        return positionEntryTimes.computeIfAbsent(symbol, k -> new AtomicReference<>(null));
+    }
+
+    void setPositionForTest(String symbol, int position) { // package-private for tests
+        positionFor(symbol).set(position);
+    }
+
+    void setEntryForTest(String symbol, double price, LocalDateTime time) { // package-private for tests
+        entryPriceFor(symbol).set(price);
+        entryTimeFor(symbol).set(time);
+    }
+
+    void executeOrderForTest(String action, int quantity, double price) { // package-private for tests
+        executeOrderWithRetry(action, quantity, price, getActiveSymbol(), false);
+    }
     
     /**
      * Get base stock quantity for stock mode (2454.TW odd lots)
@@ -210,12 +242,17 @@ public class TradingEngine {
         else if (riskManagementService.isEarningsBlackout()) state = "📅 EARNINGS BLACKOUT";
         else if (tradingPaused) state = "⏸️ PAUSED BY USER";
         
-        String positionInfo = currentPosition.get() == 0 ? "No position" :
+        String instrument = getActiveSymbol();
+        AtomicInteger posRef = positionFor(instrument);
+        AtomicReference<Double> entryRef = entryPriceFor(instrument);
+        AtomicReference<LocalDateTime> entryTimeRef = entryTimeFor(instrument);
+
+        String positionInfo = posRef.get() == 0 ? "No position" :
             String.format("%d @ %.0f (held %d min)",
-                currentPosition.get(),
-                entryPrice.get(),
-                positionEntryTime.get() != null ?
-                    java.time.Duration.between(positionEntryTime.get(), LocalDateTime.now(TAIPEI_ZONE)).toMinutes() : 0
+                posRef.get(),
+                entryRef.get(),
+                entryTimeRef.get() != null ?
+                    java.time.Duration.between(entryTimeRef.get(), LocalDateTime.now(TAIPEI_ZONE)).toMinutes() : 0
             );
         
         String modeInfo = "stock".equals(tradingMode) 
@@ -267,7 +304,7 @@ public class TradingEngine {
     }
     
     private void handleCloseCommand() {
-        if (currentPosition.get() == 0) {
+        if (positionFor(getActiveSymbol()).get() == 0) {
             telegramService.sendMessage("ℹ️ No position to close");
             return;
         }
@@ -289,7 +326,7 @@ public class TradingEngine {
             return;
         }
         
-        if (riskManagementService.isWeeklyLimitHit() && currentPosition.get() == 0) {
+        if (riskManagementService.isWeeklyLimitHit() && positionFor(getActiveSymbol()).get() == 0) {
             log.debug("🟡 Weekly limit hit - waiting until next Monday");
             return;
         }
@@ -310,7 +347,7 @@ public class TradingEngine {
                 updateNewsVetoCache();
             }
             
-            if (currentPosition.get() == 0) {
+            if (positionFor(getActiveSymbol()).get() == 0) {
                 if (!tradingPaused && !riskManagementService.isWeeklyLimitHit()) {
                     evaluateEntry();
                 }
@@ -325,9 +362,11 @@ public class TradingEngine {
     }
     
     void check45MinuteHardExit() { // package-private for testing
-        if (currentPosition.get() == 0) return;
+        String instrument = getActiveSymbol();
+        AtomicInteger posRef = positionFor(instrument);
+        if (posRef.get() == 0) return;
         
-        LocalDateTime entryTime = positionEntryTime.get();
+        LocalDateTime entryTime = entryTimeFor(instrument).get();
         if (entryTime == null) return;
         
         long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
@@ -415,11 +454,12 @@ public class TradingEngine {
         }
         
         int quantity = getTradingQuantity();
+        String instrument = getActiveSymbol();
         
         if ("LONG".equals(direction)) {
-            executeOrderWithRetry("BUY", quantity, currentPrice);
+            executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false);
         } else if ("SHORT".equals(direction)) {
-            executeOrderWithRetry("SELL", quantity, currentPrice);
+            executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);
         }
     }
     
@@ -428,14 +468,18 @@ public class TradingEngine {
         JsonNode signal = objectMapper.readTree(signalJson);
         
         double currentPrice = signal.path("current_price").asDouble(0.0);
-        int pos = currentPosition.get();
-        double entry = entryPrice.get();
+        String instrument = getActiveSymbol();
+        AtomicInteger posRef = positionFor(instrument);
+        AtomicReference<Double> entryRef = entryPriceFor(instrument);
+        AtomicReference<LocalDateTime> entryTimeRef = entryTimeFor(instrument);
+        int pos = posRef.get();
+        double entry = entryRef.get();
         
         // ========================================================================
         // MINIMUM HOLD TIME CHECK (Anti-Whipsaw)
         // Prevent exiting too quickly after entry - give position time to develop
         // ========================================================================
-        LocalDateTime entryTime = positionEntryTime.get();
+        LocalDateTime entryTime = entryTimeRef.get();
         if (entryTime != null) {
             long holdMinutes = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
             if (holdMinutes < 3) {  // 3-minute minimum hold time
@@ -473,7 +517,7 @@ public class TradingEngine {
                 .currentPrice(currentPrice)
                 .exitSignal(true)
                 .marketData(signal.toString())
-                .symbol("stock".equals(tradingMode) ? "2454.TW" : "MTXF")
+                .symbol(instrument)
                 .reason("Exit signal evaluation")
                 .newsVeto(signal.path("news_veto").asBoolean(false))
                 .newsScore(signal.path("news_score").asDouble(0.0))
@@ -497,14 +541,14 @@ public class TradingEngine {
      * Fixes the 422 error by ensuring quantity is always sent as string
      */
     private void executeOrderWithRetry(String action, int quantity, double price) {
-        executeOrderWithRetry(action, quantity, price, false);
+        executeOrderWithRetry(action, quantity, price, getActiveSymbol(), false);
     }
     
     /**
      * Execute order with retry wrapper, optional exit flag for cooldown tracking
      * @param isExit true if this is an exit/close position order (triggers cooldown on bridge)
      */
-    private void executeOrderWithRetry(String action, int quantity, double price, boolean isExit) {
+    private void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit) {
         int maxRetries = 3;
         int attempt = 0;
         
@@ -518,37 +562,41 @@ public class TradingEngine {
                 orderMap.put("price", price);
                 orderMap.put("is_exit", isExit); // Signal to bridge to start cooldown
                 
-                String instrument = "stock".equals(tradingMode) ? "2454.TW" : "MTXF";
                 log.info("📤 Sending {} order (attempt {}, exit={}): {}", instrument, attempt, isExit, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
                 log.debug("📥 Order response: {}", result);
                 
                 // Success - update position
+                AtomicInteger position = positionFor(instrument);
                 if ("BUY".equals(action)) {
-                    currentPosition.addAndGet(quantity);
+                    position.addAndGet(quantity);
                 } else {
-                    currentPosition.addAndGet(-quantity);
+                    position.addAndGet(-quantity);
                 }
-                entryPrice.set(price);
-                positionEntryTime.set(LocalDateTime.now(TAIPEI_ZONE));
+
+                if (!isExit) {
+                    entryPriceFor(instrument).set(price);
+                    entryTimeFor(instrument).set(LocalDateTime.now(TAIPEI_ZONE));
+                }
                 
                 telegramService.sendMessage(String.format(
                         "✅ ORDER FILLED\\n%s %d %s @ %.0f\\nPosition: %d", 
-                        action, quantity, instrument, price, currentPosition.get()));
+                        action, quantity, instrument, price, positionFor(instrument).get()));
                 
-                // Log the trade
-                Trade trade = Trade.builder()
-                        .timestamp(LocalDateTime.now(TAIPEI_ZONE))
-                        .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
-                        .quantity(quantity)
-                        .entryPrice(price)
-                        .symbol(instrument)
-                        .reason(isExit ? "Position exit" : "Signal execution")
-                        .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
-                        .status(Trade.TradeStatus.OPEN)
-                        .build();
-                dataLoggingService.logTrade(trade);
+                if (!isExit) {
+                    Trade trade = Trade.builder()
+                            .timestamp(LocalDateTime.now(TAIPEI_ZONE))
+                            .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
+                            .quantity(quantity)
+                            .entryPrice(price)
+                            .symbol(instrument)
+                            .reason("Signal execution")
+                            .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
+                            .status(Trade.TradeStatus.OPEN)
+                            .build();
+                    dataLoggingService.logTrade(trade);
+                }
                 
                 return; // Success - exit retry loop
                 
@@ -572,7 +620,9 @@ public class TradingEngine {
     }
     
     private void flattenPosition(String reason) {
-        int pos = currentPosition.get();
+        String instrument = getActiveSymbol();
+        AtomicInteger posRef = positionFor(instrument);
+        int pos = posRef.get();
         if (pos == 0) return;
         
         String action = pos > 0 ? "SELL" : "BUY";
@@ -581,17 +631,23 @@ public class TradingEngine {
             JsonNode signal = objectMapper.readTree(signalJson);
             double currentPrice = signal.path("current_price").asDouble(0.0);
             
-            // Store entry price before executeOrderWithRetry overwrites it
-            double originalEntryPrice = entryPrice.get();
+                // Store entry metadata before executeOrderWithRetry overwrites it
+                double originalEntryPrice = entryPriceFor(instrument).get();
+                LocalDateTime entryTime = entryTimeFor(instrument).get();
+            int holdDurationMinutes = entryTime == null ? 0 :
+                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
             
-            executeOrderWithRetry(action, Math.abs(pos), currentPrice, true); // isExit=true triggers cooldown
+                executeOrderWithRetry(action, Math.abs(pos), currentPrice, instrument, true); // isExit=true triggers cooldown
             
             double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
             double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
-            riskManagementService.recordPnL(pnl, riskSettingsService.getWeeklyLossLimit());
+                riskManagementService.recordPnL(instrument, pnl, riskSettingsService.getWeeklyLossLimit());
+
+            Trade.TradingMode mode = emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE;
+            dataLoggingService.closeLatestTrade(instrument, mode, currentPrice, pnl, holdDurationMinutes);
             
-            currentPosition.set(0);
-            positionEntryTime.set(null);
+                posRef.set(0);
+                entryTimeFor(instrument).set(null);
             
             log.info("🔒 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
             telegramService.sendMessage(String.format(

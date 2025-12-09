@@ -198,6 +198,16 @@ class RiskManagementServiceTest {
     }
 
     @Test
+    void recordPnL_perSymbol_shouldTrackIsolatedBalances() {
+        riskManagementService.recordPnL("MTXF", 1000, 15000);
+        riskManagementService.recordPnL("2454.TW", -500, 15000);
+
+        assertEquals(1000, riskManagementService.getDailyPnL("MTXF"));
+        assertEquals(-500, riskManagementService.getDailyPnL("2454.TW"));
+        assertEquals(500, riskManagementService.getDailyPnL());
+    }
+
+    @Test
     void isDailyLimitExceeded_withPositivePnL_shouldReturnFalse() {
         riskManagementService.recordPnL(5000, 15000);
         

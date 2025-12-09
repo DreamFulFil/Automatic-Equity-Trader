@@ -290,8 +290,8 @@ class DualModeTest {
         when(riskManagementService.isWeeklyLimitHit()).thenReturn(false);
         
         // Position: 100 shares at 700, now at 710 (P&L should be 100 * 10 * 1 = 1000)
-        tradingEngine.currentPosition.set(100);
-        tradingEngine.entryPrice.set(700.0);
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 100);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(700.0);
         
         // Signal showing exit_signal true - return same signal for all calls
         String signalJson = "{\"current_price\":710,\"exit_signal\":true}";
@@ -306,7 +306,7 @@ class DualModeTest {
         // Then: P&L should be calculated with multiplier 1 (stock)
         // The flattenPosition will use the same signal price (710), entry (700), pos (100)
         // P&L = (710 - 700) * 100 * 1 = 1000
-        verify(riskManagementService).recordPnL(eq(1000.0), anyInt());
+        verify(riskManagementService).recordPnL(eq("2454.TW"), eq(1000.0), eq(15000));
     }
 
     @Test
@@ -332,8 +332,8 @@ class DualModeTest {
         when(riskManagementService.isWeeklyLimitHit()).thenReturn(false);
         
         // Position: 2 contracts at 22500, now at 22510 (P&L should be 2 * 10 * 50 = 1000)
-        tradingEngine.currentPosition.set(2);
-        tradingEngine.entryPrice.set(22500.0);
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
         
         // Signal showing exit_signal true - return same signal for all calls
         String signalJson = "{\"current_price\":22510,\"exit_signal\":true}";
@@ -348,6 +348,6 @@ class DualModeTest {
         // Then: P&L should be calculated with multiplier 50 (futures)
         // The flattenPosition will use the same signal price (22510), entry (22500), pos (2)
         // P&L = (22510 - 22500) * 2 * 50 = 1000
-        verify(riskManagementService).recordPnL(eq(1000.0), anyInt());
+        verify(riskManagementService).recordPnL(eq("MTXF"), eq(1000.0), eq(15000));
     }
 }

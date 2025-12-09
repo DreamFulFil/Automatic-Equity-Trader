@@ -3,6 +3,9 @@ package tw.gc.mtxfbot.agents;
 import lombok.extern.slf4j.Slf4j;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.entities.Trade.TradeStatus;
+import tw.gc.mtxfbot.entities.BotSettings;
+import tw.gc.mtxfbot.entities.Trade;
+import tw.gc.mtxfbot.repositories.BotSettingsRepository;
 import tw.gc.mtxfbot.repositories.TradeRepository;
 
 import java.time.DayOfWeek;
@@ -30,6 +33,8 @@ import java.util.Map;
 public class RiskManagerAgent extends BaseAgent {
     
     private final TradeRepository tradeRepo;
+    private final BotSettingsRepository botSettingsRepository;
+    private BotState state = BotState.RUNNING;
     
     // Default limits (can be overridden via BotSettings)
     private int dailyLossLimit = 2500;
@@ -43,13 +48,14 @@ public class RiskManagerAgent extends BaseAgent {
     private static final double MAX_DRAWDOWN = 0.05;   // 5%
     private static final int MIN_TRADES_FOR_GOLIVE = 20;
     
-    public RiskManagerAgent(TradeRepository tradeRepo) {
+    public RiskManagerAgent(TradeRepository tradeRepo, BotSettingsRepository botSettingsRepository) {
         super(
             "RiskManager",
             "Enforces trading limits and handles /golive eligibility checks",
             List.of("limit_check", "emergency_halt", "golive_check", "mode_switch")
         );
         this.tradeRepo = tradeRepo;
+        this.botSettingsRepository = botSettingsRepository;
     }
     
     @Override
@@ -63,6 +69,10 @@ public class RiskManagerAgent extends BaseAgent {
             case "check" -> result = checkLimits(mode);
             case "golive" -> result = checkGoLiveEligibility();
             case "stats" -> result = getTradeStats(mode);
+            case "start" -> result = handleStart(mode.name());
+            case "pause" -> result = handlePause();
+            case "resume" -> result = handleResume();
+            case "stop" -> result = handleStop();
             default -> {
                 result.put("success", false);
                 result.put("error", "Unknown command: " + command);
@@ -70,6 +80,49 @@ public class RiskManagerAgent extends BaseAgent {
         }
         
         result.put("agent", name);
+        return result;
+    }
+
+    /**
+     * Check a new trade against configured risk limits using latest P&L.
+     */
+    public Map<String, Object> checkTradeRisk(Trade newTrade) {
+        Map<String, Object> result = new HashMap<>();
+        if (tradeRepo == null) {
+            result.put("allowed", false);
+            result.put("reason", "Trade repository not available");
+            return result;
+        }
+
+        TradingMode mode = newTrade.getMode() != null ? newTrade.getMode() : TradingMode.SIMULATION;
+        LocalDateTime startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime startOfWeek = LocalDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).withHour(0).withMinute(0).withSecond(0).withNano(0);
+
+        double dailyPnL = tradeRepo.sumPnLSince(mode, startOfDay);
+        double weeklyPnL = tradeRepo.sumPnLSince(mode, startOfWeek);
+        double newTradePnL = newTrade.getRealizedPnL() != null ? newTrade.getRealizedPnL() : 0.0;
+
+        double projectedDaily = dailyPnL + newTradePnL;
+        double projectedWeekly = weeklyPnL + newTradePnL;
+
+        int dailyLimitCfg = resolveLimit(BotSettings.DAILY_LOSS_LIMIT, dailyLossLimit);
+        int weeklyLimitCfg = resolveLimit(BotSettings.WEEKLY_LOSS_LIMIT, weeklyLossLimit);
+
+        boolean dailyHit = projectedDaily <= -dailyLimitCfg;
+        boolean weeklyHit = projectedWeekly <= -weeklyLimitCfg;
+
+        result.put("allowed", !(dailyHit || weeklyHit));
+        result.put("daily_pnl", projectedDaily);
+        result.put("weekly_pnl", projectedWeekly);
+        result.put("daily_limit", dailyLimitCfg);
+        result.put("weekly_limit", weeklyLimitCfg);
+        result.put("state", state.name());
+
+        if (dailyHit || weeklyHit) {
+            result.put("reason", dailyHit ? "Daily loss limit" : "Weekly loss limit");
+        } else {
+            result.put("reason", "Within limits");
+        }
         return result;
     }
     
@@ -88,12 +141,18 @@ public class RiskManagerAgent extends BaseAgent {
         double weeklyPnL = tradeRepo != null ? tradeRepo.sumPnLSince(mode, startOfWeek) : 0;
         double monthlyPnL = tradeRepo != null ? tradeRepo.sumPnLSince(mode, startOfMonth) : 0;
         
-        boolean dailyLimitHit = dailyPnL <= -dailyLossLimit;
-        boolean weeklyLimitHit = weeklyPnL <= -weeklyLossLimit;
-        boolean monthlyLimitHit = monthlyPnL <= -monthlyLossLimit;
+        int dailyLimitCfg = resolveLimit(BotSettings.DAILY_LOSS_LIMIT, dailyLossLimit);
+        int weeklyLimitCfg = resolveLimit(BotSettings.WEEKLY_LOSS_LIMIT, weeklyLossLimit);
+        int monthlyLimitCfg = resolveLimit(BotSettings.MONTHLY_LOSS_LIMIT, monthlyLossLimit);
+        int weeklyProfitCfg = resolveLimit(BotSettings.WEEKLY_PROFIT_LIMIT, weeklyProfitLimit);
+        int monthlyProfitCfg = resolveLimit(BotSettings.MONTHLY_PROFIT_LIMIT, monthlyProfitLimit);
         
-        boolean weeklyProfitHit = weeklyProfitLimit > 0 && weeklyPnL >= weeklyProfitLimit;
-        boolean monthlyProfitHit = monthlyProfitLimit > 0 && monthlyPnL >= monthlyProfitLimit;
+        boolean dailyLimitHit = dailyPnL <= -dailyLimitCfg;
+        boolean weeklyLimitHit = weeklyPnL <= -weeklyLimitCfg;
+        boolean monthlyLimitHit = monthlyPnL <= -monthlyLimitCfg;
+        
+        boolean weeklyProfitHit = weeklyProfitCfg > 0 && weeklyPnL >= weeklyProfitCfg;
+        boolean monthlyProfitHit = monthlyProfitCfg > 0 && monthlyPnL >= monthlyProfitCfg;
         
         boolean shouldHalt = dailyLimitHit || weeklyLimitHit || monthlyLimitHit;
         boolean shouldCelebrate = weeklyProfitHit || monthlyProfitHit;
@@ -110,6 +169,7 @@ public class RiskManagerAgent extends BaseAgent {
         result.put("should_halt", shouldHalt);
         result.put("should_celebrate", shouldCelebrate);
         result.put("mode", mode.name());
+        result.put("state", state.name());
         
         if (shouldHalt) {
             String reason = dailyLimitHit ? "Daily loss limit" : 
@@ -204,6 +264,30 @@ public class RiskManagerAgent extends BaseAgent {
     public void setMonthlyLossLimit(int limit) { this.monthlyLossLimit = limit; }
     public void setWeeklyProfitLimit(int limit) { this.weeklyProfitLimit = limit; }
     public void setMonthlyProfitLimit(int limit) { this.monthlyProfitLimit = limit; }
+
+    public BotState getState() {
+        return state;
+    }
+
+    public Map<String, Object> handleStart(String mode) {
+        state = BotState.RUNNING;
+        return Map.of("success", true, "state", state.name(), "mode", mode);
+    }
+
+    public Map<String, Object> handlePause() {
+        state = BotState.PAUSED;
+        return Map.of("success", true, "state", state.name());
+    }
+
+    public Map<String, Object> handleResume() {
+        state = BotState.RUNNING;
+        return Map.of("success", true, "state", state.name());
+    }
+
+    public Map<String, Object> handleStop() {
+        state = BotState.STOPPED;
+        return Map.of("success", true, "state", state.name());
+    }
     
     @Override
     protected Map<String, Object> getFallbackResponse() {
@@ -213,5 +297,24 @@ public class RiskManagerAgent extends BaseAgent {
             "reason", "Risk check unavailable - defaulting to halt",
             "agent", name
         );
+    }
+
+    private int resolveLimit(String key, int defaultValue) {
+        return botSettingsRepository.findByKey(key)
+                .map(BotSettings::getValue)
+                .map(this::parseIntSafe)
+                .orElse(defaultValue);
+    }
+
+    private int parseIntSafe(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    public enum BotState {
+        RUNNING, PAUSED, STOPPED
     }
 }

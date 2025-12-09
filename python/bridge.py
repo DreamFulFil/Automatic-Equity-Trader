@@ -109,9 +109,22 @@ def load_config_with_decryption(password: str):
         config = yaml.safe_load(f)
     
     if 'shioaji' in config:
-        for key in ['api-key', 'secret-key', 'ca-password', 'person-id']:
+        # Decrypt common fields
+        for key in ['ca-password', 'person-id']:
             if key in config['shioaji']:
                 config['shioaji'][key] = decrypt_config_value(config['shioaji'][key], password)
+        
+        # Decrypt stock keys
+        if 'stock' in config['shioaji']:
+             for key in ['api-key', 'secret-key']:
+                if key in config['shioaji']['stock']:
+                    config['shioaji']['stock'][key] = decrypt_config_value(config['shioaji']['stock'][key], password)
+
+        # Decrypt future keys
+        if 'future' in config['shioaji']:
+             for key in ['api-key', 'secret-key']:
+                if key in config['shioaji']['future']:
+                    config['shioaji']['future'][key] = decrypt_config_value(config['shioaji']['future'][key], password)
         
         ca_path = config['shioaji'].get('ca-path', 'Sinopac.pfx')
         if not os.path.isabs(ca_path):
@@ -177,10 +190,16 @@ class ShioajiWrapper:
                 # Create fresh API instance
                 self.api = sj.Shioaji()
                 
+                # Select credentials based on mode
+                if self.trading_mode == "stock":
+                    creds = self.config['shioaji'].get('stock', {})
+                else:
+                    creds = self.config['shioaji'].get('future', {})
+
                 # Login
                 self.api.login(
-                    api_key=self.config['shioaji']['api-key'],
-                    secret_key=self.config['shioaji']['secret-key'],
+                    api_key=creds.get('api-key'),
+                    secret_key=creds.get('secret-key'),
                     contracts_cb=lambda security_type: print(f"✅ Contracts loaded: {security_type}")
                 )
                 
@@ -678,6 +697,17 @@ def get_signal():
             "confidence": 0.0,
             "exit_signal": False,
             "reason": "Insufficient data (warming up)",
+            "momentum_3min": 0.0,
+            "momentum_5min": 0.0,
+            "momentum_10min": 0.0,
+            "volume_ratio": 1.0,
+            "rsi": 50.0,
+            "consecutive_signals": 0,
+            "in_cooldown": False,
+            "cooldown_remaining": 0,
+            "session_high": session_high if session_high is not None else price,
+            "session_low": session_low if session_low is not None else price,
+            "raw_direction": "NEUTRAL",
             "timestamp": datetime.now().isoformat()
         }
     

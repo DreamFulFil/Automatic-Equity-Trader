@@ -30,9 +30,10 @@ class TestShioajiSimulation:
         config = load_config_with_decryption(password)
         
         assert 'shioaji' in config
-        assert 'api-key' in config['shioaji']
+        assert 'stock' in config['shioaji']
+        assert 'api-key' in config['shioaji']['stock']
         # Decrypted value should not start with ENC(
-        assert not str(config['shioaji']['api-key']).startswith('ENC(')
+        assert not str(config['shioaji']['stock']['api-key']).startswith('ENC(')
     
     def test_ca_path_resolution(self):
         """CA path should resolve to absolute path"""
@@ -53,9 +54,10 @@ class TestShioajiSimulation:
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
         
-        assert 'secret-key' in config['shioaji']
+        assert 'stock' in config['shioaji']
+        assert 'secret-key' in config['shioaji']['stock']
         # Decrypted value should not start with ENC(
-        assert not str(config['shioaji']['secret-key']).startswith('ENC(')
+        assert not str(config['shioaji']['stock']['secret-key']).startswith('ENC(')
     
     def test_person_id_decryption(self):
         """Person ID should be decrypted"""

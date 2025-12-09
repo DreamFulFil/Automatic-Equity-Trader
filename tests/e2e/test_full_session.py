@@ -138,6 +138,22 @@ class TestFullTradingSession:
             assert 0 <= signal["confidence"] <= 1
             assert "exit_signal" in signal
             assert isinstance(signal["exit_signal"], bool)
+            # Extended telemetry required for live trading diagnostics
+            for key in (
+                "momentum_3min",
+                "momentum_5min",
+                "momentum_10min",
+                "volume_ratio",
+                "rsi",
+                "consecutive_signals",
+                "in_cooldown",
+                "cooldown_remaining",
+                "session_high",
+                "session_low",
+                "raw_direction",
+                "timestamp",
+            ):
+                assert key in signal, f"Missing field: {key}"
             
             # Small delay between calls
             time.sleep(0.1)
@@ -156,6 +172,8 @@ class TestFullTradingSession:
         assert "news_score" in news
         assert 0 <= news["news_score"] <= 1
         assert "news_reason" in news
+        assert "headlines_count" in news
+        assert news["headlines_count"] >= 0
     
     def test_contract_scaling_flow(self):
         """
@@ -211,6 +229,7 @@ class TestEarningsBlackout:
         assert r.status_code == 200
         data = r.json()
         assert data.get("status") in {"seeded", "ignored"}
+        today = datetime.utcnow().date().isoformat()
         
         for date_str in data.get("dates", []):
             assert date_str >= today, f"Date {date_str} is in the past"

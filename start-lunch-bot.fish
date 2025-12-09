@@ -200,6 +200,19 @@ if not curl -s http://localhost:11434/api/tags | grep -q "llama3.1"
 end
 echo -e "$GREEN✅ Ollama + Llama 3.1 ready$NC"
 
+# Step 4.5: Check PostgreSQL (only for local runs, not CI)
+if not set -q CI
+    echo "4.5️⃣ Checking PostgreSQL..."
+    
+    # Check if psql container is running
+    if not docker ps --filter "name=psql" --filter "status=running" | grep -q "psql"
+        echo "Starting PostgreSQL container..."
+        docker start psql
+        sleep 2
+    end
+    echo -e "$GREEN✅ PostgreSQL ready$NC"
+end
+
 # Step 5: Build Java app (ROBUST: use jenv exec mvn if available)
 echo "5️⃣ Building Java application..."
 set MVN_CMD "mvn"

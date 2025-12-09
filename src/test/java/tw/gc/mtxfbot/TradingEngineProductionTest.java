@@ -152,9 +152,9 @@ class TradingEngineProductionTest {
     @SuppressWarnings("unchecked")
     void test45MinuteHardExit_ForcesFlattening() throws Exception {
         // Given: Position exists for 46 minutes
-        tradingEngine.currentPosition.set(2);
-        tradingEngine.entryPrice.set(22500.0);
-        tradingEngine.positionEntryTime.set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(46));
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
+        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(46));
         
         // Mock signal for current price
         String signalJson = """
@@ -215,9 +215,9 @@ class TradingEngineProductionTest {
         when(riskManagementService.getWeeklyPnL()).thenReturn(8500.0);
         
         // Position exists
-        tradingEngine.currentPosition.set(2);
-        tradingEngine.entryPrice.set(22500.0);
-        tradingEngine.positionEntryTime.set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(15));
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
+        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(15));
         
         // When: handleStatusCommand is called
         tradingEngine.handleStatusCommand();
@@ -302,8 +302,8 @@ class TradingEngineProductionTest {
             .thenReturn(signalJson);
         
         // Position exists
-        tradingEngine.currentPosition.set(1);
-        tradingEngine.entryPrice.set(22500.0);
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 1);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
         
         // When: checkRiskLimits is called
         tradingEngine.checkRiskLimits();
@@ -330,8 +330,8 @@ class TradingEngineProductionTest {
     @Test
     void testStopLoss_TriggersAtCorrectThreshold() throws Exception {
         // Given: Position with 2 contracts at loss
-        tradingEngine.currentPosition.set(2);
-        tradingEngine.entryPrice.set(22500.0);
+        tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
+        tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
         
         // Mock signal showing loss position
         String signalJson = """

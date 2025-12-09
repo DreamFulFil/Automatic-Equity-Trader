@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class ShioajiReconnectWrapperTest {
+class ShioajiReconnectWrapperIntegrationTest {
 
     @Mock private RestTemplate restTemplate;
     @Mock private TelegramService telegramService;
