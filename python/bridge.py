@@ -745,9 +745,16 @@ def get_signal():
                 losses.append(abs(change))
         
         avg_gain = sum(gains) / 60 if gains else 0
-        avg_loss = sum(losses) / 60 if losses else 0.0001  # Avoid division by zero
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
+        avg_loss = sum(losses) / 60 if losses else 0
+        
+        if avg_loss == 0:
+            if avg_gain == 0:
+                rsi = 50.0
+            else:
+                rsi = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
     
     # ========================================================================
     # VOLUME ANALYSIS
