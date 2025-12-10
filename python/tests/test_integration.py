@@ -333,6 +333,33 @@ class TestAccountEndpoints:
         # Both should have required fields for contract scaling
         assert "equity" in account
         assert "total_pnl" in profit
+    
+    def test_earnings_scrape_endpoint(self):
+        """Should successfully scrape earnings dates"""
+        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=30)  # Allow more time for scraping
+        
+        assert r.status_code == 200
+        data = r.json()
+        
+        # Check required fields
+        assert "last_updated" in data
+        assert "source" in data
+        assert "tickers_checked" in data
+        assert "dates" in data
+        
+        # Check data types
+        assert isinstance(data["tickers_checked"], list)
+        assert isinstance(data["dates"], list)
+        
+        # Should have checked some tickers
+        assert len(data["tickers_checked"]) > 0
+        
+        # Dates should be strings in YYYY-MM-DD format
+        for date in data["dates"]:
+            assert isinstance(date, str)
+            # Basic format check
+            assert len(date) == 10
+            assert date.count('-') == 2
 
 
 if __name__ == '__main__':

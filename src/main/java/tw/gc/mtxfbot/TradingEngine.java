@@ -145,8 +145,9 @@ public class TradingEngine {
                 contractScalingService.updateContractSizing();
             }
         } catch (Exception e) {
-            log.error("❌ Failed to connect to Python bridge", e);
-            telegramService.sendMessage("🚨 Python bridge connection failed!");
+            log.warn("⚠️ Python bridge not available during startup (will retry during trading cycle): {}", e.getMessage());
+            // Don't send Telegram message during startup - bridge may start later
+            // marketDataConnected remains false, will be retried in trading cycle
         }
     }
 
@@ -319,7 +320,26 @@ public class TradingEngine {
     
     @Scheduled(fixedRate = 30000)
     public void tradingLoop() {
-        if (emergencyShutdown || !marketDataConnected) return;
+        // Try to reconnect to bridge if not connected
+        if (!marketDataConnected) {
+            try {
+                String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
+                log.info("✅ Python bridge reconnected: {}", response);
+                marketDataConnected = true;
+                telegramService.sendMessage("✅ Python bridge reconnected!");
+                
+                // Run pre-market checks now that bridge is available
+                runPreMarketHealthCheck();
+                if ("futures".equals(tradingMode)) {
+                    contractScalingService.updateContractSizing();
+                }
+            } catch (Exception e) {
+                log.debug("Bridge still unavailable: {}", e.getMessage());
+                return; // Skip trading loop until bridge is available
+            }
+        }
+        
+        if (emergencyShutdown) return;
         
         if (riskManagementService.isEarningsBlackout()) {
             log.debug("📅 Earnings blackout day - no trading");

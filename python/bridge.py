@@ -930,6 +930,32 @@ def place_order(order: OrderRequest):
     
     return result
 
+@app.get("/earnings/scrape")
+def scrape_earnings_endpoint():
+    """Scrape earnings blackout dates and return JSON for Java service"""
+    try:
+        jasypt_password = os.environ.get('JASYPT_PASSWORD')
+        if not jasypt_password:
+            return JSONResponse(status_code=500, content={"error": "JASYPT_PASSWORD not set"})
+        
+        dates = scrape_earnings_dates(jasypt_password)
+        
+        # Format for Java service
+        result = {
+            "last_updated": datetime.now().isoformat(),
+            "source": "Yahoo Finance (yfinance)",
+            "tickers_checked": [
+                'TSM', '2454.TW', '2317.TW', 'UMC', '2303.TW', 
+                'ASX', '3711.TW', '2412.TW', '2882.TW', '2881.TW', 
+                '1301.TW', '2002.TW'
+            ],
+            "dates": dates
+        }
+        
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/order/dry-run")
 def place_order_dry_run(order: OrderRequest):
     """Validate order request without executing - for pre-market health checks"""

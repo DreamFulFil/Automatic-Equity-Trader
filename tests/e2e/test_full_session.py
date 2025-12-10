@@ -197,11 +197,7 @@ class TestFullTradingSession:
 
 def java_available():
     """Check if Java server is available"""
-    try:
-        r = requests.get(f"{JAVA_URL}/health", timeout=2)
-        return r.status_code == 200
-    except:
-        return False
+    return wait_for_service(JAVA_URL, timeout=10)
 
 
 @pytest.mark.e2e
