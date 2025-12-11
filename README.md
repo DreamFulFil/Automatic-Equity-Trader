@@ -160,7 +160,14 @@ python/venv/bin/pytest python/tests/test_bridge.py python/tests/test_contract.py
 | Bot mode management (simulation/live) | Implemented |
 | Extended Telegram commands (/agent, /talk, /insight, /golive, /backtosim) | Implemented |
 | **Database-driven configuration (stock/risk settings)** | **Implemented** |
-| Comprehensive test suite (202 tests) | Implemented |
+| Comprehensive test suite (341 tests) | Implemented |
+| **Statistics duplication prevention** | **Implemented** |
+
+### Recent Updates (December 2025)
+
+- **Statistics Duplication Fix**: Daily trading statistics are now calculated exactly once per trading day, preventing duplicate entries that occurred when statistics were calculated both at shutdown (13:00) and next startup (11:30)
+- **Test Suite Expansion**: Comprehensive test coverage increased to 341 tests across all components
+- **Database-Driven Configuration**: All bot settings now stored in database for runtime updates
 
 ---
 
@@ -901,16 +908,16 @@ grep "P&L" logs/mtxf-bot.log
 
 ### Comprehensive Test Suite
 
-The project includes a complete testing suite with **403 tests** covering all components.
+The project includes a complete testing suite with **341 tests** covering all components.
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| **Java Integration Tests** | 108 | Java-Python bridge communication, order flow |
-| **Python Unit Tests** | 59 | Bridge logic, contract validation, config decryption |
-| **Python Integration Tests** | 24 | Real bridge endpoints, Ollama integration |
-| **E2E Tests** | 18 | Full trading session simulation |
-| **Fish Shell Tests** | 27 | Startup script, supervisor, environment validation |
-| **Total** | **403** | |
+| **Java Unit Tests** | 194 | Core business logic, trading engine, services |
+| **Python Unit Tests** | 65 | Bridge logic, contract validation, config decryption |
+| **Java Integration Tests** | 41 | Java-Python bridge communication, order flow |
+| **Python Integration Tests** | 25 | Real bridge endpoints, Ollama integration |
+| **E2E Tests** | 16 | Full trading session simulation |
+| **Total** | **341** | |
 
 ### Running All Tests
 
