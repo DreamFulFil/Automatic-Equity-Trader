@@ -11,13 +11,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
+import tw.gc.mtxfbot.entities.DailyStatistics;
 import tw.gc.mtxfbot.entities.Signal;
 import tw.gc.mtxfbot.entities.Signal.SignalDirection;
 import tw.gc.mtxfbot.entities.Trade;
+import tw.gc.mtxfbot.repositories.DailyStatisticsRepository;
+import tw.gc.mtxfbot.services.EndOfDayStatisticsService;
 import tw.gc.mtxfbot.services.DataLoggingService;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -75,6 +79,10 @@ public class TradingEngine {
     private final RiskSettingsService riskSettingsService;
     @NonNull
     private final DataLoggingService dataLoggingService;
+    @NonNull
+    private final EndOfDayStatisticsService endOfDayStatisticsService;
+    @NonNull
+    private final DailyStatisticsRepository dailyStatisticsRepository;
     
     // Trading mode: "stock" or "futures"
     private String tradingMode;
@@ -101,6 +109,20 @@ public class TradingEngine {
             "stock".equals(tradingMode) ? "2454.TW odd lots" : "MTXF futures");
         
         registerTelegramCommands();
+        
+        // Calculate statistics for yesterday on startup
+        LocalDate yesterday = LocalDate.now(TAIPEI_ZONE).minusDays(1);
+        String symbol = "stock".equals(tradingMode) ? "2454.TW" : "MTXF";
+        if (dailyStatisticsRepository.findByTradeDateAndSymbol(yesterday, symbol).isEmpty()) {
+            try {
+                log.info("📊 Calculating statistics for {} on startup...", yesterday);
+                endOfDayStatisticsService.calculateAndSaveStatisticsForDay(yesterday, symbol);
+            } catch (Exception e) {
+                log.error("❌ Failed to calculate yesterday's statistics on startup", e);
+            }
+        } else {
+            log.info("📊 Statistics for {} already exist, skipping calculation on startup", yesterday);
+        }
         
         String modeDescription = "stock".equals(tradingMode) 
             ? "Mode: STOCK (2454.TW odd lots)" 
@@ -739,5 +761,19 @@ public class TradingEngine {
         flattenPosition("System shutdown");
         // Daily summary already sent by autoFlatten() - don't send twice
         telegramService.sendMessage("🛑 Bot stopped");
+        
+        // Calculate end-of-day statistics for today on shutdown
+        LocalDate today = LocalDate.now(TAIPEI_ZONE);
+        String symbol = "stock".equals(tradingMode) ? "2454.TW" : "MTXF";
+        if (dailyStatisticsRepository.findByTradeDateAndSymbol(today, symbol).isEmpty()) {
+            try {
+                log.info("📊 Calculating today's statistics on shutdown...");
+                endOfDayStatisticsService.calculateAndSaveStatisticsForDay(today, symbol);
+            } catch (Exception e) {
+                log.error("❌ Failed to calculate today's statistics on shutdown", e);
+            }
+        } else {
+            log.info("📊 Statistics for {} already exist, skipping calculation on shutdown", today);
+        }
     }
 }
