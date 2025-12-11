@@ -69,13 +69,45 @@ jenv local 21.0
 
 ---
 
-## Shell Tools (Use Instead of Traditional Commands)
-| Task | Use | Avoid |
-|------|-----|-------|
-| Find files | `fd` | `find`, `ls -R` |
-| Search text | `rg` (ripgrep) | `grep`, `ag` |
-| Code structure | `ast-grep` | `grep`, `sed` |
-| JSON | `jq` | `python -m json.tool` |
+## Shell Tools Usage Guidelines
+⚠️ **IMPORTANT**: Use the following specialized tools instead of traditional Unix commands: (Install if missing)
+| Task Type | Must Use | Do Not Use |
+|-----------|----------|------------|
+| Find Files | fd | `find`, ls -R |
+| Search Text | rg (ripgrep) | `grep`, ag |
+| Analyze Code Structure | ast-grep | `grep`, sed |
+| Interactive Selection | fzf | Manual filtering |
+| Process JSON | jq | python -m json.tool |
+| Process YAML/XML | yq | Manual parsing |
+
+## File Reading Efficiency
+⚠️ **IMPORTANT**: When given specific line numbers to modify:
+- **DO NOT** read entire files unnecessarily
+- **DO** use targeted reads with offset and limit parameters around the specified line numbers
+- **ONLY** read the full file if broader context is genuinely required
+- Trust the provided line numbers - be surgical, not exploratory
+
+## Code Compilation Verification
+⚠️ **IMPORTANT**: When all tasks are completed:
+- **DO** run the appropriate build/compile command to verify all changes compile successfully
+- **DO** fix any compilation errors before marking work as complete
+- For Java projects: Use mvn compile or mvn clean compile
+- For JavaScript/React projects: Use npm run build or equivalent
+- Never consider a task fully complete without compilation verification
+
+## Import Statement Management
+🚨 **CRITICAL - DO NOT SKIP**: Add imports IMMEDIATELY when making code changes:
+- **NEVER** add code using new classes without adding the corresponding import statements FIRST
+- **ALWAYS** add imports in the SAME edit where you introduce new class usage
+- **DO NOT** defer import additions to later - this wastes massive amounts of tokens on compilation errors
+- When adding code that uses: ByteArrayOutputStream, FileOutputStream, InputStream, StandardCharsets, or any utility class → ADD THE IMPORT IMMEDIATELY
+- Check BOTH standard library imports (java.io.*, java.nio.charset.*) AND project-specific imports (custom converters, utilities)
+- Forgetting imports means wasting tokens on:
+  1. Failed compilation
+  2. Reading error messages
+  3. Re-reading files to add imports
+  4. Re-compilation
+- **This is extremely wasteful - add imports when you write the code, not after it fails to compile**
 
 
 Refer to the detailed sections below for more information on each step.
