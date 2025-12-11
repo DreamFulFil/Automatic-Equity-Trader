@@ -384,7 +384,7 @@ public class TelegramService {
         }
     }
 
-    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void sendDailySummaryDigest() {
         if (agentService == null || botModeService == null) {
             return;

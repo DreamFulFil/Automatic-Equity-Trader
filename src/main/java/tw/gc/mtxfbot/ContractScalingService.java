@@ -138,7 +138,7 @@ public class ContractScalingService {
     /**
      * Daily update at 11:15 (before trading window opens at 11:30)
      */
-    @Scheduled(cron = "0 15 11 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 15 11 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void dailyContractSizingUpdate() {
         log.info("11:15 Daily contract sizing update triggered");
         updateContractSizing();

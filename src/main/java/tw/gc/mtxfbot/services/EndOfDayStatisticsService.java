@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.entities.*;
 import tw.gc.mtxfbot.repositories.*;
+import tw.gc.mtxfbot.AppConstants;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EndOfDayStatisticsService {
 
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
 
     @NonNull
     private final TradeRepository tradeRepository;
@@ -47,7 +48,7 @@ public class EndOfDayStatisticsService {
      * Calculate and store end-of-day statistics.
      * Triggered at 13:05 Taiwan time (5 minutes after market close).
      */
-    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     @Transactional
     public void calculateEndOfDayStatistics() {
         log.info("📊 Calculating end-of-day statistics...");

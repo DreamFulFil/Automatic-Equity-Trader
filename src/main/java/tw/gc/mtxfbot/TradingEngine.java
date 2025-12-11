@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class TradingEngine {
     
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     
     @NonNull
     private final RestTemplate restTemplate;
@@ -686,7 +686,7 @@ public class TradingEngine {
         }
     }
     
-    @Scheduled(cron = "0 0 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 0 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void autoFlatten() {
         log.info("🕐 13:00 Auto-flatten triggered");
         flattenPosition("End of trading window");
@@ -720,14 +720,14 @@ public class TradingEngine {
             : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
         
         telegramService.sendMessage(String.format(
-                "📊 DAILY SUMMARY\\n" +
-                "━━━━━━━━━━━━━━━━\\n" +
-                "%s\\n" +
-                "Today P&L: %.0f TWD\\n" +
-                "Week P&L: %.0f TWD\\n" +
-                "Equity: %.0f TWD\\n" +
-                "Status: %s%s\\n" +
-                "━━━━━━━━━━━━━━━━\\n" +
+                "📊 DAILY SUMMARY\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "%s\n" +
+                "Today P&L: %.0f TWD\n" +
+                "Week P&L: %.0f TWD\n" +
+                "Equity: %.0f TWD\n" +
+                "Status: %s%s\n" +
+                "━━━━━━━━━━━━━━━━\n" +
                 "🚀 NO PROFIT CAPS - Unlimited upside!",
                 modeInfo, pnl, riskManagementService.getWeeklyPnL(),
                 contractScalingService.getLastEquity(), status, comment));
