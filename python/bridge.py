@@ -324,16 +324,24 @@ class ShioajiWrapper:
     
     def place_order(self, action: str, quantity: int, price: float):
         """Place order with account validation and error handling - mode-aware"""
+        # 🚨 CRITICAL: Check simulation mode first - NO REAL ORDERS IN SIMULATION
+        if self.config['shioaji']['simulation']:
+            print(f"🎭 SIMULATION MODE: Simulating {action} {quantity} shares @ {price}")
+            # Generate a fake order ID for simulation
+            import uuid
+            fake_order_id = str(uuid.uuid4())[:8]
+            return {"status": "filled", "order_id": f"sim-{fake_order_id}", "mode": self.trading_mode}
+
         if not self.connected:
             if not self.reconnect():
                 return {"status": "error", "error": "Not connected"}
-        
+
         try:
             if self.trading_mode == "stock":
                 return self._place_stock_order(action, quantity, price)
             else:
                 return self._place_futures_order(action, quantity, price)
-                
+
         except Exception as e:
             print(f"❌ Order failed: {e}")
             return {"status": "error", "error": str(e)}
@@ -345,7 +353,7 @@ class ShioajiWrapper:
             print("⚠️ Stock account not available, reconnecting...")
             if not self.reconnect():
                 return {"status": "error", "error": "Stock account unavailable"}
-        
+
         order_obj = self.api.Order(
             price=price,
             quantity=quantity,  # Integer for stocks
@@ -355,9 +363,27 @@ class ShioajiWrapper:
             order_lot=sj.constant.StockOrderLot.IntradayOdd,  # Odd lot for small quantities
             account=self.api.stock_account
         )
-        
+
         trade = self.api.place_order(self.contract, order_obj)
-        return {"status": "filled", "order_id": trade.status.id, "mode": "stock"}
+
+        # 🚨 CRITICAL: Check if order actually succeeded
+        if hasattr(trade, 'status') and trade.status:
+            # Check for error messages in the operation
+            if hasattr(trade, 'operation') and trade.operation:
+                op_msg = getattr(trade.operation, 'op_msg', '')
+                if op_msg and ('不足' in op_msg or 'error' in op_msg.lower()):
+                    print(f"❌ Order failed: {op_msg}")
+                    return {"status": "error", "error": op_msg}
+
+            # Check if any quantity was actually filled
+            order_quantity = getattr(trade.status, 'order_quantity', 0)
+            if order_quantity == 0:
+                print(f"❌ Order failed: No shares filled (order_quantity=0)")
+                return {"status": "error", "error": "Order not filled"}
+
+            return {"status": "filled", "order_id": trade.status.id, "mode": "stock"}
+        else:
+            return {"status": "error", "error": "Invalid order response"}
     
     def _place_futures_order(self, action: str, quantity: int, price: float):
         """Place futures order (MTXF)"""
@@ -366,7 +392,7 @@ class ShioajiWrapper:
             print("⚠️ Futures account not available, reconnecting...")
             if not self.reconnect():
                 return {"status": "error", "error": "Futures account unavailable"}
-        
+
         order_obj = self.api.Order(
             price=price,
             quantity=quantity,  # Integer works for futures too
@@ -375,15 +401,42 @@ class ShioajiWrapper:
             order_type=sj.constant.OrderType.ROD,
             account=self.api.futopt_account
         )
-        
+
         trade = self.api.place_order(self.contract, order_obj)
-        return {"status": "filled", "order_id": trade.status.id, "mode": "futures"}
+
+        # 🚨 CRITICAL: Check if order actually succeeded
+        if hasattr(trade, 'status') and trade.status:
+            # Check for error messages in the operation
+            if hasattr(trade, 'operation') and trade.operation:
+                op_msg = getattr(trade.operation, 'op_msg', '')
+                if op_msg and ('不足' in op_msg or 'error' in op_msg.lower()):
+                    print(f"❌ Order failed: {op_msg}")
+                    return {"status": "error", "error": op_msg}
+
+            # Check if any quantity was actually filled
+            order_quantity = getattr(trade.status, 'order_quantity', 0)
+            if order_quantity == 0:
+                print(f"❌ Order failed: No contracts filled (order_quantity=0)")
+                return {"status": "error", "error": "Order not filled"}
+
+            return {"status": "filled", "order_id": trade.status.id, "mode": "futures"}
+        else:
+            return {"status": "error", "error": "Invalid order response"}
     
     def get_account_info(self):
         """Get account equity and margin info with error handling - mode-aware"""
+        # 🚨 CRITICAL: Return simulated account data in simulation mode
+        if self.config['shioaji']['simulation']:
+            print("🎭 SIMULATION MODE: Returning simulated account info")
+            return {
+                "equity": 100000.0,  # Simulated equity
+                "available_margin": 50000.0,  # Simulated margin
+                "status": "ok"
+            }
+
         if not self.connected:
             return {"equity": 0, "available_margin": 0, "status": "error", "error": "Not connected"}
-        
+
         try:
             if self.trading_mode == "stock":
                 return self._get_stock_account_info()
