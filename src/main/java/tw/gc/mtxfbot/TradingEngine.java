@@ -222,6 +222,68 @@ public class TradingEngine {
         }
     }
     
+    /**
+     * Check account balance/position and adjust quantity to prevent insufficient funds/shares
+     */
+    private int checkBalanceAndAdjustQuantity(String action, int requestedQuantity, double price, String instrument) {
+        try {
+            if ("BUY".equals(action)) {
+                // Check available balance for BUY orders
+                String accountJson = restTemplate.getForObject(getBridgeUrl() + "/account", String.class);
+                JsonNode accountData = objectMapper.readTree(accountJson);
+                
+                if (!"ok".equals(accountData.path("status").asText())) {
+                    log.warn("⚠️ Could not get account balance - proceeding with requested quantity");
+                    return requestedQuantity;
+                }
+                
+                double availableBalance = accountData.path("available_margin").asDouble(0.0);
+                if (availableBalance <= 0) {
+                    log.warn("⚠️ No available balance in account");
+                    return 0;
+                }
+                
+                // Calculate maximum affordable quantity
+                double maxAffordable = availableBalance / price;
+                int maxQuantity = (int) Math.floor(maxAffordable);
+                
+                // For stocks, ensure we don't exceed reasonable limits
+                if ("stock".equals(tradingMode)) {
+                    maxQuantity = Math.min(maxQuantity, 1000); // Safety limit
+                }
+                
+                if (maxQuantity < requestedQuantity) {
+                    log.warn("⚠️ Balance insufficient - reducing quantity from {} to {} (balance: {:.0f} TWD, price: {:.0f} TWD)",
+                        requestedQuantity, maxQuantity, availableBalance, price);
+                    return Math.max(0, maxQuantity);
+                }
+                
+            } else if ("SELL".equals(action)) {
+                // Check current position for SELL orders
+                AtomicInteger currentPosition = positionFor(instrument);
+                int availableShares = Math.abs(currentPosition.get());
+                
+                if (availableShares <= 0) {
+                    log.warn("⚠️ No position to sell for {}", instrument);
+                    return 0;
+                }
+                
+                if (requestedQuantity > availableShares) {
+                    log.warn("⚠️ Insufficient shares - reducing quantity from {} to {} (position: {} shares)",
+                        requestedQuantity, availableShares, availableShares);
+                    return availableShares;
+                }
+            }
+            
+            return requestedQuantity;
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to check account balance/position: {}", e.getMessage());
+            // On error, proceed with requested quantity to avoid blocking trades
+            return requestedQuantity;
+        }
+    }
+    
     public String getTradingMode() {
         return tradingMode;
     }
@@ -498,10 +560,37 @@ public class TradingEngine {
         int quantity = getTradingQuantity();
         String instrument = getActiveSymbol();
         
+        // 🚨 CRITICAL: Check account balance before placing BUY orders
+        if ("LONG".equals(direction)) {
+            quantity = checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument);
+            if (quantity <= 0) {
+                log.warn("⚠️ Insufficient balance for BUY order - skipping trade");
+                telegramService.sendMessage("⚠️ Insufficient account balance - BUY order skipped");
+                return;
+            }
+        } else if ("SHORT".equals(direction) && "stock".equals(tradingMode)) {
+            // For stock SHORT orders (which we reject), check if we have shares to sell
+            // This shouldn't happen due to the SHORT rejection above, but safety check
+            quantity = checkBalanceAndAdjustQuantity("SELL", quantity, currentPrice, instrument);
+            if (quantity <= 0) {
+                log.warn("⚠️ No position to sell - skipping SHORT signal");
+                return;
+            }
+        }
+        
         if ("LONG".equals(direction)) {
             executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false);
         } else if ("SHORT".equals(direction)) {
-            executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);
+            // 🚨 CRITICAL: Taiwan stock market does not allow short selling for retail investors
+            // Only futures (MTXF) support short positions
+            if ("stock".equals(tradingMode)) {
+                log.warn("⚠️ SHORT signal ignored - Taiwan retail investors cannot short sell stocks");
+                telegramService.sendMessage("⚠️ SHORT signal received but ignored (retail investors cannot short sell stocks in Taiwan)");
+                return;
+            } else {
+                // Futures mode allows short selling
+                executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);
+            }
         }
     }
     

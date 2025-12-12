@@ -361,6 +361,7 @@ class ShioajiWrapper:
             price_type=sj.constant.StockPriceType.LMT,
             order_type=sj.constant.OrderType.ROD,
             order_lot=sj.constant.StockOrderLot.IntradayOdd,  # Odd lot for small quantities
+            daytrade_short=(action == "SELL"),  # Enable day trade short selling for SELL orders
             account=self.api.stock_account
         )
 
