@@ -36,17 +36,20 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Dual-Mode Lunch-Break Trading Engine (December 2025 Production Version)
- * 
+ *
  * Supports two trading modes via -Dtrading.mode system property:
  * - "stock" (default): Trades 2454.TW odd lots (70 shares base, +27 per 20k equity)
  * - "futures": Trades MTXF with full scaling (1→2→3→4 contracts)
- * 
+ *
  * Core trading orchestrator responsible for:
  * - Signal polling and trade execution with auto-scaling
  * - Position management with 45-minute hard exit
  * - Trading window enforcement with weekly loss breaker
  * - Shioaji auto-reconnect wrapper with retry logic
- * 
+ *
+ * NOTE: Taiwan market does not support day trading for odd lots.
+ * Bot performs regular intraday trading (buy/sell same day) without special day trading mechanics.
+ *
  * Delegates to:
  * - ContractScalingService: Auto sizing based on equity + 30d profit
  * - RiskManagementService: P&L tracking and weekly -15k TWD limit
@@ -589,6 +592,11 @@ public class TradingEngine {
                 return;
             } else {
                 // Futures mode allows short selling
+                quantity = checkBalanceAndAdjustQuantity("SELL", quantity, currentPrice, instrument);
+                if (quantity <= 0) {
+                    log.warn("⚠️ No position to sell - skipping futures SHORT order");
+                    return;
+                }
                 executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);
             }
         }
