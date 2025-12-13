@@ -13,9 +13,9 @@
     </parent>
 
     <groupId>tw.gc</groupId>
-    <artifactId>mtxf-bot</artifactId>
+    <artifactId>auto-equity-trader</artifactId>
     <version>1.0.0</version>
-    <name>MTXF Lunch Bot</name>
+    <name>Automatic Equity Trader</name>
 
     <properties>
         <java.version>21</java.version>

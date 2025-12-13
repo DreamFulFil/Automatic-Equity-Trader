@@ -4,8 +4,8 @@ server:
 # PostgreSQL Database (for agents, settings, trades)
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/lunchbot
-    username: lunchbotuser
+    url: jdbc:postgresql://localhost:5432/autotrader
+    username: autotraderuser
     password: ENC(9GDI62q7tkjCK3Dk7llB2qd8u4kwN5sLWTCGjxONfDuzR1gcPVwyUA==)
     driver-class-name: org.postgresql.Driver
   jpa:
