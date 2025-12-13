@@ -18,6 +18,7 @@ import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
 import tw.gc.auto.equity.trader.services.DataLoggingService;
 import tw.gc.auto.equity.trader.services.EndOfDayStatisticsService;
+import tw.gc.auto.equity.trader.context.TradingContext;
 
 import java.util.Map;
 
@@ -43,6 +44,7 @@ class DualModeTest {
     @Mock private DailyStatisticsRepository dailyStatisticsRepository;
     @Mock private EndOfDayStatisticsService endOfDayStatisticsService;
     @Mock private ShioajiSettingsService shioajiSettingsService;
+    @Mock private tw.gc.auto.equity.trader.services.LlmService llmService;
 
     private TradingEngine tradingEngine;
     private TradingProperties tradingProperties;
@@ -52,8 +54,6 @@ class DualModeTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         tradingProperties = new TradingProperties();
-        tradingProperties.getWindow().setStart("11:30");
-        tradingProperties.getWindow().setEnd("13:00");
         tradingProperties.getBridge().setUrl("http://localhost:8888");
 
         // Mock stock settings
@@ -98,18 +98,32 @@ class DualModeTest {
         System.clearProperty("trading.mode");
     }
 
+    private TradingContext createMockContext() {
+        TradingContext context = mock(TradingContext.class);
+        when(context.getRestTemplate()).thenReturn(restTemplate);
+        when(context.getObjectMapper()).thenReturn(objectMapper);
+        when(context.getTelegramService()).thenReturn(telegramService);
+        when(context.getTradingProperties()).thenReturn(tradingProperties);
+        when(context.getApplicationContext()).thenReturn(applicationContext);
+        when(context.getContractScalingService()).thenReturn(contractScalingService);
+        when(context.getRiskManagementService()).thenReturn(riskManagementService);
+        when(context.getStockSettingsService()).thenReturn(stockSettingsService);
+        when(context.getRiskSettingsService()).thenReturn(riskSettingsService);
+        when(context.getDataLoggingService()).thenReturn(dataLoggingService);
+        when(context.getEndOfDayStatisticsService()).thenReturn(endOfDayStatisticsService);
+        when(context.getDailyStatisticsRepository()).thenReturn(dailyStatisticsRepository);
+        when(context.getShioajiSettingsService()).thenReturn(shioajiSettingsService);
+        when(context.getLlmService()).thenReturn(llmService);
+        return context;
+    }
+
     @Test
     void testDefaultMode_IsStock() {
         // Given: No trading.mode system property set
         System.clearProperty("trading.mode");
         
         // When: Create engine
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         // Initialize to read the property
         when(restTemplate.getForObject(anyString(), eq(String.class)))
@@ -129,12 +143,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "futures");
         
         // When: Create engine
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -154,12 +163,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "stock");
         when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -176,12 +180,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "stock");
         when(contractScalingService.getLastEquity()).thenReturn(120000.0);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -197,12 +196,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "futures");
         when(contractScalingService.getMaxContracts()).thenReturn(3);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(anyString(), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -218,12 +212,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "stock");
         when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -255,12 +244,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "futures");
         when(contractScalingService.getMaxContracts()).thenReturn(1);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -292,12 +276,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "stock");
         when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");
@@ -335,12 +314,7 @@ class DualModeTest {
         System.setProperty("trading.mode", "futures");
         when(contractScalingService.getMaxContracts()).thenReturn(1);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(createMockContext());
         
         when(restTemplate.getForObject(eq("http://localhost:8888/health"), eq(String.class)))
             .thenReturn("{\"status\":\"ok\"}");

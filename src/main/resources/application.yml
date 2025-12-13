@@ -4,7 +4,7 @@ server:
 # PostgreSQL Database (for agents, settings, trades)
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/autotrader
+    url: jdbc:postgresql://localhost:5432/auto_equity_trader
     username: dreamer
     password: ENC(9GDI62q7tkjCK3Dk7llB2qd8u4kwN5sLWTCGjxONfDuzR1gcPVwyUA==)
     driver-class-name: org.postgresql.Driver
@@ -32,15 +32,7 @@ management:
       show-details: when-authorized
 
 trading:
-  # Trading window: 11:30 - 13:00 Taipei time
-  window:
-    start: "11:30"
-    end: "13:00"
-  
-  # Stock and Risk settings are now stored in database
-  # See StockSettings and RiskSettings entities
-  # Default values are set by StockSettingsService and RiskSettingsService
-  
+  active-strategy: "LegacyBridge"
   # Python bridge
   bridge:
     url: "http://localhost:8888"

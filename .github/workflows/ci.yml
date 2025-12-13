@@ -95,7 +95,7 @@ jobs:
 
       - name: Validate Fish scripts (syntax check)
         run: |
-          fish -n start-lunch-bot.fish
+          fish -n start-auto-trader.fish
           fish tests/fish/test_start_script.fish
 
       # Start Ollama in Docker

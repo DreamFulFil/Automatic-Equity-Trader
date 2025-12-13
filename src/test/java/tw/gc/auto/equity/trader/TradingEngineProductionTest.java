@@ -16,6 +16,7 @@ import tw.gc.auto.equity.trader.entities.RiskSettings;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
 import tw.gc.auto.equity.trader.services.DataLoggingService;
 import tw.gc.auto.equity.trader.services.EndOfDayStatisticsService;
+import tw.gc.auto.equity.trader.context.TradingContext;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -40,6 +41,8 @@ class TradingEngineProductionTest {
     @Mock private EndOfDayStatisticsService endOfDayStatisticsService;
     @Mock private DailyStatisticsRepository dailyStatisticsRepository;
     @Mock private ShioajiSettingsService shioajiSettingsService;
+    @Mock private tw.gc.auto.equity.trader.services.LlmService llmService;
+    @Mock private TradingContext tradingContext;
     
     private TradingEngine tradingEngine;
     private TradingProperties tradingProperties;
@@ -52,8 +55,6 @@ class TradingEngineProductionTest {
         
         objectMapper = new ObjectMapper();
         tradingProperties = new TradingProperties();
-        tradingProperties.getWindow().setStart("11:30");
-        tradingProperties.getWindow().setEnd("13:00");
         tradingProperties.getBridge().setUrl("http://localhost:8888");
         
         // Mock stock settings
@@ -76,12 +77,23 @@ class TradingEngineProductionTest {
         when(riskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
         when(riskSettingsService.getMaxHoldMinutes()).thenReturn(45);
         
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        // Configure TradingContext mock
+        when(tradingContext.getRestTemplate()).thenReturn(restTemplate);
+        when(tradingContext.getObjectMapper()).thenReturn(objectMapper);
+        when(tradingContext.getTelegramService()).thenReturn(telegramService);
+        when(tradingContext.getTradingProperties()).thenReturn(tradingProperties);
+        when(tradingContext.getApplicationContext()).thenReturn(applicationContext);
+        when(tradingContext.getContractScalingService()).thenReturn(contractScalingService);
+        when(tradingContext.getRiskManagementService()).thenReturn(riskManagementService);
+        when(tradingContext.getStockSettingsService()).thenReturn(stockSettingsService);
+        when(tradingContext.getRiskSettingsService()).thenReturn(riskSettingsService);
+        when(tradingContext.getDataLoggingService()).thenReturn(dataLoggingService);
+        when(tradingContext.getEndOfDayStatisticsService()).thenReturn(endOfDayStatisticsService);
+        when(tradingContext.getDailyStatisticsRepository()).thenReturn(dailyStatisticsRepository);
+        when(tradingContext.getShioajiSettingsService()).thenReturn(shioajiSettingsService);
+        when(tradingContext.getLlmService()).thenReturn(llmService);
+
+        tradingEngine = new TradingEngine(tradingContext);
     }
 
     @Test
@@ -211,12 +223,7 @@ class TradingEngineProductionTest {
         System.setProperty("trading.mode", "futures");
         
         // Re-create engine to pick up system property
-        tradingEngine = new TradingEngine(
-            restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
-        );
+        tradingEngine = new TradingEngine(tradingContext);
         
         when(contractScalingService.getMaxContracts()).thenReturn(3);
         when(contractScalingService.getLastEquity()).thenReturn(750000.0);

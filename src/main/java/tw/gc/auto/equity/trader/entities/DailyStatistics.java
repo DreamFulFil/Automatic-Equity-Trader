@@ -38,6 +38,9 @@ public class DailyStatistics {
     @Column(length = 20, nullable = false)
     private String symbol; // e.g., "2454.TW", "AUTO_EQUITY_TRADER"
 
+    @Column(name = "strategy_name", length = 100)
+    private String strategyName; // Name of the strategy for these stats
+
     // ========== PRICE STATISTICS ==========
     @Column(name = "open_price")
     private Double openPrice;

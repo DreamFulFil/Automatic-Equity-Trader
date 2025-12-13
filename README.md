@@ -135,6 +135,11 @@ jenv exec mvn test
 | `/resume` | Resume trading |
 | `/close` | Immediately flatten all positions |
 | `/shutdown` | Gracefully stop the application |
+| `/strategy` | Switch active strategy dynamically |
+| `/golive` | Check eligibility for live trading |
+| `/backtosim` | Switch back to simulation mode |
+| `/talk <q>` | Ask TutorBot a trading question |
+| `/insight` | Generate daily market insight |
 
 ---
 

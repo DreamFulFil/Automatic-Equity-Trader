@@ -40,7 +40,7 @@ public class BotModeService {
         
         TradingMode mode = getTradingMode();
         // Sync Shioaji simulation with trading mode
-        shioajiSettingsService.setSimulation(mode == TradingMode.SIMULATION);
+        shioajiSettingsService.updateSimulationMode(mode == TradingMode.SIMULATION);
         log.info("🎯 BotModeService initialized - Current mode: {}", mode);
     }
     
@@ -72,7 +72,7 @@ public class BotModeService {
      */
     public void switchToLiveMode() {
         updateSetting(BotSettings.TRADING_MODE, TradingMode.LIVE.name().toLowerCase());
-        shioajiSettingsService.setSimulation(false);
+        shioajiSettingsService.updateSimulationMode(false);
         shutdownBridge();
         log.warn("🔴 SWITCHED TO LIVE MODE - Real money at risk!");
     }
@@ -82,7 +82,7 @@ public class BotModeService {
      */
     public void switchToSimulationMode() {
         updateSetting(BotSettings.TRADING_MODE, TradingMode.SIMULATION.name().toLowerCase());
-        shioajiSettingsService.setSimulation(true);
+        shioajiSettingsService.updateSimulationMode(true);
         shutdownBridge();
         log.info("🟢 Switched to simulation mode");
     }

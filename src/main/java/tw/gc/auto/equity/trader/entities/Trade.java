@@ -50,6 +50,9 @@ public class Trade {
     
     @Column(length = 50)
     private String symbol; // e.g., "2454.TW", "AUTO_EQUITY_TRADER"
+
+    @Column(name = "strategy_name", length = 100)
+    private String strategyName; // Name of the strategy that generated this trade
     
     @Column(length = 200)
     private String reason; // Entry/exit reason from signal
