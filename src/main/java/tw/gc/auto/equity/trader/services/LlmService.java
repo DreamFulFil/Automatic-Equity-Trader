@@ -265,6 +265,97 @@ public class LlmService {
         );
     }
     
+    /**
+     * Signal Generation Assistance
+     * Analyze market data and provide AI-enhanced signal recommendations
+     */
+    public Map<String, Object> generateSignalAssistance(
+            String symbol,
+            Map<String, Object> marketData,
+            Map<String, Object> strategyContext) {
+        
+        String prompt = String.format(
+            "Analyze market conditions and provide trading signal assistance.\n\n" +
+            "Symbol: %s\n" +
+            "Market Data: %s\n" +
+            "Strategy Context: %s\n\n" +
+            "Respond ONLY with valid JSON matching this exact schema:\n" +
+            "{\n" +
+            "  \"signal_recommendation\": \"<STRONG_BUY|BUY|HOLD|SELL|STRONG_SELL>\",\n" +
+            "  \"confidence\": <float 0.0 to 1.0>,\n" +
+            "  \"reasoning\": \"<brief explanation>\",\n" +
+            "  \"key_factors\": [<list of key factors>],\n" +
+            "  \"risk_level\": \"<LOW|MEDIUM|HIGH>\",\n" +
+            "  \"suggested_position_size\": <float 0.0 to 1.0>,\n" +
+            "  \"time_horizon\": \"<SHORT|MEDIUM|LONG>\"\n" +
+            "}",
+            symbol,
+            objectToString(marketData),
+            objectToString(strategyContext)
+        );
+        
+        Map<String, Class<?>> schema = new HashMap<>();
+        schema.put("signal_recommendation", String.class);
+        schema.put("confidence", Double.class);
+        schema.put("reasoning", String.class);
+        schema.put("key_factors", Object.class);
+        schema.put("risk_level", String.class);
+        schema.put("suggested_position_size", Double.class);
+        schema.put("time_horizon", String.class);
+        
+        return executeStructuredPrompt(
+            prompt,
+            InsightType.SIGNAL_GENERATION,
+            "SignalGeneratorAgent",
+            symbol,
+            schema
+        );
+    }
+    
+    /**
+     * Startup Market Analysis
+     * Analyze overall market conditions at system startup
+     */
+    public Map<String, Object> analyzeMarketAtStartup(
+            String market,
+            Map<String, Object> recentData) {
+        
+        String prompt = String.format(
+            "Perform comprehensive market analysis at trading system startup.\n\n" +
+            "Market: %s\n" +
+            "Recent Data: %s\n\n" +
+            "Respond ONLY with valid JSON matching this exact schema:\n" +
+            "{\n" +
+            "  \"market_sentiment\": \"<VERY_BEARISH|BEARISH|NEUTRAL|BULLISH|VERY_BULLISH>\",\n" +
+            "  \"confidence\": <float 0.0 to 1.0>,\n" +
+            "  \"key_trends\": [<list of important trends>],\n" +
+            "  \"risk_factors\": [<list of risk factors>],\n" +
+            "  \"opportunities\": [<list of opportunities>],\n" +
+            "  \"recommended_strategy\": \"<AGGRESSIVE|MODERATE|CONSERVATIVE|DEFENSIVE>\",\n" +
+            "  \"explanation\": \"<comprehensive analysis summary>\"\n" +
+            "}",
+            market,
+            objectToString(recentData)
+        );
+        
+        Map<String, Class<?>> schema = new HashMap<>();
+        schema.put("market_sentiment", String.class);
+        schema.put("confidence", Double.class);
+        schema.put("key_trends", Object.class);
+        schema.put("risk_factors", Object.class);
+        schema.put("opportunities", Object.class);
+        schema.put("recommended_strategy", String.class);
+        schema.put("explanation", String.class);
+        
+        return executeStructuredPrompt(
+            prompt,
+            InsightType.MARKET_ANALYSIS,
+            "TradingEngine",
+            market,
+            schema
+        );
+    }
+    
     // Utility methods
     
     private String extractJson(String response) {
