@@ -127,7 +127,9 @@ public class TelegramService {
     }
 
     /**
-     * Poll for Telegram updates every 5 seconds
+     * Poll for Telegram updates every 5 seconds.
+     * JUSTIFICATION: Required for Telegram bot command interface to work.
+     * Telegram API uses long-polling for updates, polling every 5s provides responsive command handling.
      */
     @Scheduled(fixedRate = 5000)
     public void pollUpdates() {
@@ -409,6 +411,10 @@ public class TelegramService {
         }
     }
 
+    /**
+     * Send daily trading summary digest at 13:05 (5 minutes after market close).
+     * JUSTIFICATION: Provides daily performance summary to trader after market close.
+     */
     @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void sendDailySummaryDigest() {
         if (agentService == null || botModeService == null) {
@@ -444,6 +450,11 @@ public class TelegramService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+
+            // Add bot emoticon prefix if not already present
+            if (!message.startsWith("🤖")) {
+                message = "🤖 " + message;
+            }
 
             // Replace \n with <br> for HTML parse_mode
             message = message.replace("\n", "<br>");
