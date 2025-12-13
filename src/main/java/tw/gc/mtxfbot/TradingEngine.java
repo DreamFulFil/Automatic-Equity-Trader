@@ -86,6 +86,8 @@ public class TradingEngine {
     private final EndOfDayStatisticsService endOfDayStatisticsService;
     @NonNull
     private final DailyStatisticsRepository dailyStatisticsRepository;
+    @NonNull
+    private final ShioajiSettingsService shioajiSettingsService;
     
     // Trading mode: "stock" or "futures"
     private String tradingMode;
@@ -127,6 +129,12 @@ public class TradingEngine {
             log.info("📊 Statistics for {} already exist, skipping calculation on startup", yesterday);
         }
         
+        // Get simulation mode status
+        boolean isSimulation = shioajiSettingsService.getSettings().isSimulation();
+        String tradingModeLabel = isSimulation 
+            ? "🟡 SIMULATION MODE" 
+            : "🔴 LIVE TRADING MODE";
+        
         String modeDescription = "stock".equals(tradingMode) 
             ? "Mode: STOCK (2454.TW odd lots)" 
             : "Mode: FUTURES (MTXF)";
@@ -138,14 +146,22 @@ public class TradingEngine {
             : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
         
         String startupMessage = String.format(
-            "🤖 Bot started — %s\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "🚀 TRADING SYSTEM STARTED\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "%s\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "%s\n" +
             "Trading window: %s - %s\n" +
             "%s\n" +
             "Daily loss limit: %d TWD\n" +
             "Weekly loss limit: %d TWD\n" +
             "Max hold time: %d min\n" +
             "Signal: 30s | News: 10min\n" +
-            "Weekly P&L: %.0f TWD%s%s",
+            "Weekly P&L: %.0f TWD%s%s\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "App runs indefinitely - use /shutdown to stop",
+            tradingModeLabel,
             modeDescription,
             tradingProperties.getWindow().getStart(),
             tradingProperties.getWindow().getEnd(),
@@ -159,6 +175,11 @@ public class TradingEngine {
                 riskManagementService.getEarningsBlackoutStock()) : ""
         );
         telegramService.sendMessage(startupMessage);
+        
+        // Also log to console prominently
+        log.warn("═══════════════════════════════════════════════════");
+        log.warn(tradingModeLabel);
+        log.warn("═══════════════════════════════════════════════════");
         
         try {
             String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
@@ -319,8 +340,27 @@ public class TradingEngine {
             v -> handleStatusCommand(),
             v -> handlePauseCommand(),
             v -> handleResumeCommand(),
-            v -> handleCloseCommand()
+            v -> handleCloseCommand(),
+            v -> handleShutdownCommand()
         );
+    }
+    
+    private void handleShutdownCommand() {
+        log.info("🛑 Shutdown command received via Telegram");
+        telegramService.sendMessage("🛑 Shutting down application...\nFlattening all positions");
+        
+        // Trigger shutdown in background thread
+        new Thread(() -> {
+            try {
+                flattenPosition("Shutdown via Telegram command");
+                Thread.sleep(2000); // Give time for messages to send
+                
+                int exitCode = org.springframework.boot.SpringApplication.exit(applicationContext, () -> 0);
+                System.exit(exitCode);
+            } catch (Exception e) {
+                log.error("❌ Error during Telegram-triggered shutdown", e);
+            }
+        }).start();
     }
     
     void handleStatusCommand() { // package-private for testing
@@ -362,7 +402,7 @@ public class TradingEngine {
             "Week P&L: %.0f TWD\n" +
             "News Veto: %s\n" +
             "━━━━━━━━━━━━━━━━\n" +
-            "Commands: /pause /resume /close",
+            "Commands: /pause /resume /close /shutdown",
             state, modeInfo, positionInfo,
             contractScalingService.getLastEquity(), contractScalingService.getLast30DayProfit(),
             riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL(),
@@ -758,7 +798,7 @@ public class TradingEngine {
         }
     }
     
-    private void flattenPosition(String reason) {
+    public void flattenPosition(String reason) {
         String instrument = getActiveSymbol();
         AtomicInteger posRef = positionFor(instrument);
         int pos = posRef.get();
@@ -807,15 +847,15 @@ public class TradingEngine {
     
     @Scheduled(cron = "0 0 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void autoFlatten() {
-        log.info("🕐 13:00 Auto-flatten triggered");
+        log.info("🕐 13:00 Auto-flatten triggered - flattening positions");
         flattenPosition("End of trading window");
         sendDailySummary();
         
-        log.info("🛑 Trading window ended - shutting down application");
-        telegramService.sendMessage("🛑 Trading window ended - Bot shutting down");
+        log.info("📊 Trading window closed - positions flattened, continuing to run");
+        telegramService.sendMessage("📊 Trading window closed at 13:00\nAll positions flattened\nBot continues running - use /shutdown to stop");
         
-        // Exit the Spring context, which will then trigger @PreDestroy
-        System.exit(SpringApplication.exit(applicationContext));
+        // Application continues running - no System.exit()
+        // Graceful shutdown only via dedicated endpoint or external signal
     }
     
     private void sendDailySummary() {

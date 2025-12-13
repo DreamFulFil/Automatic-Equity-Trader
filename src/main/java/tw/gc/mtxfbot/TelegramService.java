@@ -31,9 +31,10 @@ import java.util.function.Consumer;
  * 
  * Supported commands (case-insensitive):
  * - /status → current position, today P&L, week P&L, bot state
- * - /pause → pause new entries until /resume (still flattens at 13:00)
+ * - /pause → pause new entries until /resume
  * - /resume → re-enable trading
  * - /close → immediately flatten everything
+ * - /shutdown → gracefully stop the application
  * - /agent → list available agents
  * - /talk <question> → ask TutorBot a trading question
  * - /insight → get daily trading insight
@@ -100,16 +101,21 @@ public class TelegramService {
     /**
      * Register command handlers from TradingEngine
      */
+    @Nullable
+    private Consumer<Void> shutdownHandler;
+    
     public void registerCommandHandlers(
             Consumer<Void> statusHandler,
             Consumer<Void> pauseHandler,
             Consumer<Void> resumeHandler,
-            Consumer<Void> closeHandler) {
+            Consumer<Void> closeHandler,
+            Consumer<Void> shutdownHandler) {
         this.statusHandler = statusHandler;
         this.pauseHandler = pauseHandler;
         this.resumeHandler = resumeHandler;
         this.closeHandler = closeHandler;
-        log.info("✅ Telegram command handlers registered");
+        this.shutdownHandler = shutdownHandler;
+        log.info("✅ Telegram command handlers registered (including shutdown)");
     }
 
     /**
@@ -172,6 +178,8 @@ public class TelegramService {
             if (resumeHandler != null) resumeHandler.accept(null);
         } else if (lowerText.equals("/close")) {
             if (closeHandler != null) closeHandler.accept(null);
+        } else if (lowerText.equals("/shutdown")) {
+            if (shutdownHandler != null) shutdownHandler.accept(null);
         } else if (lowerText.equals("/agent") || lowerText.equals("/agents")) {
             handleAgentCommand(chatId);
         } else if (lowerText.startsWith("/talk ")) {
@@ -197,6 +205,7 @@ public class TelegramService {
                     "/pause - Pause trading\n" +
                     "/resume - Resume trading\n" +
                     "/close - Close position\n" +
+                    "/shutdown - Stop application\n" +
                     "/agent - List agents\n" +
                     "/talk <question> - Ask TutorBot\n" +
                     "/insight - Daily insight\n" +

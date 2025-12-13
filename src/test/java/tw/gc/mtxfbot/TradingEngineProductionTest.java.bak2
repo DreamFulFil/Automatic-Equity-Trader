@@ -80,7 +80,7 @@ class TradingEngineProductionTest {
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
             stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
+            endOfDayStatisticsService, dailyStatisticsRepository
         );
     }
 
@@ -215,7 +215,7 @@ class TradingEngineProductionTest {
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
             stockSettingsService, riskSettingsService, dataLoggingService,
-            endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService
+            endOfDayStatisticsService, dailyStatisticsRepository
         );
         
         when(contractScalingService.getMaxContracts()).thenReturn(3);
