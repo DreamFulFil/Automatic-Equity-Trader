@@ -5,7 +5,7 @@ server:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/autotrader
-    username: autotraderuser
+    username: dreamer
     password: ENC(9GDI62q7tkjCK3Dk7llB2qd8u4kwN5sLWTCGjxONfDuzR1gcPVwyUA==)
     driver-class-name: org.postgresql.Driver
   jpa:
