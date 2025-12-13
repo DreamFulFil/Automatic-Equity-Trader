@@ -104,10 +104,13 @@ end
 # Ensure Java is in PATH
 set -x PATH $JAVA_HOME/bin $PATH
 
-echo "🚀 Lunch Investor Bot Launcher (Fish Shell)"
-echo "========================================"
-echo "Directory: $BOT_DIR"
-echo "Mode: $TRADING_MODE"
+echo "╔════════════════════════════════════════════════════════════════╗"
+echo "║     🤖 Lunch Investor Bot - Taiwan Stock Trading System       ║"
+echo "╠════════════════════════════════════════════════════════════════╣"
+echo "║  Directory: $BOT_DIR"
+echo "║  Mode:      $TRADING_MODE"
+echo "║  Started:   "(date '+%Y-%m-%d %H:%M:%S')
+echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
 # Colors for Fish
