@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.auto.equity.trader.TelegramService;
 import tw.gc.auto.equity.trader.entities.*;
 import tw.gc.auto.equity.trader.repositories.*;
 
@@ -36,6 +37,8 @@ class EndOfDayStatisticsServiceTest {
     private MarketDataRepository marketDataRepository;
     @Mock
     private RestTemplate restTemplate;
+    @Mock
+    private TelegramService telegramService;
 
     @InjectMocks
     private EndOfDayStatisticsService service;

@@ -17,7 +17,7 @@ from pydantic import ValidationError
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from bridge import OrderRequest
+from app.main import OrderRequest
 
 
 class TestOrderRequestContract:

@@ -28,18 +28,20 @@ OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
 def bridge_available():
     """Check if Python bridge is available"""
     try:
-        r = requests.get(f"{BRIDGE_URL}/health", timeout=2)
+        r = requests.get(f"{BRIDGE_URL}/health", timeout=5)
         return r.status_code == 200
-    except:
+    except Exception as e:
+        print(f"Bridge check failed: {e}")
         return False
 
 
 def ollama_available():
     """Check if Ollama is available"""
     try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=2)
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
         return r.status_code == 200
-    except:
+    except Exception as e:
+        print(f"Ollama check failed: {e}")
         return False
 
 
@@ -140,7 +142,7 @@ class TestOllamaIntegration:
     
     def test_news_endpoint_returns_veto_decision(self):
         """GET /signal/news should return news analysis"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
         
         assert r.status_code == 200
         data = r.json()
@@ -154,7 +156,7 @@ class TestOllamaIntegration:
     
     def test_news_endpoint_handles_empty_headlines(self):
         """News endpoint should work even with no headlines"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
         
         assert r.status_code == 200
         data = r.json()
@@ -238,7 +240,7 @@ class TestJavaPythonInteraction:
         
         # Step 3: News veto check (skip if Ollama not available)
         if ollama_available():
-            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
+            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
             assert news_r.status_code == 200
 
 

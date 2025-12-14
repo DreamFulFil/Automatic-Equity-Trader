@@ -24,7 +24,7 @@ class TestShioajiSimulation:
     
     def test_config_loading(self):
         """Config should load with decryption"""
-        from bridge import load_config_with_decryption
+        from app.core.config import load_config_with_decryption
         
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
@@ -37,7 +37,7 @@ class TestShioajiSimulation:
     
     def test_ca_path_resolution(self):
         """CA path should resolve to absolute path"""
-        from bridge import load_config_with_decryption
+        from app.core.config import load_config_with_decryption
         
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
@@ -49,7 +49,7 @@ class TestShioajiSimulation:
     
     def test_secret_key_decryption(self):
         """Secret key should be decrypted"""
-        from bridge import load_config_with_decryption
+        from app.core.config import load_config_with_decryption
         
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
@@ -61,7 +61,7 @@ class TestShioajiSimulation:
     
     def test_person_id_decryption(self):
         """Person ID should be decrypted"""
-        from bridge import load_config_with_decryption
+        from app.core.config import load_config_with_decryption
         
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
@@ -72,7 +72,7 @@ class TestShioajiSimulation:
     
     def test_simulation_mode_flag(self):
         """Simulation mode should be set"""
-        from bridge import load_config_with_decryption
+        from app.core.config import load_config_with_decryption
         
         password = os.environ['JASYPT_PASSWORD']
         config = load_config_with_decryption(password)
@@ -87,14 +87,14 @@ class TestConfigWithoutCredentials:
     
     def test_decrypt_config_value_without_enc(self):
         """Plain values should pass through unchanged"""
-        from bridge import decrypt_config_value
+        from app.core.config import decrypt_config_value
         
         result = decrypt_config_value("plain_value", "any_password")
         assert result == "plain_value"
     
     def test_decrypt_config_value_with_non_string(self):
         """Non-string values should pass through unchanged"""
-        from bridge import decrypt_config_value
+        from app.core.config import decrypt_config_value
         
         assert decrypt_config_value(12345, "pwd") == 12345
         assert decrypt_config_value(None, "pwd") is None
