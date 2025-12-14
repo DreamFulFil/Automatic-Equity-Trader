@@ -36,8 +36,8 @@ jobs:
       postgres:
         image: postgres:16.1
         env:
-          POSTGRES_DB: lunchbot
-          POSTGRES_USER: lunchbotuser
+          POSTGRES_DB: auto_equity_trader
+          POSTGRES_USER: dreamer
           POSTGRES_PASSWORD: testpassword123
           POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
         options: >-
@@ -74,10 +74,10 @@ jobs:
             chmod 600 Sinopac.pfx
           fi
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: python/requirements.txt
 
