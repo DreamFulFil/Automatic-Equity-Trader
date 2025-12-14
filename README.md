@@ -1,4 +1,4 @@
-[![CI](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml)
+[![CI](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
 # Automatic Equity Trader
 
@@ -40,8 +40,8 @@ Advanced trading platform supporting Taiwan stocks/futures with indefinite lifec
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/DreamFulFil/Lunch-Investor-Bot.git
-cd Lunch-Investor-Bot
+git clone https://github.com/DreamFulFil/Automatic-Equity-Trader.git
+cd Automatic-Equity-Trader
 
 # 2. Install dependencies
 brew install openjdk@21 maven ollama fish postgresql
