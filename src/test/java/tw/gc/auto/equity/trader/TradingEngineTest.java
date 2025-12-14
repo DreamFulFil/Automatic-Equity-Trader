@@ -54,7 +54,7 @@ class TradingEngineTest {
     private TradingStateService tradingStateService;
     private PositionManager positionManager;
 
-    private TradingEngine tradingEngine;
+    private TradingEngineService tradingEngine;
 
     @BeforeEach
     void setUp() {
@@ -92,7 +92,7 @@ class TradingEngineTest {
         tradingStateService = new TradingStateService();
         positionManager = new PositionManager();
 
-        tradingEngine = new TradingEngine(
+        tradingEngine = new TradingEngineService(
             restTemplate, objectMapper, telegramService, tradingProperties, applicationContext,
             contractScalingService, riskManagementService, stockSettingsService, riskSettingsService,
             dataLoggingService, endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService,

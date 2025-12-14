@@ -25,7 +25,7 @@ import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 public class ShutdownController {
     
     @NonNull
-    private final TradingEngine tradingEngine;
+    private final TradingEngineService tradingEngine;
     @NonNull
     private final ShioajiSettingsService shioajiSettingsService;
     @NonNull

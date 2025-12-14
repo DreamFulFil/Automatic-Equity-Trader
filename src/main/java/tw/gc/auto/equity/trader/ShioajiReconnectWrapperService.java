@@ -17,7 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class ShioajiReconnectWrapper {
+public class ShioajiReconnectWrapperService {
     
     @NonNull
     private final RestTemplate restTemplate;

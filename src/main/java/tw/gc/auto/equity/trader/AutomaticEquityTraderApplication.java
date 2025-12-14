@@ -8,7 +8,7 @@ import java.util.TimeZone;
 
 @SpringBootApplication
 @EnableScheduling
-public class MtxfBotApplication {
+public class AutomaticEquityTraderApplication {
     
     static {
         // Set default timezone to Asia/Taipei for all scheduled tasks and time operations
@@ -16,7 +16,7 @@ public class MtxfBotApplication {
     }
     
     public static void main(String[] args) {
-        SpringApplication.run(MtxfBotApplication.class, args);
+        SpringApplication.run(AutomaticEquityTraderApplication.class, args);
     }
 }
 

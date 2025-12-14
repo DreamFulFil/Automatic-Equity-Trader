@@ -32,7 +32,7 @@ class BotModeServiceTest {
     private RestTemplate restTemplate;
     
     @Mock
-    private BridgeManager bridgeManager;
+    private BridgeManagerService bridgeManager;
     
     private BotModeService botModeService;
     

@@ -2,6 +2,8 @@
 
 # Automatic Equity Trader
 
+[![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
+
 **Enterprise-grade automated trading platform for macOS Apple Silicon with multi-market support, concurrent strategy execution, and local LLM analytics.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)

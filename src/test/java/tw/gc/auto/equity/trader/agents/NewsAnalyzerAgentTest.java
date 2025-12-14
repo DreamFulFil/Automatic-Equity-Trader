@@ -53,8 +53,8 @@ class NewsAnalyzerAgentTest {
                 """;
         Mockito.doReturn(rss).when(agent).fetchRss(anyString());
 
-        when(restTemplate.postForObject(anyString(), any(), Mockito.eq(String.class)))
-                .thenReturn("{\"veto\":true,\"score\":0.82,\"reason\":\"Negative headlines\"}");
+        Mockito.doReturn("{\"veto\":true,\"score\":0.82,\"reason\":\"Negative headlines\"}")
+                .when(restTemplate).postForObject(anyString(), any(), Mockito.eq(String.class));
 
         VetoResponse response = agent.scrapeAndAnalyze(List.of("url1"));
 

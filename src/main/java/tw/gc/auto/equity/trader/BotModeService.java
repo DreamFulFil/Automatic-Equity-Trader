@@ -31,7 +31,7 @@ public class BotModeService {
     @NonNull
     private final RestTemplate restTemplate;
     @NonNull
-    private final BridgeManager bridgeManager;
+    private final BridgeManagerService bridgeManager;
     
     @PostConstruct
     public void initialize() {
