@@ -153,7 +153,7 @@ jenv exec mvn test
 | Max Position | 1-4 contracts | Cannot exceed |
 | Daily Loss Limit | 1,500 TWD | Emergency shutdown |
 | Weekly Loss Limit | 7,000 TWD | Pause until Monday |
-| Trading Window | 11:30-13:00 | No trades outside |
+| Trading Window | 11:30-13:30 | No trades outside |
 
 ---
 
@@ -174,6 +174,6 @@ jenv exec mvn test
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 240/240 passing ✅ | **Last Updated**: December 2025
+**Status**: Production-ready ✅ | **Tests**: 394/394 passing ✅ | **Last Updated**: December 2025
 
 *Owner: DreamFulFil | License: MIT*

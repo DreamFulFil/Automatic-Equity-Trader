@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 
 /**
  * EndOfDayStatisticsService - Calculates and stores daily trading statistics.
- * Runs automatically at 13:05 Taiwan time (after trading window closes).
+ * Runs automatically at 13:35 Taiwan time (after trading window closes).
  * Generates AI insights from collected data via Ollama/Llama.
  */
 @Service
@@ -47,11 +47,11 @@ public class EndOfDayStatisticsService {
 
     /**
      * Calculate and store end-of-day statistics.
-     * Triggered at 13:05 Taiwan time (5 minutes after market close).
+     * Triggered at 13:35 Taiwan time (5 minutes after market close).
      * JUSTIFICATION: Calculates and persists daily statistics (OHLCV, trades, P&L) for historical analysis.
-     * Runs after market close (13:00) to ensure all data is captured.
+     * Runs after market close (13:30) to ensure all data is captured.
      */
-    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 35 13 * * MON-FRI", zone = "Asia/Taipei")
     @Transactional
     public void calculateEndOfDayStatistics() {
         log.info("📊 Calculating end-of-day statistics...");
@@ -87,7 +87,7 @@ public class EndOfDayStatisticsService {
 
     DailyStatistics calculateStatisticsForDay(LocalDate date, String symbol) {
         LocalDateTime dayStart = date.atTime(LocalTime.of(11, 30));
-        LocalDateTime dayEnd = date.atTime(LocalTime.of(13, 0));
+        LocalDateTime dayEnd = date.atTime(LocalTime.of(13, 30));
 
         // Get trades for the day
         List<Trade> trades = tradeRepository.findByTimestampBetween(dayStart, dayEnd)

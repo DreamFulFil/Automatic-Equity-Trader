@@ -32,11 +32,11 @@ public class ReportingService {
     private final StrategyManager strategyManager;
 
     /**
-     * Calculate daily statistics at 13:30 (30 minutes after market close).
+     * Calculate daily statistics at 14:00 (30 minutes after market close).
      * JUSTIFICATION: Generates comprehensive daily reports for shadow-mode strategies.
      * Runs 30 minutes after close to allow EndOfDayStatisticsService to complete first.
      */
-    @Scheduled(cron = "0 30 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Taipei")
     public void calculateDailyStatistics() {
         log.info("📊 Calculating end-of-day statistics...");
         try {
