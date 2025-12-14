@@ -69,10 +69,10 @@ jenv exec mvn clean package -DskipTests
 ### Verify Installation
 
 ```bash
-# Run all 240 tests
-jenv exec mvn test
+# Run all tests
+./run-tests.sh YOUR_JASYPT_PASSWORD
 
-# Expected: Tests run: 240, Failures: 0, Errors: 0, Skipped: 0
+# Expected: All 395 tests passing (246 Java unit, 67 Python unit, 41 Java integration, 25 Python integration, 16 E2E)
 ```
 
 ---
@@ -170,7 +170,7 @@ jenv exec mvn test
 ## 📚 Documentation
 
 - **[Release Notes](docs/RELEASE-20251213.md)** - Full feature list, performance benchmarks, detailed architecture
-- **[Testing Guide](docs/tests/TESTING.md)** - Complete test documentation (240 tests)
+- **[Testing Guide](docs/tests/TESTING.md)** - Complete test documentation (395 tests)
 - **[System Re-Creation Prompts](docs/prompts/)** - 5-part series to rebuild entire system from scratch
 - **[Historical Documentation](docs/misc/)** - Audit reports, implementation logs, refactor summaries
 
@@ -184,6 +184,6 @@ jenv exec mvn test
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 394/394 passing ✅ | **Last Updated**: December 2025
+**Status**: Production-ready ✅ | **Tests**: 395/395 passing ✅ | **Last Updated**: December 2025
 
 *Owner: DreamFulFil | License: MIT*

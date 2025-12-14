@@ -201,6 +201,18 @@ class TradingEngineTest {
         verify(telegramService).sendMessage(contains("Bot stopped"));
     }
 
+    @Test
+    void tradingLoop_shouldHandleBridgeConnectionError() throws Exception {
+        tradingStateService.setMarketDataConnected(true);
+        when(restTemplate.getForObject(contains("/signal"), eq(String.class)))
+            .thenThrow(new org.springframework.web.client.ResourceAccessException("Connection refused"));
+        
+        tradingEngine.tradingLoop();
+        
+        assertFalse(tradingStateService.isMarketDataConnected(), "Should mark bridge as disconnected");
+        verify(telegramService, never()).sendMessage(contains("Trading loop error"));
+    }
+
     private void invokePrivateMethod(Object obj, String methodName, Object... args) throws Exception {
         Class<?>[] paramTypes = new Class<?>[args.length];
         for (int i = 0; i < args.length; i++) {
