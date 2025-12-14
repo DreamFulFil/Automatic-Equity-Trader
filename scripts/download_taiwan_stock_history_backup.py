@@ -53,12 +53,34 @@ MAX_TICKERS = None  # Set to a number for testing, None for all
 
 def get_twse_tickers():
     """
-    Get list of well-known Taiwan Stock Exchange tickers.
+    Fetch list of all Taiwan Stock Exchange tickers from multiple sources.
     Returns a list of ticker symbols (with .TW suffix for yfinance).
     """
-    print("📥 Using well-known TWSE ticker list...")
+    print("📥 Fetching TWSE ticker list...")
     
-    # Only use well-known Taiwan stocks (skip web scraping and range generation)
+    tickers = set()
+    
+    # Method 1: Try to get from StockAnalysis website
+    try:
+        url = "https://stockanalysis.com/list/taiwan-stock-exchange/"
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Find the table with tickers
+        table = soup.find('table')
+        if table:
+            for row in table.find_all('tr')[1:]:  # Skip header
+                cells = row.find_all('td')
+                if cells and len(cells) > 0:
+                    ticker = cells[0].text.strip()
+                    if ticker and ticker.isdigit():
+                        tickers.add(f"{ticker}.TW")
+        
+        print(f"   ✅ Found {len(tickers)} tickers from StockAnalysis")
+    except Exception as e:
+        print(f"   ⚠️  Could not fetch from StockAnalysis: {e}")
+    
+    # Method 2: Add well-known Taiwan stocks
     well_known_stocks = [
         "2330.TW",  # TSMC
         "2454.TW",  # MediaTek
@@ -79,8 +101,19 @@ def get_twse_tickers():
         "3008.TW",  # Largan Precision
         "2912.TW",  # President Chain Store
     ]
+    tickers.update(well_known_stocks)
     
-    tickers_list = sorted(well_known_stocks)
+    # Method 3: Generate common ticker ranges (most Taiwan stocks are 4-digit numbers)
+    # This is a fallback - we'll generate a subset for common ranges
+    # Major Taiwan stocks are typically in ranges: 1000-3000, 5000-6000, 8000-9000
+    if len(tickers) < 100:
+        print("   ℹ️  Generating additional tickers from common ranges...")
+        for prefix in ['1', '2', '3', '5', '6', '8', '9']:
+            for i in range(100):
+                ticker_num = f"{prefix}{i:03d}"
+                tickers.add(f"{ticker_num}.TW")
+    
+    tickers_list = sorted(list(tickers))
     
     if MAX_TICKERS:
         tickers_list = tickers_list[:MAX_TICKERS]
@@ -205,7 +238,7 @@ def download_and_insert_stock_data(ticker, conn):
             execute_batch(cursor, """
                 INSERT INTO market_data (timestamp, symbol, timeframe, open_price, high_price, 
                                         low_price, close_price, volume)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s::timeframe, %s, %s, %s, %s, %s)
             """, market_data_rows, page_size=BATCH_SIZE)
             records_inserted += len(market_data_rows)
         
