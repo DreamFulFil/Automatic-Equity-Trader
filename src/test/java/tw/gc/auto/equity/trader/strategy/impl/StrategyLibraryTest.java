@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader.strategy.impl.library;
+package tw.gc.auto.equity.trader.strategy.impl;
 
 import org.junit.jupiter.api.Test;
 import tw.gc.auto.equity.trader.entities.MarketData;

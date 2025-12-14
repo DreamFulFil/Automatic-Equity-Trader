@@ -1,14 +1,14 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tw.gc.auto.equity.trader.agents.AgentService;
+import tw.gc.auto.equity.trader.services.AgentService;
 import tw.gc.auto.equity.trader.agents.RiskManagerAgent;
 import tw.gc.auto.equity.trader.config.TelegramProperties;
-import tw.gc.auto.equity.trader.StockSettingsService;
+import tw.gc.auto.equity.trader.services.StockSettingsService;
 
 import java.lang.reflect.Method;
 import java.util.Map;

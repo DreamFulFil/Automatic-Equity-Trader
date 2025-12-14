@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;

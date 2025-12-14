@@ -1,6 +1,6 @@
-package tw.gc.auto.equity.trader.strategy.impl.library;
+package tw.gc.auto.equity.trader.strategy.impl;
 
-import tw.gc.auto.equity.trader.strategy.impl.library.RSIStrategy;
+import tw.gc.auto.equity.trader.strategy.impl.RSIStrategy;
 
 /**
  * Aggressive RSI Strategy (Example Configuration)

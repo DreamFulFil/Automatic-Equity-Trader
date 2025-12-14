@@ -3,7 +3,7 @@ package tw.gc.auto.equity.trader.services;
 import org.junit.jupiter.api.Test;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
-import tw.gc.auto.equity.trader.strategy.impl.library.RSIStrategy;
+import tw.gc.auto.equity.trader.strategy.impl.RSIStrategy;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

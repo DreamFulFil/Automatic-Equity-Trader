@@ -9,9 +9,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.RiskManagementService;
-import tw.gc.auto.equity.trader.RiskSettingsService;
-import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.services.RiskManagementService;
+import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 

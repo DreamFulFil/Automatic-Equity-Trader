@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

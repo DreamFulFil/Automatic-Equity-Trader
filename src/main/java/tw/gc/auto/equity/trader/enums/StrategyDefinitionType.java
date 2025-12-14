@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader.entities;
+package tw.gc.auto.equity.trader.enums;
 
 import tw.gc.auto.equity.trader.strategy.StrategyType;
 
@@ -6,7 +6,7 @@ import tw.gc.auto.equity.trader.strategy.StrategyType;
  * Enumeration of all implemented trading strategies.
  * Provides type-safe strategy identification and metadata.
  */
-public enum StrategyEnum {
+public enum StrategyDefinitionType {
     // Long-term strategies
     DCA("DCA", "Dollar Cost Averaging", StrategyType.LONG_TERM, true, true),
     AUTOMATIC_REBALANCING("AutomaticRebalancing", "Portfolio Rebalancing", StrategyType.LONG_TERM, true, false),
@@ -38,7 +38,7 @@ public enum StrategyEnum {
     private final boolean supportsStock;
     private final boolean supportsFutures;
     
-    StrategyEnum(String className, String displayName, StrategyType type, 
+    StrategyDefinitionType(String className, String displayName, StrategyType type, 
                  boolean supportsStock, boolean supportsFutures) {
         this.className = className;
         this.displayName = displayName;
@@ -70,7 +70,7 @@ public enum StrategyEnum {
     /**
      * Check if strategy is compatible with given trading mode
      */
-    public boolean isCompatibleWith(TradingModeEnum mode) {
+    public boolean isCompatibleWith(TradingModeType mode) {
         if (mode.includesStock() && supportsStock) {
             return true;
         }
@@ -83,8 +83,8 @@ public enum StrategyEnum {
     /**
      * Parse from class name (e.g., "MovingAverageCrossover", "DCA")
      */
-    public static StrategyEnum fromClassName(String className) {
-        for (StrategyEnum strategy : values()) {
+    public static StrategyDefinitionType fromClassName(String className) {
+        for (StrategyDefinitionType strategy : values()) {
             if (strategy.className.equalsIgnoreCase(className)) {
                 return strategy;
             }
@@ -95,8 +95,8 @@ public enum StrategyEnum {
     /**
      * Parse from display name
      */
-    public static StrategyEnum fromDisplayName(String displayName) {
-        for (StrategyEnum strategy : values()) {
+    public static StrategyDefinitionType fromDisplayName(String displayName) {
+        for (StrategyDefinitionType strategy : values()) {
             if (strategy.displayName.equalsIgnoreCase(displayName)) {
                 return strategy;
             }

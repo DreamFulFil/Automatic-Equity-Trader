@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class TradingEngineService {
     
-    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;

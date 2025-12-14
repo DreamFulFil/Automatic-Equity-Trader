@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
@@ -10,7 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.agents.AgentService;
+import tw.gc.auto.equity.trader.services.AgentService;
 import tw.gc.auto.equity.trader.agents.RiskManagerAgent;
 import tw.gc.auto.equity.trader.agents.TutorBotAgent;
 import tw.gc.auto.equity.trader.config.TelegramProperties;
@@ -416,7 +416,7 @@ public class TelegramService {
      * JUSTIFICATION: Provides daily performance summary to trader after market close.
      * Disabled in favor of EndOfDayStatisticsService detailed report.
      */
-    // @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
+    // @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
     public void sendDailySummaryDigest() {
         if (agentService == null || botModeService == null) {
             return;

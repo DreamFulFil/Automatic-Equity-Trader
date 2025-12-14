@@ -1,10 +1,10 @@
-package tw.gc.auto.equity.trader.entities;
+package tw.gc.auto.equity.trader.enums;
 
 /**
  * Trading mode enumeration for multi-market support.
  * Defines which markets the bot operates in.
  */
-public enum TradingModeEnum {
+public enum TradingModeType {
     /**
      * Taiwan stock market only (TSE/OTC)
      * Examples: 2454.TW (MediaTek), 2330.TW (TSMC)
@@ -26,7 +26,7 @@ public enum TradingModeEnum {
     private final String code;
     private final String description;
     
-    TradingModeEnum(String code, String description) {
+    TradingModeType(String code, String description) {
         this.code = code;
         this.description = description;
     }
@@ -42,8 +42,8 @@ public enum TradingModeEnum {
     /**
      * Parse from code string (e.g., "stock", "futures")
      */
-    public static TradingModeEnum fromCode(String code) {
-        for (TradingModeEnum mode : values()) {
+    public static TradingModeType fromCode(String code) {
+        for (TradingModeType mode : values()) {
             if (mode.code.equalsIgnoreCase(code)) {
                 return mode;
             }

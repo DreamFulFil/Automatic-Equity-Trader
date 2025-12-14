@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader.strategy.impl.library;
+package tw.gc.auto.equity.trader.strategy.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import tw.gc.auto.equity.trader.entities.MarketData;

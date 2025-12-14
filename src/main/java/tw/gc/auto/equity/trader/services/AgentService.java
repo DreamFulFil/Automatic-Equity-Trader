@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader.agents;
+package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.BotModeService;
-import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.services.BotModeService;
+import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.OllamaProperties;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Agent;
@@ -18,6 +18,11 @@ import tw.gc.auto.equity.trader.repositories.AgentRepository;
 import tw.gc.auto.equity.trader.repositories.BotSettingsRepository;
 import tw.gc.auto.equity.trader.repositories.TradeRepository;
 import tw.gc.auto.equity.trader.agents.PromptFactory;
+import tw.gc.auto.equity.trader.agents.BaseAgent;
+import tw.gc.auto.equity.trader.agents.NewsAnalyzerAgent;
+import tw.gc.auto.equity.trader.agents.TutorBotAgent;
+import tw.gc.auto.equity.trader.agents.SignalGeneratorAgent;
+import tw.gc.auto.equity.trader.agents.RiskManagerAgent;
 
 import java.util.List;
 import java.util.Map;

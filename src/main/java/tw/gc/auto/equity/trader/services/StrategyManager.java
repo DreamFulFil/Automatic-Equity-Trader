@@ -10,13 +10,13 @@ import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
 import tw.gc.auto.equity.trader.strategy.impl.*;
-import tw.gc.auto.equity.trader.strategy.impl.library.*;
-import tw.gc.auto.equity.trader.AppConstants;
-import tw.gc.auto.equity.trader.ContractScalingService;
-import tw.gc.auto.equity.trader.StockSettingsService;
+import tw.gc.auto.equity.trader.strategy.impl.*;
+import tw.gc.auto.equity.trader.services.ContractScalingService;
+import tw.gc.auto.equity.trader.services.StockSettingsService;
 
 import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -189,7 +189,7 @@ public class StrategyManager {
 
     private void logShadowTrade(String strategyName, String action, int qty, double price, Double pnl, String reason) {
         Trade trade = Trade.builder()
-            .timestamp(LocalDateTime.now(AppConstants.TAIPEI_ZONE))
+            .timestamp(LocalDateTime.now(ZoneId.of("Asia/Taipei")))
             .action(action.contains("BUY") ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
             .quantity(qty)
             .entryPrice(price)

@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RiskManagementService {
     
-    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
     
     @NonNull

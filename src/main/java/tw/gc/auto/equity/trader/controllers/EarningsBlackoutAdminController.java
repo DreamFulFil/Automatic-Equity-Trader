@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.controllers;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.NonNull;
@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutMeta;
 import tw.gc.auto.equity.trader.services.EarningsBlackoutService;
+import tw.gc.auto.equity.trader.services.RiskManagementService;
 
 import java.util.HashMap;
 import java.util.Map;

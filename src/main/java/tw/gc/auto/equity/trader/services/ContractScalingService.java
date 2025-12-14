@@ -1,4 +1,4 @@
-package tw.gc.auto.equity.trader;
+package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -140,7 +140,7 @@ public class ContractScalingService {
      * JUSTIFICATION: Updates contract sizing based on account equity before market opens.
      * Runs before 11:30 trading window to ensure correct position sizes are ready.
      */
-    @Scheduled(cron = "0 15 11 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
+    @Scheduled(cron = "0 15 11 * * MON-FRI", zone = "Asia/Taipei")
     public void dailyContractSizingUpdate() {
         log.info("11:15 Daily contract sizing update triggered");
         updateContractSizing();

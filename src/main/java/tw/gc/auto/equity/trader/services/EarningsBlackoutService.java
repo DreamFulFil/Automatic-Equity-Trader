@@ -9,12 +9,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.EarningsProperties;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutDate;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutMeta;
 import tw.gc.auto.equity.trader.repositories.EarningsBlackoutMetaRepository;
-import tw.gc.auto.equity.trader.AppConstants;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,7 +48,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EarningsBlackoutService {
 
-    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     private static final int DEFAULT_TTL_DAYS = 7;
     private static final String LEGACY_JSON_PATH = "config/earnings-blackout-dates.json";
     private static final Duration[] BACKOFFS = new Duration[]{
@@ -92,7 +91,7 @@ public class EarningsBlackoutService {
      * JUSTIFICATION: Fetches upcoming earnings dates to enforce trading blackouts.
      * Runs early morning before market opens to ensure blackout rules are current.
      */
-    @Scheduled(cron = "0 0 9 * * *", zone = AppConstants.SCHEDULER_TIMEZONE)
+    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
     public void scheduledRefresh() {
         if (!earningsProperties.getRefresh().isEnabled()) {
             return;
