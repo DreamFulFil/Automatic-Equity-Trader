@@ -142,18 +142,27 @@ jenv exec mvn clean package -DskipTests
 
 ## 📱 Telegram Control
 
+**17 Real-Time Commands** for complete bot management:
+
 | Command | Description |
 |---------|-------------|
-| `/status` | Show position, P&L, bot state |
-| `/pause` | Pause new entries |
+| `/status` | Show position, P&L, bot state, equity |
+| `/pause` | Pause new entries (positions still flatten at EOD) |
 | `/resume` | Resume trading |
 | `/close` | Immediately flatten all positions |
 | `/shutdown` | Gracefully stop the application |
-| `/strategy` | Switch active strategy dynamically |
-| `/golive` | Check eligibility for live trading |
+| `/strategy <name>` | Switch active strategy dynamically |
+| `/mode [live\|sim]` | Switch trading mode (live/simulation) |
+| `/golive` | Check eligibility for live trading (win rate, drawdown) |
+| `/confirmlive` | Confirm live mode switch (10-minute window) |
 | `/backtosim` | Switch back to simulation mode |
-| `/talk <q>` | Ask TutorBot a trading question |
+| `/agent` or `/agents` | List all active AI agents |
+| `/talk <question>` | Ask TutorBot a trading question |
+| `/ask <question>` | Ask TutorBot (alias for `/talk`) |
 | `/insight` | Generate daily market insight |
+| `/news` | Fetch latest news analysis |
+| `/change-share <n>` | Update base stock quantity |
+| `/change-increment <n>` | Update share increment per 20k equity |
 
 ---
 
@@ -161,10 +170,15 @@ jenv exec mvn clean package -DskipTests
 
 | Control | Value | Action |
 |---------|-------|--------|
-| Max Position | 1-4 contracts | Cannot exceed |
+| Max Position | 1-4 contracts (futures) / 1,000+ shares (stocks) | Auto-scaled by equity |
 | Daily Loss Limit | 1,500 TWD | Emergency shutdown |
 | Weekly Loss Limit | 7,000 TWD | Pause until Monday |
-| Trading Window | 11:30-13:30 | No trades outside |
+| Max Hold Time | 45 minutes | Force-flatten position |
+| Min Hold Time | 3 minutes | Anti-whipsaw protection |
+| Stop Loss | -500 TWD per contract | Immediate exit |
+| ~~Trading Window~~ | ~~11:30-13:30~~ | **DEPRECATED** (legacy strategy only) |
+
+**Note**: The trading window restriction (11:30-13:30) is only enforced by the legacy "LegacyBridge" strategy and will be removed in the next major refactor. Modern 50+ strategies trade throughout market hours (9:00-13:30) with time-based risk controls instead.
 
 ---
 
