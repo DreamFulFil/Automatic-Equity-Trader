@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.1.1** - Bug Fixes & Contract Scaling Improvements
+**Version 2.1.2** - Dynamic Stock Selection & Runtime Configuration
 
 [![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
@@ -166,6 +166,7 @@ jenv exec mvn clean package -DskipTests
 | `/news` | Fetch latest news analysis |
 | `/change-share <n>` | Update base stock quantity |
 | `/change-increment <n>` | Update share increment per 20k equity |
+| `/change-stock <symbol>` | **NEW** - Change active trading stock (stock mode only) |
 
 ---
 
@@ -189,19 +190,27 @@ jenv exec mvn clean package -DskipTests
 
 - **[Release Notes](docs/RELEASE-20251213.md)** - Full feature list, performance benchmarks, detailed architecture
 - **[Performance Evaluation](docs/misc/performance-evaluation.md)** - Strategy performance tracking, automatic switching, shadow mode details
+- **[Dynamic Stock Selection](docs/misc/dynamic-stock-selection.md)** - Runtime stock switching, optimization strategies, decision workflows
 - **[Testing Guide](docs/tests/TESTING.md)** - Complete test documentation (434 tests)
 - **[System Re-Creation Prompts](docs/prompts/)** - 5-part series to rebuild entire system from scratch
 - **[Historical Documentation](docs/misc/)** - Audit reports, implementation logs, refactor summaries
 
 ---
 
-## 🆕 Latest Updates (v2.1.1)
+## 🆕 Latest Updates (v2.1.2)
 
-### Bug Fixes & Documentation (December 15, 2025)
+### Dynamic Stock Selection (December 15, 2025)
+- **Removed Hardcoded Stock**: MediaTek (2454.TW) no longer hardcoded - now database-driven
+- **Active Stock Service**: New service manages currently active trading stock dynamically  
+- **Telegram Command**: `/change-stock <symbol>` - Switch trading stock at runtime
+- **Database Configuration**: Active stock stored in `system_config` table
+- **Failsafe Design**: Falls back to MediaTek if database unavailable
+- **All Services Updated**: 6 services refactored to use dynamic stock selection
+
+### Bug Fixes & Documentation (v2.1.1)
 - **Fixed Contract Sizing in Stock Mode**: Contract scaling scheduled task now correctly skips execution when trading stocks (not futures)
-- **Enhanced Mode Detection**: `ContractScalingService.dailyContractSizingUpdate()` now checks trading mode before updating
-- **Performance Evaluation Guide**: Added comprehensive documentation on strategy performance tracking, automatic switching mechanism, and shadow mode system
-- **Test Coverage**: Added 2 new unit tests for mode-aware contract sizing behavior
+- **Performance Evaluation Guide**: Comprehensive documentation on strategy performance tracking and automatic switching
+- **Test Coverage**: Added 13 new unit tests (ActiveStockService + updated service tests)
 
 ### Dynamic Strategy Management (v2.1.0)
 - **Database-Backed Configuration**: Main strategy now stored in PostgreSQL for persistence across restarts
@@ -234,6 +243,6 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 434/434 passing ✅ | **Last Updated**: December 15, 2025
+**Status**: Production-ready ✅ | **Tests**: 445/445 passing ✅ | **Last Updated**: December 15, 2025
 
 *Owner: DreamFulFil | License: MIT*

@@ -36,6 +36,7 @@ public class StrategyManager {
     private final PositionManager positionManager;
     private final DataLoggingService dataLoggingService;
     private final ShadowModeStockService shadowModeStockService;
+    private final ActiveStockService activeStockService;
 
     private final List<IStrategy> activeStrategies = new ArrayList<>();
     private final Map<String, Portfolio> strategyPortfolios = new ConcurrentHashMap<>();
@@ -340,7 +341,7 @@ public class StrategyManager {
     }
 
     private String getActiveSymbol() {
-        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
     }
 
     private int getTradingQuantity() {

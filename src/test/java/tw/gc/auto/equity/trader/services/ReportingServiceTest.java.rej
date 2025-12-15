@@ -1,0 +1,8 @@
+@@ -33,6 +33,7 @@
+     @Mock private TelegramService telegramService;
+     @Mock private TradingStateService tradingStateService;
+     @Mock private StrategyManager strategyManager;
++    @Mock private ActiveStockService activeStockService;
+ 
+     private ReportingService reportingService;
+ 

@@ -44,6 +44,8 @@ public class EndOfDayStatisticsService {
     private final RestTemplate restTemplate;
     @NonNull
     private final TelegramService telegramService;
+    @NonNull
+    private final ActiveStockService activeStockService;
 
     /**
      * Calculate and store end-of-day statistics.
@@ -57,7 +59,8 @@ public class EndOfDayStatisticsService {
         log.info("📊 Calculating end-of-day statistics...");
 
         LocalDate today = LocalDate.now(TAIPEI_ZONE);
-        String symbol = System.getProperty("trading.mode", "stock").equals("stock") ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        String tradingMode = System.getProperty("trading.mode", "stock");
+        String symbol = activeStockService.getActiveSymbol(tradingMode);
 
         try {
             DailyStatistics stats = calculateStatisticsForDay(today, symbol);

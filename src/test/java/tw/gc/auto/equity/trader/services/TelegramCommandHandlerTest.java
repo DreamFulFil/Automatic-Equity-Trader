@@ -65,12 +65,15 @@ class TelegramCommandHandlerTest {
 
         ActiveStrategyService mockActiveStrategyService = mock(ActiveStrategyService.class);
         StrategyPerformanceService mockStrategyPerformanceService = mock(StrategyPerformanceService.class);
+        ActiveStockService mockActiveStockService = mock(ActiveStockService.class);
+        when(mockActiveStockService.getActiveStock()).thenReturn("2454.TW");
+        when(mockActiveStockService.getActiveSymbol(anyString())).thenReturn("2454.TW");
         
         telegramCommandHandler = new TelegramCommandHandler(
             telegramService, tradingStateService, positionManager, riskManagementService,
             contractScalingService, stockSettingsService, shioajiSettingsService, llmService,
             orderExecutionService, applicationContext, riskSettingsService,
-            mockActiveStrategyService, mockStrategyPerformanceService
+            mockActiveStrategyService, mockStrategyPerformanceService, mockActiveStockService
         );
         
         // Register commands to trigger internal registration logic (though we test handlers directly via reflection or by invoking registered callbacks if we could access them, but here we might need to expose handlers or test via side effects)
