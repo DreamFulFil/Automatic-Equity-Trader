@@ -188,7 +188,8 @@ jenv exec mvn clean package -DskipTests
 ## 📚 Documentation
 
 - **[Release Notes](docs/RELEASE-20251213.md)** - Full feature list, performance benchmarks, detailed architecture
-- **[Testing Guide](docs/tests/TESTING.md)** - Complete test documentation (395 tests)
+- **[Performance Evaluation](docs/misc/performance-evaluation.md)** - Strategy performance tracking, automatic switching, shadow mode details
+- **[Testing Guide](docs/tests/TESTING.md)** - Complete test documentation (434 tests)
 - **[System Re-Creation Prompts](docs/prompts/)** - 5-part series to rebuild entire system from scratch
 - **[Historical Documentation](docs/misc/)** - Audit reports, implementation logs, refactor summaries
 
@@ -196,9 +197,10 @@ jenv exec mvn clean package -DskipTests
 
 ## 🆕 Latest Updates (v2.1.1)
 
-### Bug Fixes & Improvements (December 15, 2025)
+### Bug Fixes & Documentation (December 15, 2025)
 - **Fixed Contract Sizing in Stock Mode**: Contract scaling scheduled task now correctly skips execution when trading stocks (not futures)
 - **Enhanced Mode Detection**: `ContractScalingService.dailyContractSizingUpdate()` now checks trading mode before updating
+- **Performance Evaluation Guide**: Added comprehensive documentation on strategy performance tracking, automatic switching mechanism, and shadow mode system
 - **Test Coverage**: Added 2 new unit tests for mode-aware contract sizing behavior
 
 ### Dynamic Strategy Management (v2.1.0)
