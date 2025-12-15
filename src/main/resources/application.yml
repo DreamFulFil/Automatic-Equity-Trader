@@ -32,7 +32,6 @@ management:
       show-details: when-authorized
 
 trading:
-  active-strategy: "LegacyBridge"
   # Python bridge
   bridge:
     url: "http://localhost:8888"

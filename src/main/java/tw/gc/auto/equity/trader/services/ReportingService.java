@@ -101,20 +101,20 @@ public class ReportingService {
         }
         
         if (pnl > 3000) {
-            comment = "\\n🚀 EXCEPTIONAL DAY! Let winners run!";
+            comment = "\n🚀 EXCEPTIONAL DAY! Let winners run!";
         } else if (pnl > 2000) {
-            comment = "\\n🎯 Great performance!";
+            comment = "\n🎯 Great performance!";
         } else if (pnl > 1000) {
-            comment = "\\n✅ Solid day!";
+            comment = "\n✅ Solid day!";
         }
         
         String tradingMode = tradingStateService.getTradingMode();
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK\\nShares: %d (base %d +%d/20k)",
+            ? String.format("Mode: STOCK\nShares: %d (base %d +%d/20k)",
                 stockSettingsService.getBaseStockQuantity(contractScalingService.getLastEquity()),
                 stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
-            : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
+            : String.format("Mode: FUTURES\nContracts: %d", contractScalingService.getMaxContracts());
         
         telegramService.sendMessage(String.format(
                 "📊 DAILY SUMMARY\n" +

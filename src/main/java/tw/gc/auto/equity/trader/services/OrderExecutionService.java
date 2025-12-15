@@ -132,7 +132,7 @@ public class OrderExecutionService {
                 }
                 
                 telegramService.sendMessage(String.format(
-                        "✅ ORDER FILLED [%s]\\n%s %d %s @ %.0f\\nPosition: %d", 
+                        "✅ ORDER FILLED [%s]\n%s %d %s @ %.0f\nPosition: %d", 
                         strategyName != null ? strategyName : "Unknown", action, quantity, instrument, price, positionManager.getPosition(instrument)));
                 
                 if (!isExit) {
@@ -208,12 +208,12 @@ public class OrderExecutionService {
             
             log.info("🔒 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
             telegramService.sendMessage(String.format(
-                    "🔒 POSITION CLOSED\\nReason: %s\\nP&L: %.0f TWD\\nDaily P&L: %.0f TWD\\nWeekly P&L: %.0f TWD", 
+                    "🔒 POSITION CLOSED\nReason: %s\nP&L: %.0f TWD\nDaily P&L: %.0f TWD\nWeekly P&L: %.0f TWD", 
                     reason, pnl, riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL()));
             
             if (riskManagementService.isWeeklyLimitHit()) {
                 telegramService.sendMessage(String.format(
-                    "🚨 WEEKLY LOSS LIMIT HIT\\nWeekly P&L: %.0f TWD\\nTrading paused until next Monday!",
+                    "🚨 WEEKLY LOSS LIMIT HIT\nWeekly P&L: %.0f TWD\nTrading paused until next Monday!",
                     riskManagementService.getWeeklyPnL()
                 ));
             }

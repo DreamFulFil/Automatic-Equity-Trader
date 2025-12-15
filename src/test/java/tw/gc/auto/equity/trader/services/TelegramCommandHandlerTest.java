@@ -63,10 +63,14 @@ class TelegramCommandHandlerTest {
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
 
+        ActiveStrategyService mockActiveStrategyService = mock(ActiveStrategyService.class);
+        StrategyPerformanceService mockStrategyPerformanceService = mock(StrategyPerformanceService.class);
+        
         telegramCommandHandler = new TelegramCommandHandler(
             telegramService, tradingStateService, positionManager, riskManagementService,
             contractScalingService, stockSettingsService, shioajiSettingsService, llmService,
-            orderExecutionService, applicationContext, riskSettingsService
+            orderExecutionService, applicationContext, riskSettingsService,
+            mockActiveStrategyService, mockStrategyPerformanceService
         );
         
         // Register commands to trigger internal registration logic (though we test handlers directly via reflection or by invoking registered callbacks if we could access them, but here we might need to expose handlers or test via side effects)

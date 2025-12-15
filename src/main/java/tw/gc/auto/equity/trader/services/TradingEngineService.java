@@ -223,17 +223,6 @@ public class TradingEngineService {
                 updateNewsVetoCache();
             }
             
-            // Legacy Bridge Strategy (Default if activeStrategyName is "LegacyBridge")
-            if ("LegacyBridge".equalsIgnoreCase(tradingStateService.getActiveStrategyName())) {
-                if (positionManager.getPosition(getActiveSymbol()) == 0) {
-                    if (!tradingStateService.isTradingPaused() && !riskManagementService.isWeeklyLimitHit()) {
-                        evaluateEntry(); // Legacy entry logic
-                    }
-                } else {
-                    evaluateExit(); // Legacy exit logic
-                }
-            }
-            
         } catch (RestClientException e) {
             // Bridge connection error - mark as disconnected and skip this cycle
             tradingStateService.setMarketDataConnected(false);
@@ -258,7 +247,7 @@ public class TradingEngineService {
         if (minutesHeld >= maxHold) {
             log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
             telegramService.sendMessage(String.format(
-                "⏰ 45-MIN HARD EXIT\\nPosition held %d minutes\\nForce-flattening now!",
+                "⏰ 45-MIN HARD EXIT\nPosition held %d minutes\nForce-flattening now!",
                 minutesHeld
             ));
             orderExecutionService.flattenPosition("45-minute time limit", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());

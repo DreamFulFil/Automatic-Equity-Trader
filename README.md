@@ -2,6 +2,8 @@
 
 # Automatic Equity Trader
 
+**Version 2.1.1** - Bug Fixes & Contract Scaling Improvements
+
 [![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
 **Enterprise-grade automated trading platform for macOS Apple Silicon with multi-market support, concurrent strategy execution, and local LLM analytics.**
@@ -72,7 +74,7 @@ jenv exec mvn clean package -DskipTests
 # Run all tests
 ./run-tests.sh YOUR_JASYPT_PASSWORD
 
-# Expected: All 395 tests passing (246 Java unit, 67 Python unit, 41 Java integration, 25 Python integration, 16 E2E)
+# Expected: All 434 tests passing (277 Java unit, 67 Python unit, 49 Java integration, 25 Python integration, 16 E2E)
 ```
 
 ---
@@ -142,7 +144,7 @@ jenv exec mvn clean package -DskipTests
 
 ## 📱 Telegram Control
 
-**17 Real-Time Commands** for complete bot management:
+**19 Real-Time Commands** for complete bot management:
 
 | Command | Description |
 |---------|-------------|
@@ -151,14 +153,15 @@ jenv exec mvn clean package -DskipTests
 | `/resume` | Resume trading |
 | `/close` | Immediately flatten all positions |
 | `/shutdown` | Gracefully stop the application |
-| `/strategy <name>` | Switch active strategy dynamically |
+| `/strategy <name>` | Switch active strategy dynamically (deprecated - use `/set-main-strategy`) |
+| `/set-main-strategy <name>` | **NEW** - Switch main strategy with auto-loaded optimal parameters |
 | `/mode [live\|sim]` | Switch trading mode (live/simulation) |
 | `/golive` | Check eligibility for live trading (win rate, drawdown) |
 | `/confirmlive` | Confirm live mode switch (10-minute window) |
 | `/backtosim` | Switch back to simulation mode |
 | `/agent` or `/agents` | List all active AI agents |
 | `/talk <question>` | Ask TutorBot a trading question |
-| `/ask <question>` | Ask TutorBot (alias for `/talk`) |
+| `/ask` | **ENHANCED** - Get AI-powered strategy recommendation (or ask question with arguments) |
 | `/insight` | Generate daily market insight |
 | `/news` | Fetch latest news analysis |
 | `/change-share <n>` | Update base stock quantity |
@@ -191,6 +194,36 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
+## 🆕 Latest Updates (v2.1.1)
+
+### Bug Fixes & Improvements (December 15, 2025)
+- **Fixed Contract Sizing in Stock Mode**: Contract scaling scheduled task now correctly skips execution when trading stocks (not futures)
+- **Enhanced Mode Detection**: `ContractScalingService.dailyContractSizingUpdate()` now checks trading mode before updating
+- **Test Coverage**: Added 2 new unit tests for mode-aware contract sizing behavior
+
+### Dynamic Strategy Management (v2.1.0)
+- **Database-Backed Configuration**: Main strategy now stored in PostgreSQL for persistence across restarts
+- **Performance Tracking**: Continuous monitoring of all strategies with Sharpe ratio, max drawdown, and win rate metrics
+- **Automated Strategy Switching**: System auto-switches to best performer when MDD exceeds 15% threshold
+- **New Telegram Commands**:
+  - `/set-main-strategy <name>` - Switch main strategy with optimal parameters
+  - `/ask` (without arguments) - Get AI-powered strategy recommendation based on recent performance
+
+### Enhanced Features
+- **Rolling Window Analysis (RWA)**: Combines backtest, shadow, and main strategy data for optimal selection
+- **Drawdown Monitor**: Scheduled service checks MDD every 5 minutes, triggers emergency actions
+- **Clean Telegram Messages**: Fixed literal `\n` and `[Unknown]` appearing in notifications
+- **Futures Message Suppression**: Contract sizing updates only sent when values change (not on every refresh)
+- **Legacy Strategy Cleanup**: Removed odd-lot trading strategy to comply with Taiwan regulations
+
+### Architecture Improvements
+- **Spring-Independent Integration Tests**: All integration tests now use Mockito (no Spring context required)
+- **New Entities**: `ActiveStrategyConfig`, `StrategyPerformance` for robust strategy management
+- **New Services**: `ActiveStrategyService`, `StrategyPerformanceService`, `DrawdownMonitorService`
+- **Enhanced Test Coverage**: +17 new tests (3 unit test classes, comprehensive integration tests)
+
+---
+
 ## ⚠️ License & Disclaimer
 
 **MIT License** - Use at your own risk.
@@ -199,6 +232,6 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 404/404 passing ✅ | **Last Updated**: December 2025
+**Status**: Production-ready ✅ | **Tests**: 434/434 passing ✅ | **Last Updated**: December 15, 2025
 
 *Owner: DreamFulFil | License: MIT*
