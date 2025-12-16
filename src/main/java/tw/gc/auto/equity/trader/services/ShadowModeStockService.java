@@ -92,6 +92,31 @@ public class ShadowModeStockService {
         shadowModeStockRepository.deleteBySymbol(symbol);
         log.info("🗑️ Removed shadow mode stock: {}", symbol);
     }
+    
+    /**
+     * Clear all shadow mode stocks
+     */
+    @Transactional
+    public void clearAll() {
+        shadowModeStockRepository.deleteAll();
+        log.info("🗑️ Cleared all shadow mode stocks");
+    }
+    
+    /**
+     * Add a single shadow stock (for auto-selection)
+     */
+    @Transactional
+    public void addShadowStock(String symbol, String strategyName) {
+        ShadowModeStock stock = ShadowModeStock.builder()
+                .symbol(symbol)
+                .stockName(symbol) // Use symbol as name for now
+                .strategyName(strategyName)
+                .enabled(true)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        shadowModeStockRepository.save(stock);
+    }
 
     /**
      * Configuration DTO

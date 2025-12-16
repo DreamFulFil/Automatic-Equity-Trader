@@ -2,11 +2,11 @@
 
 # Automatic Equity Trader
 
-**Version 2.1.2** - Dynamic Stock Selection & Runtime Configuration
+**Version 2.2.0** - Fully Automated Strategy Selection
 
 [![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
-**Enterprise-grade automated trading platform for macOS Apple Silicon with multi-market support, concurrent strategy execution, and local LLM analytics.**
+**Enterprise-grade automated trading platform for macOS Apple Silicon with AI-powered strategy selection, 47 stocks, 54 strategies, comprehensive backtesting, and zero manual intervention.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -14,6 +14,25 @@
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 
 Advanced trading platform supporting Taiwan stocks/futures with indefinite lifecycle, comprehensive data persistence, structured LLM intelligence, and extensible multi-market/multi-strategy architecture.
+
+---
+
+## ✨ What's New in v2.2.0
+
+**🤖 FULLY AUTOMATED TRADING**
+- **Auto Strategy Selection**: System automatically selects best performing strategy daily at 08:30
+- **Auto Stock Selection**: Switches to most profitable stock based on backtest results
+- **Shadow Mode Auto-Config**: Top 5 strategies automatically added to shadow trading
+- **47 Taiwan Stocks**: Extended from 18 to 47 stocks (TSMC, MediaTek, Hon Hai, etc.)
+- **54 Trading Strategies**: All strategies with unit tests and backtesting
+- **365-Day Backtests**: Extended from 90 days to full year for better accuracy
+- **Database-Backed Decisions**: All strategy-stock performance saved and ranked
+- **Market-Hours Automation**: Watchdog only runs during trading hours (Mon-Fri 09:00-14:30)
+
+**Risk Management**
+- Automatic position scaling based on Sharpe ratio
+- Capital allocation from Shioaji API with fallbacks  
+- Only strategies with >5% return, Sharpe>1.0, WinRate>50%, MaxDD<20% are selected
 
 ---
 
