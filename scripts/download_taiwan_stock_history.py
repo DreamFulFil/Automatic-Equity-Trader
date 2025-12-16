@@ -58,8 +58,9 @@ def get_twse_tickers():
     """
     print("📥 Using well-known TWSE ticker list...")
     
-    # Only use well-known Taiwan stocks (skip web scraping and range generation)
+    # Expanded to 50+ well-known Taiwan stocks for better diversification
     well_known_stocks = [
+        # Original 18 major stocks
         "2330.TW",  # TSMC
         "2454.TW",  # MediaTek
         "2317.TW",  # Hon Hai (Foxconn)
@@ -78,6 +79,39 @@ def get_twse_tickers():
         "2357.TW",  # Asustek Computer
         "3008.TW",  # Largan Precision
         "2912.TW",  # President Chain Store
+        
+        # Additional 32+ quality stocks for diversification
+        "2880.TW",  # Hua Nan Financial
+        "2884.TW",  # E.Sun Financial
+        "2892.TW",  # First Financial
+        "2395.TW",  # Advantech
+        "2379.TW",  # Realtek
+        "2377.TW",  # Micro-Star International
+        "2408.TW",  # Nanya Technology
+        "2474.TW",  # Catcher Technology
+        "3045.TW",  # Taiwan Mobile
+        "3034.TW",  # Novatek
+        "2885.TW",  # Yuanta Financial
+        "2883.TW",  # DBS Taiwan
+        "2609.TW",  # Yang Ming Marine
+        "2615.TW",  # Wan Hai Lines
+        "2610.TW",  # China Airlines
+        "2888.TW",  # Shin Kong Financial
+        "2887.TW",  # Taishin Financial
+        "1402.TW",  # Far Eastern New Century
+        "1216.TW",  # Uni-President Enterprises
+        "1326.TW",  # Formosa Chemicals & Fibre
+        "2105.TW",  # Cheng Shin Rubber
+        "2801.TW",  # Chang Hwa Bank
+        "2834.TW",  # Taiwan Business Bank
+        "2823.TW",  # China Development Financial
+        "2845.TW",  # Far Eastern International Bank
+        "3037.TW",  # Unimicron Technology
+        "6505.TW",  # Taiwan Secom
+        "2327.TW",  # Yageo
+        "2301.TW",  # Lite-On Technology
+        "2409.TW",  # AU Optronics
+        "2324.TW",  # Compal Electronics
     ]
     
     tickers_list = sorted(well_known_stocks)
