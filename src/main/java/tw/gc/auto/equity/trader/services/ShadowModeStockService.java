@@ -104,17 +104,21 @@ public class ShadowModeStockService {
     
     /**
      * Add a single shadow stock (for auto-selection)
+     * Uses find-or-create pattern to avoid duplicates
      */
     @Transactional
     public void addShadowStock(String symbol, String strategyName) {
-        ShadowModeStock stock = ShadowModeStock.builder()
-                .symbol(symbol)
-                .stockName(symbol) // Use symbol as name for now
-                .strategyName(strategyName)
-                .enabled(true)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+        ShadowModeStock stock = shadowModeStockRepository.findBySymbol(symbol)
+                .orElse(ShadowModeStock.builder()
+                        .symbol(symbol)
+                        .stockName(symbol)
+                        .createdAt(LocalDateTime.now())
+                        .build());
+        
+        stock.setStrategyName(strategyName);
+        stock.setEnabled(true);
+        stock.setUpdatedAt(LocalDateTime.now());
+        
         shadowModeStockRepository.save(stock);
     }
 
