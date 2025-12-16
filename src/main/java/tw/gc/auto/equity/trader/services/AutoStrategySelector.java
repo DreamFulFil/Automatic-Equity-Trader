@@ -150,10 +150,25 @@ public class AutoStrategySelector {
     public void selectShadowModeStrategies() {
         log.info("🌙 AUTO-SELECTION: Selecting top 5 shadow mode strategies...");
         
-        List<StrategyStockMapping> topStrategies = mappingRepository.findAll().stream()
+        // Group all mappings by symbol and find best strategy per stock
+        List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
             .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
             .filter(m -> m.getTotalReturnPct() > 3.0) // At least 3% return
             .filter(m -> m.getSharpeRatio() > 0.8)
+            .toList();
+        
+        // Group by symbol and pick best strategy for each stock
+        java.util.Map<String, StrategyStockMapping> bestPerStock = new java.util.HashMap<>();
+        for (StrategyStockMapping mapping : allMappings) {
+            String symbol = mapping.getSymbol();
+            if (!bestPerStock.containsKey(symbol) || 
+                calculateScore(mapping) > calculateScore(bestPerStock.get(symbol))) {
+                bestPerStock.put(symbol, mapping);
+            }
+        }
+        
+        // Select top 5 unique stocks by score
+        List<StrategyStockMapping> topStrategies = bestPerStock.values().stream()
             .sorted((a, b) -> Double.compare(calculateScore(b), calculateScore(a)))
             .limit(5)
             .toList();
@@ -161,7 +176,7 @@ public class AutoStrategySelector {
         // Clear existing shadow mode stocks
         shadowModeStockService.clearAll();
         
-        // Add top 5
+        // Add top 5 unique stocks
         for (StrategyStockMapping mapping : topStrategies) {
             shadowModeStockService.addShadowStock(
                 mapping.getSymbol(), 
