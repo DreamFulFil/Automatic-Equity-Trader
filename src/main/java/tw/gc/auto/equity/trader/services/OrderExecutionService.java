@@ -12,15 +12,24 @@ import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * OrderExecutionService - Handles order execution with retry logic, balance checks, and blackout enforcement.
+ * 
+ * Integrates with the EarningsBlackoutService to enforce trading restrictions around earnings dates.
+ * Before placing any new orders (not exits), verifies the symbol is not in an earnings blackout window.
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class OrderExecutionService {
+
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -30,6 +39,7 @@ public class OrderExecutionService {
     private final PositionManager positionManager;
     private final RiskManagementService riskManagementService;
     private final RiskSettingsService riskSettingsService;
+    private final EarningsBlackoutService earningsBlackoutService;
 
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
@@ -97,9 +107,19 @@ public class OrderExecutionService {
     }
 
     /**
-     * Execute order with retry wrapper and quantity bug fix
+     * Execute order with retry wrapper and quantity bug fix.
+     * Enforces earnings blackout check before placing new (non-exit) orders.
      */
     public void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit, boolean emergencyShutdown, String strategyName) {
+        // Earnings blackout check - block new entries but allow exits
+        if (!isExit && isInEarningsBlackout()) {
+            log.warn("📅 EARNINGS BLACKOUT: Blocking {} order for {} - blackout window active", action, instrument);
+            telegramService.sendMessage(String.format(
+                "📅 ORDER BLOCKED - EARNINGS BLACKOUT\nAction: %s %d %s @ %.0f\nReason: Earnings blackout window active\nExisting positions can still be closed.",
+                action, quantity, instrument, price));
+            return;
+        }
+
         int maxRetries = 3;
         int attempt = 0;
         
@@ -226,5 +246,26 @@ public class OrderExecutionService {
         } catch (Exception e) {
             log.error("❌ Flatten failed", e);
         }
+    }
+
+    /**
+     * Check if today is an earnings blackout day.
+     * Returns true if trading should be blocked for new entries.
+     */
+    public boolean isInEarningsBlackout() {
+        try {
+            LocalDate today = LocalDate.now(TAIPEI_ZONE);
+            return earningsBlackoutService.isDateBlackout(today);
+        } catch (Exception e) {
+            log.warn("⚠️ Could not check earnings blackout status: {}", e.getMessage());
+            return false; // Fail-open: allow trading if blackout check fails
+        }
+    }
+
+    /**
+     * Get earnings blackout status for monitoring/reporting
+     */
+    public boolean getEarningsBlackoutStatus() {
+        return isInEarningsBlackout();
     }
 }

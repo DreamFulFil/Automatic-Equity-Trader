@@ -169,26 +169,30 @@ public class AutoStrategySelector {
             }
         }
         
-        // Select top 10 unique stocks by score (expanded from 5)
+        // Select top 10 unique stocks by score (data-driven, no hardcoding)
         List<StrategyStockMapping> topStrategies = bestPerStock.values().stream()
             .sorted((a, b) -> Double.compare(calculateScore(b), calculateScore(a)))
-            .limit(10)
+            .limit(shadowModeStockService.getMaxShadowModeStocks())
             .toList();
         
-        // Clear existing shadow mode stocks
-        shadowModeStockService.clearAll();
-        
-        // Add top 10 unique stocks
+        // Build config list with full metrics for upsert
+        List<ShadowModeStockService.ShadowModeStockConfig> configs = new java.util.ArrayList<>();
         for (StrategyStockMapping mapping : topStrategies) {
-            shadowModeStockService.addShadowStock(
-                mapping.getSymbol(), 
-                mapping.getStrategyName()
-            );
-            log.info("🌙 Added to shadow mode: {} + {} (Score: {})", 
-                mapping.getSymbol(), 
-                mapping.getStrategyName(),
-                String.format("%.4f", calculateScore(mapping)));
+            double score = calculateScore(mapping);
+            configs.add(ShadowModeStockService.ShadowModeStockConfig.builder()
+                .symbol(mapping.getSymbol())
+                .stockName(mapping.getStockName())
+                .strategyName(mapping.getStrategyName())
+                .expectedReturnPercentage(mapping.getTotalReturnPct())
+                .sharpeRatio(mapping.getSharpeRatio())
+                .winRatePct(mapping.getWinRatePct())
+                .maxDrawdownPct(mapping.getMaxDrawdownPct())
+                .selectionScore(score)
+                .build());
         }
+
+        // Upsert top candidates (clears old, inserts new with ranking)
+        shadowModeStockService.upsertTopCandidates(configs);
         
         if (!topStrategies.isEmpty()) {
             StringBuilder msg = new StringBuilder("🌙 *Shadow Mode Strategies (Top 10)*\n\n");

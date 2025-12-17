@@ -9,10 +9,22 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * MarketData entity for storing OHLCV (Open, High, Low, Close, Volume) candlestick data.
- * Essential for backtesting, technical analysis, and chart generation.
+ * MarketData Entity - OHLCV candlestick data for backtesting and technical analysis.
  * 
- * Data is aggregated at various timeframes (1min, 5min, 15min, 1h, 1d).
+ * <h3>Trading Lifecycle Role:</h3>
+ * <ul>
+ *   <li><b>Backtesting</b>: Historical data source for strategy simulation</li>
+ *   <li><b>Technical Analysis</b>: Pre-calculated indicators (SMA, EMA, RSI, MACD, Bollinger)</li>
+ *   <li><b>Chart Generation</b>: OHLCV data for visualization</li>
+ *   <li><b>Real-time Feed</b>: Stores tick-level to daily aggregations</li>
+ * </ul>
+ * 
+ * <h3>Asset Type:</h3>
+ * The {@code assetType} column defaults to {@code STOCK}. Supports both Taiwan stocks (TSE)
+ * and Taiwan futures (TAIFEX) when futures trading is enabled.
+ * 
+ * @see BacktestService for historical simulation
+ * @see HistoryDataService for data retrieval
  */
 @Entity
 @Table(name = "market_data", indexes = {

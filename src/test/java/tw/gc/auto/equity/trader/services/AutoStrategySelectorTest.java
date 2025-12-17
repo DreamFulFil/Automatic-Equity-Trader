@@ -130,13 +130,13 @@ class AutoStrategySelectorTest {
         );
         
         when(mappingRepository.findAll()).thenReturn(mappings);
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
         
         // When
         autoStrategySelector.selectShadowModeStrategies();
         
-        // Then
-        verify(shadowModeStockService).clearAll();
-        verify(shadowModeStockService, times(10)).addShadowStock(anyString(), anyString());
+        // Then - now uses upsertTopCandidates instead of clearAll + addShadowStock
+        verify(shadowModeStockService).upsertTopCandidates(argThat(configs -> configs.size() == 10));
         verify(telegramService).sendMessage(contains("Shadow Mode Strategies"));
     }
 
@@ -147,13 +147,14 @@ class AutoStrategySelectorTest {
         StrategyStockMapping poorMapping = createMapping("2454.TW", "PoorStrategy", 2.0, 0.5, 45.0, -25.0); // Below thresholds
         
         when(mappingRepository.findAll()).thenReturn(Arrays.asList(goodMapping, poorMapping));
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
         
         // When
         autoStrategySelector.selectShadowModeStrategies();
         
-        // Then
-        verify(shadowModeStockService).addShadowStock("2330.TW", "GoodStrategy");
-        verify(shadowModeStockService, never()).addShadowStock(eq("2454.TW"), anyString());
+        // Then - only good mapping should be included
+        verify(shadowModeStockService).upsertTopCandidates(argThat(configs -> 
+            configs.size() == 1 && configs.get(0).getSymbol().equals("2330.TW")));
     }
 
     @Test
@@ -163,13 +164,14 @@ class AutoStrategySelectorTest {
         StrategyStockMapping strategy2ForStock = createMapping("2330.TW", "Strategy2", 15.0, 2.0, 65.0, -5.0); // Better
         
         when(mappingRepository.findAll()).thenReturn(Arrays.asList(strategy1ForStock, strategy2ForStock));
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
         
         // When
         autoStrategySelector.selectShadowModeStrategies();
         
-        // Then
-        verify(shadowModeStockService).addShadowStock("2330.TW", "Strategy2"); // Should pick Strategy2
-        verify(shadowModeStockService, times(1)).addShadowStock(anyString(), anyString());
+        // Then - should pick Strategy2 (better score)
+        verify(shadowModeStockService).upsertTopCandidates(argThat(configs -> 
+            configs.size() == 1 && configs.get(0).getStrategyName().equals("Strategy2")));
     }
 
     private StrategyStockMapping createMapping(String symbol, String strategyName, 
