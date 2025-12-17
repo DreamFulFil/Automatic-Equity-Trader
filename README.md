@@ -148,7 +148,7 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-## ✨ What's New - December 2024 Update
+## ✨ What's New - December 2025 Update
 
 ### 🤖 Beginner-Friendly AI Features
 ✅ **AI-Powered Insights** - Ollama explains everything in simple language  
