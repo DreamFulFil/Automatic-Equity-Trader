@@ -10,8 +10,8 @@ General rules (must follow):
 • Always use jenv for Java and Maven commands
 • Never invoke java, javac, or mvn directly
 • Do not generate markdown files
-• Assume PostgreSQL is running in Docker
-• If database inspection is needed, write a temporary Python script under /tmp
+• PostgreSQL is running in Docker
+• If database inspection is needed, write a temporary Python script under /tmp, or use "docker exec".
 • All code must compile
 • All existing tests must pass
 • All new code must be covered by tests

@@ -54,4 +54,6 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
                     @Param("since") LocalDateTime since);
 
     void deleteByTimestampBefore(LocalDateTime before);
+    
+    boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, Timeframe timeframe);
 }

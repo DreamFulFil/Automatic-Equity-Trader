@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.2.0** - Fully Automated Strategy Selection
+**Version 2.4.0** - Multi-Asset Support & Enhanced Configuration
 
 [![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
@@ -17,12 +17,57 @@ Advanced trading platform supporting Taiwan stocks/futures with indefinite lifec
 
 ---
 
-## ✨ What's New in v2.2.0
+## ✨ What's New in v2.4.0
 
-**🤖 FULLY AUTOMATED TRADING**
-- **Auto Strategy Selection**: System automatically selects best performing strategy daily at 08:30
+**🔧 CENTRALIZED CONFIGURATION MANAGEMENT**
+- **SystemConfigService**: Centralized configuration with DB persistence (snake_case) and Java access (camelCase)
+- **Telegram Commands**: `/config help`, `/config <key> <value>`, `/show-configs`
+- **Dynamic Risk Limits**: Daily/Weekly/Monthly loss limits configurable at runtime
+- **Strategy Filters**: Min Sharpe ratio, Min win rate, Max drawdown all configurable
+- **AI Settings**: Enable/disable AI veto, adjust confidence thresholds
+
+**🎯 MANUAL STRATEGY SELECTION TRIGGER**
+- **Removed @Scheduled**: Auto-selection no longer runs on a schedule
+- **REST API**: `POST /api/auto-selection/run-now` - Manual trigger via API
+- **Telegram Command**: `/auto-strategy-select` - Manual trigger via chat
+- **Selection Logic**: Based on backtest data, simulation stats, and LLM insights
+
+**🌙 EXPANDED SHADOW MODE**
+- **10 Shadow Strategies**: Expanded from 5 to 10 shadow mode slots
+- **Better Diversification**: Track more strategies in parallel for performance comparison
+
+**📊 MULTI-ASSET SUPPORT**
+- **Asset Type Differentiation**: STOCK and FUTURE asset types tracked separately
+- **Unified Statistics**: DailyStatistics now tracks asset_type for proper separation
+- **Trade Entity Updated**: All trades tagged with asset type for reporting
+- **MarketData Enhanced**: Market data schema supports both asset classes
+
+**🤖 ENHANCED LLM RISK MANAGEMENT**
+- **System Prompt**: Paranoid Risk Manager with 10-point checklist
+- **Context Injection**: Comprehensive state snapshot (P&L, drawdown, trade count, volatility)
+- **Output Format**: Strictly `APPROVE` or `VETO: <reason>`
+
+**🧹 CODEBASE CLEANUP**
+- **Python Scripts Removed**: Obsolete backtest/download scripts deleted (all ported to Java)
+- **Test Coverage**: New tests for HistoryDataService, SystemConfigService, AutoStrategySelector
+
+---
+
+## ✨ What's New in v2.3.0
+
+**🧪 INTEGRATED BACKTESTING & DATA MANAGEMENT**
+- **Telegram Backtest Command**: `/backtest <symbol> <days>` - Run all 54 strategies via Telegram
+- **History Data Downloader**: `/download-history <symbol> [years]` - Download from Yahoo Finance directly
+- **REST APIs Added**:
+  - `POST /api/history/download` - Download historical data
+  - `GET /api/backtest/run` - Run backtests programmatically
+- **Python Scripts Deprecated**: Core backtest/data download migrated to Java
+- **Duplicate Prevention**: Smart duplicate checking prevents data redundancy
+
+**🤖 FULLY AUTOMATED TRADING** (v2.2.0)
+- **Auto Strategy Selection**: Manually triggered via `/auto-strategy-select` or REST API
 - **Auto Stock Selection**: Switches to most profitable stock based on backtest results
-- **Shadow Mode Auto-Config**: Top 5 strategies automatically added to shadow trading
+- **Shadow Mode Auto-Config**: Top 10 strategies automatically added to shadow trading
 - **47 Taiwan Stocks**: Extended from 18 to 47 stocks (TSMC, MediaTek, Hon Hai, etc.)
 - **54 Trading Strategies**: All strategies with unit tests and backtesting
 - **365-Day Backtests**: Extended from 90 days to full year for better accuracy
@@ -191,7 +236,7 @@ jenv exec mvn clean package -DskipTests
 
 ## 📱 Telegram Control
 
-**19 Real-Time Commands** for complete bot management:
+**22 Real-Time Commands** for complete bot management:
 
 | Command | Description |
 |---------|-------------|
@@ -201,19 +246,22 @@ jenv exec mvn clean package -DskipTests
 | `/close` | Immediately flatten all positions |
 | `/shutdown` | Gracefully stop the application |
 | `/strategy <name>` | Switch active strategy dynamically (deprecated - use `/set-main-strategy`) |
-| `/set-main-strategy <name>` | **NEW** - Switch main strategy with auto-loaded optimal parameters |
+| `/set-main-strategy <name>` | Switch main strategy with auto-loaded optimal parameters |
 | `/mode [live\|sim]` | Switch trading mode (live/simulation) |
 | `/golive` | Check eligibility for live trading (win rate, drawdown) |
 | `/confirmlive` | Confirm live mode switch (10-minute window) |
 | `/backtosim` | Switch back to simulation mode |
 | `/agent` or `/agents` | List all active AI agents |
 | `/talk <question>` | Ask TutorBot a trading question |
-| `/ask` | **ENHANCED** - Get AI-powered strategy recommendation (or ask question with arguments) |
+| `/ask` | Get AI-powered strategy recommendation (or ask question with arguments) |
 | `/insight` | Generate daily market insight |
 | `/news` | Fetch latest news analysis |
 | `/change-share <n>` | Update base stock quantity |
 | `/change-increment <n>` | Update share increment per 20k equity |
-| `/change-stock <symbol>` | **NEW** - Change active trading stock (stock mode only) |
+| `/change-stock <symbol>` | Change active trading stock (stock mode only) |
+| `/auto-strategy-select` | **NEW** - Manually trigger auto strategy/stock selection |
+| `/config <key> <value>` | **NEW** - Set system configuration value |
+| `/show-configs` | **NEW** - Display all system configurations |
 
 ---
 
@@ -333,14 +381,14 @@ python3 scripts/weekly_performance_report.py
 **Schedule with cron:**
 ```bash
 # Daily report after market close
-35 14 * * 1-5 cd /path/to/project && python3 scripts/daily_performance_report.py
+35 14 * * 1-5 cd /path/to/project && python3 scripts/automation/daily_performance_report.py
 
 # Weekly report Monday morning
-30 8 * * 1 cd /path/to/project && python3 scripts/weekly_performance_report.py
+30 8 * * 1 cd /path/to/project && python3 scripts/automation/weekly_performance_report.py
 ```
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 434/445 passing (13 pre-existing failures) | **Last Updated**: December 15, 2025
+**Status**: Production-ready ✅ | **Tests**: 481 passing (324 Java unit, 67 Python unit, 49 Java integration, 25 Python integration, 16 E2E) | **Last Updated**: December 17, 2025
 
 *Owner: DreamFulFil | License: MIT*

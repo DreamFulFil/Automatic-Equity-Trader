@@ -103,6 +103,11 @@ public class MarketData {
     @Column(name = "momentum_pct")
     private Double momentumPct; // Price momentum percentage
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "asset_type")
+    @Builder.Default
+    private AssetType assetType = AssetType.STOCK;
+
     public enum Timeframe {
         TICK,       // Raw tick data (aggregated per second)
         MIN_1,      // 1-minute candles
@@ -111,5 +116,10 @@ public class MarketData {
         MIN_30,     // 30-minute candles
         HOUR_1,     // 1-hour candles
         DAY_1       // Daily candles
+    }
+    
+    public enum AssetType {
+        STOCK,
+        FUTURE
     }
 }
