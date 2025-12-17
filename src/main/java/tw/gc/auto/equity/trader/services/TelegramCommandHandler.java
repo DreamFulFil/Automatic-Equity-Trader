@@ -149,6 +149,11 @@ public class TelegramCommandHandler {
         telegramService.registerCustomCommand("/show-configs", args -> {
             handleShowConfigs();
         });
+        
+        // Register /observer command for passive mode
+        telegramService.registerCustomCommand("/observer", args -> {
+            handleObserverCommand(args);
+        });
     }
     
     /**
@@ -664,5 +669,39 @@ public class TelegramCommandHandler {
      */
     private void handleShowConfigs() {
         telegramService.sendMessage(systemConfigService.getAllConfigsFormatted());
+    }
+    
+    /**
+     * Handle /observer command for passive mode control
+     */
+    private void handleObserverCommand(String args) {
+        if (args == null || args.trim().isEmpty()) {
+            boolean isActive = tradingStateService.isActivePolling();
+            telegramService.sendMessage(String.format(
+                "🔭 OBSERVER MODE\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Current: %s\n\n" +
+                "Usage:\n" +
+                "/observer on - Enable active polling\n" +
+                "/observer off - Disable active polling (passive mode)\n\n" +
+                "When passive, signal polling stops but the app keeps running.",
+                isActive ? "✅ Active polling" : "⏸️ Passive mode"
+            ));
+            return;
+        }
+        
+        String command = args.trim().toLowerCase();
+        
+        if ("on".equals(command) || "active".equals(command)) {
+            tradingStateService.setActivePolling(true);
+            telegramService.sendMessage("✅ Active polling enabled\nSignal polling resumed");
+            log.info("🔭 Active polling enabled via /observer command");
+        } else if ("off".equals(command) || "passive".equals(command)) {
+            tradingStateService.setActivePolling(false);
+            telegramService.sendMessage("⏸️ Passive mode enabled\nSignal polling stopped (app still running)");
+            log.info("🔭 Passive mode enabled via /observer command");
+        } else {
+            telegramService.sendMessage("❌ Invalid argument. Use: /observer on OR /observer off");
+        }
     }
 }
