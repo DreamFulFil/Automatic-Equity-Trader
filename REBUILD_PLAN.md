@@ -59,9 +59,9 @@ This document tracks the complete system rebuild mandate.
 - [x] #16: User prompt format structure ready (LlmService.executeTradeVeto)
 - [ ] #16: Integrate into actual trade execution flow
 
-## RISK CONFIGURATION (DONE - needs Telegram UI)
+## RISK CONFIGURATION (DONE)
 - [x] #17: All 17 risk parameters centralized in RiskSettings entity
-- [ ] #17: Telegram commands for runtime configuration (TODO)
+- [x] #17: Telegram commands for runtime configuration (/risk command implemented)
 
 ## DOCUMENTATION (Large)
 - [ ] #18: Update all markdown files
