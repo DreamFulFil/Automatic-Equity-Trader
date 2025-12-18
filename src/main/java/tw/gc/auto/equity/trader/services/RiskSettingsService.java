@@ -36,9 +36,9 @@ public class RiskSettingsService {
     public void ensureDefaultSettings() {
         if (riskSettingsRepo.findFirst() == null) {
             RiskSettings defaultSettings = RiskSettings.builder()
-                    .maxPosition(1)
-                    .dailyLossLimit(1500)
-                    .weeklyLossLimit(7000)
+                    .maxSharesPerTrade(50)
+                    .dailyLossLimitTwd(1000)
+                    .weeklyLossLimitTwd(4000)
                     .maxHoldMinutes(45)
                     .updatedAt(LocalDateTime.now())
                     .build();
@@ -64,33 +64,34 @@ public class RiskSettingsService {
     @Transactional
     public RiskSettings updateSettings(int maxPosition, int dailyLossLimit, int weeklyLossLimit, int maxHoldMinutes) {
         RiskSettings settings = getSettings();
-        settings.setMaxPosition(maxPosition);
-        settings.setDailyLossLimit(dailyLossLimit);
-        settings.setWeeklyLossLimit(weeklyLossLimit);
+        settings.setMaxSharesPerTrade(maxPosition);
+        settings.setDailyLossLimitTwd(dailyLossLimit);
+        settings.setWeeklyLossLimitTwd(weeklyLossLimit);
         settings.setMaxHoldMinutes(maxHoldMinutes);
         settings.setUpdatedAt(LocalDateTime.now());
         return riskSettingsRepo.save(settings);
     }
 
     /**
-     * Get maximum position size
+     * Get maximum position size (deprecated - use getMaxSharesPerTrade)
      */
+    @Deprecated
     public int getMaxPosition() {
-        return getSettings().getMaxPosition();
+        return getSettings().getMaxSharesPerTrade();
     }
 
     /**
      * Get daily loss limit
      */
     public int getDailyLossLimit() {
-        return getSettings().getDailyLossLimit();
+        return getSettings().getDailyLossLimitTwd();
     }
 
     /**
      * Get weekly loss limit
      */
     public int getWeeklyLossLimit() {
-        return getSettings().getWeeklyLossLimit();
+        return getSettings().getWeeklyLossLimitTwd();
     }
 
     /**
@@ -98,5 +99,12 @@ public class RiskSettingsService {
      */
     public int getMaxHoldMinutes() {
         return getSettings().getMaxHoldMinutes();
+    }
+    
+    /**
+     * Get all risk settings as RiskSettings entity
+     */
+    public RiskSettings getRiskSettings() {
+        return getSettings();
     }
 }
