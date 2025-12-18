@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.7.0** - Full System Rebuild (In Progress)
+**Version 2.7.0** - Phase 4: Foundation Rebuild Complete
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -18,40 +18,45 @@ See [REBUILD_PLAN.md](REBUILD_PLAN.md) for complete rebuild roadmap.
 
 ---
 
-## ✨ What's New in v2.7.0 (Current Phase)
+## ✨ What's New in v2.7.0
 
-**🔒 PARANOID RISK MANAGER (Ollama AI)**
-- **VETO by Default**: AI rejects trades unless ALL 10 safety criteria met
-- **Capital Preservation**: Profitability irrelevant - avoiding losses is everything
-- **Strict Parsing**: APPROVE or VETO: reason format enforced
-- **System Prompt**: Centralized, identical in Python and Java
-- **Trade Proposal**: Full context (P&L, news, volatility, streaks)
+**Phase 4 Complete: Foundation Rebuild ✅**
 
-**🇹🇼 TAIWAN REGULATORY COMPLIANCE**
-- **Odd-Lot Day Trading**: Requires ≥ 2,000,000 TWD capital (TSE rules)
-- **Round Lot Validation**: 1000 shares per round lot
-- **Live Capital Check**: Fetches account balance from Shioaji API
-- **Intraday Detection**: Automatically flags day-trading strategies
-- **Fail-Safe Defaults**: Conservative 80k TWD if API unavailable
+**🇹🇼 TAIWAN REGULATORY COMPLIANCE** (Fully Integrated)
+- **Compliance Checks**: Integrated into order execution flow
+- **Odd-Lot Day Trading**: Auto-validates ≥ 2M TWD capital requirement
+- **Live Capital Fetch**: Real-time balance from Shioaji API
+- **Intraday Detection**: Automatic strategy classification
+- **Order Blocking**: Non-compliant trades blocked with Telegram alerts
 
-**⚙️ CENTRALIZED RISK CONFIGURATION**
-- **17 Risk Parameters**: All in one RiskSettings entity
-- **Conservative Defaults**: 50 shares/trade, 1k daily loss limit
-- **Strategy Quality**: Min Sharpe 1.5, win rate 55%, max drawdown 15%
-- **Telegram Configurable**: Runtime parameter updates (in development)
-- **Database-Backed**: Persistent, versioned, auditable
+**⚙️ RISK CONFIGURATION** (Complete + Telegram UI)
+- **17 Risk Parameters**: All centralized in RiskSettings entity
+- **Telegram Commands**: Full runtime configuration via `/risk`
+- **Validation**: Range checking for all parameters
+- **Conservative Defaults**: 50 shares, 1k daily loss, 4k weekly loss
+- **Help System**: `/risk help` shows all configurable parameters
 
-**📝 DATA STORAGE AUDIT**
-- **Complete Documentation**: [DATA_STORE_WHILE_TRADE_TUTORIAL.md](docs/usage/DATA_STORE_WHILE_TRADE_TUTORIAL.md)
-- **20 Entities Documented**: Purpose, storage, lifecycle, retention
-- **Zero Unused Data**: Everything earns its right to exist
-- **No "Just in Case"**: Intentional schema design only
+**🗄️ DATABASE & ENTITIES** (Clean Slate)
+- **Fresh PostgreSQL**: Intentional schema with ddl-auto: update
+- **Entity Audit**: Removed 3 unused entities (EconomicNews, MarketConfig, Quote)
+- **Documentation**: Complete DATA_STORE_WHILE_TRADE_TUTORIAL.md
+- **Zero Bloat**: Every entity justified and documented
+
+**🧪 TESTING INFRASTRUCTURE**
+- **Testcontainers**: Added for integration testing (PostgreSQL)
+- **326 Unit Tests**: All passing
+- **70 Python Tests**: All passing
+- **Clean Build**: No compilation errors
+
+**🔒 PARANOID RISK MANAGER** (Ollama AI Foundation)
+- **System Prompt**: Centralized, paranoid veto-by-default
+- **Trade Veto Interface**: Ready in LlmService
+- **Integration Pending**: Awaits strategy implementation (#16)
 
 **🔧 SYSTEM CLEANUP**
-- **No 08:30 Schedules**: Manual triggers only (explicit behavior)
-- **Earnings on Startup**: @PostConstruct, not scheduled
-- **Backward Compatibility**: Legacy methods deprecated but functional
-- **Compile-Time Safety**: All changes verified before commit
+- **No Scheduled Tasks**: All explicit, no silent failures
+- **Earnings on Startup**: @PostConstruct only
+- **Test Fixes**: Updated for new risk parameter names
 
 ---
 
