@@ -2,41 +2,56 @@
 
 # Automatic Equity Trader
 
-**Version 2.6.1** - Taiwan Regulatory Compliance
+**Version 2.7.0** - Full System Rebuild (In Progress)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 
-Enterprise-grade automated trading platform for Taiwan stocks with AI-powered strategy selection, 54 compliant strategies, and zero manual intervention.
+**⚠️ SYSTEM REBUILD IN PROGRESS ⚠️**
+
+Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
+Designed for capital preservation with 80,000 TWD starting capital.
+
+See [REBUILD_PLAN.md](REBUILD_PLAN.md) for complete rebuild roadmap.
 
 ---
 
-## ✨ What's New in v2.6.1
+## ✨ What's New in v2.7.0 (Current Phase)
+
+**🔒 PARANOID RISK MANAGER (Ollama AI)**
+- **VETO by Default**: AI rejects trades unless ALL 10 safety criteria met
+- **Capital Preservation**: Profitability irrelevant - avoiding losses is everything
+- **Strict Parsing**: APPROVE or VETO: reason format enforced
+- **System Prompt**: Centralized, identical in Python and Java
+- **Trade Proposal**: Full context (P&L, news, volatility, streaks)
 
 **🇹🇼 TAIWAN REGULATORY COMPLIANCE**
-- **Odd Lot Restrictions**: Intraday/day-trading strategies excluded from auto-selection
-- **Filtered Strategies**: Pivot Points, VWAP, TWAP, Price Volume Rank removed
-- **Multi-Day Focus**: All selected strategies comply with Taiwan Stock Exchange rules
-- **Automated Filtering**: isIntradayStrategy() validates compliance at selection time
+- **Odd-Lot Day Trading**: Requires ≥ 2,000,000 TWD capital (TSE rules)
+- **Round Lot Validation**: 1000 shares per round lot
+- **Live Capital Check**: Fetches account balance from Shioaji API
+- **Intraday Detection**: Automatically flags day-trading strategies
+- **Fail-Safe Defaults**: Conservative 80k TWD if API unavailable
 
-**🎯 DYNAMIC SHADOW MODE (Top 10)**
-- **Data-Driven Selection**: Shadow mode candidates selected from compliant backtesting results
-- **Performance Pipeline**: Backtesting → Forward-Testing → Rank → Upsert Top 10
-- **Full Metrics**: Sharpe ratio, win rate, max drawdown tracked per candidate
-- **No Hardcoding**: Selection logic driven entirely by performance data
+**⚙️ CENTRALIZED RISK CONFIGURATION**
+- **17 Risk Parameters**: All in one RiskSettings entity
+- **Conservative Defaults**: 50 shares/trade, 1k daily loss limit
+- **Strategy Quality**: Min Sharpe 1.5, win rate 55%, max drawdown 15%
+- **Telegram Configurable**: Runtime parameter updates (in development)
+- **Database-Backed**: Persistent, versioned, auditable
 
-**📅 EARNINGS BLACKOUT (Production)**
-- **Trade Executor Integration**: Blackout check before placing new orders
-- **Exit Orders Allowed**: Existing positions can be closed during blackout
-- **Database-Backed**: EarningsBlackoutService persists dates with TTL
+**📝 DATA STORAGE AUDIT**
+- **Complete Documentation**: [DATA_STORE_WHILE_TRADE_TUTORIAL.md](docs/usage/DATA_STORE_WHILE_TRADE_TUTORIAL.md)
+- **20 Entities Documented**: Purpose, storage, lifecycle, retention
+- **Zero Unused Data**: Everything earns its right to exist
+- **No "Just in Case"**: Intentional schema design only
 
-**📊 JAVA REPORTING SERVICE**
-- **Daily Report**: Scheduled at Taiwan market close (14:00)
-- **Weekly Report**: Friday 14:00 with 7-day trend analysis
-- **Shadow Comparison**: Main vs shadow strategy performance
-- **Telegram Delivery**: Formatted reports with recommendations
+**🔧 SYSTEM CLEANUP**
+- **No 08:30 Schedules**: Manual triggers only (explicit behavior)
+- **Earnings on Startup**: @PostConstruct, not scheduled
+- **Backward Compatibility**: Legacy methods deprecated but functional
+- **Compile-Time Safety**: All changes verified before commit
 
 ---
 
