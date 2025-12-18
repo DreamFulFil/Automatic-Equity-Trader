@@ -9,7 +9,7 @@ This document tracks the complete system rebuild mandate.
 - [x] #13: Earnings scraping → Run on startup, NOT scheduled
 
 ## DATABASE & ENTITIES (Foundation)
-- [ ] #1: Database reset with intentional schema design
+- [x] #1: Database reset with intentional schema design (fresh DB created 2025-12-18)
 - [x] #7: Create DATA_STORE_WHILE_TRADE_TUTORIAL.md
 - [x] #8: Entity/field justification - remove unused (removed EconomicNews, MarketConfig, Quote)
 - [x] #14: Implement Testcontainers for PostgreSQL
