@@ -2,21 +2,27 @@
 
 # Automatic Equity Trader
 
-**Version 2.6.0** - Production Alignment & Dynamic Shadow Mode
+**Version 2.6.1** - Taiwan Regulatory Compliance
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 
-Enterprise-grade automated trading platform for Taiwan stocks with AI-powered strategy selection, 54 strategies, and zero manual intervention.
+Enterprise-grade automated trading platform for Taiwan stocks with AI-powered strategy selection, 54 compliant strategies, and zero manual intervention.
 
 ---
 
-## ✨ What's New in v2.6.0
+## ✨ What's New in v2.6.1
+
+**🇹🇼 TAIWAN REGULATORY COMPLIANCE**
+- **Odd Lot Restrictions**: Intraday/day-trading strategies excluded from auto-selection
+- **Filtered Strategies**: Pivot Points, VWAP, TWAP, Price Volume Rank removed
+- **Multi-Day Focus**: All selected strategies comply with Taiwan Stock Exchange rules
+- **Automated Filtering**: isIntradayStrategy() validates compliance at selection time
 
 **🎯 DYNAMIC SHADOW MODE (Top 10)**
-- **Data-Driven Selection**: Shadow mode candidates selected from backtesting results
+- **Data-Driven Selection**: Shadow mode candidates selected from compliant backtesting results
 - **Performance Pipeline**: Backtesting → Forward-Testing → Rank → Upsert Top 10
 - **Full Metrics**: Sharpe ratio, win rate, max drawdown tracked per candidate
 - **No Hardcoding**: Selection logic driven entirely by performance data
@@ -31,10 +37,6 @@ Enterprise-grade automated trading platform for Taiwan stocks with AI-powered st
 - **Weekly Report**: Friday 14:00 with 7-day trend analysis
 - **Shadow Comparison**: Main vs shadow strategy performance
 - **Telegram Delivery**: Formatted reports with recommendations
-
-**📝 ENTITY DOCUMENTATION**
-- **Javadoc Enhancement**: All entities documented with lifecycle role
-- **AssetType Verification**: Defaults to STOCK globally (Futures not live)
 
 ---
 
