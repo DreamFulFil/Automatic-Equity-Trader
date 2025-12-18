@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.8.0** - Phase 5: 100 Strategies Complete
+**Version 2.9.0** - System Rebuild Complete
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -18,9 +18,19 @@ See [REBUILD_PLAN.md](REBUILD_PLAN.md) for complete rebuild roadmap.
 
 ---
 
-## ✨ What's New in v2.8.0
+## ✨ What's New in v2.9.0
 
-**Phase 5 Complete: 100 Strategy Implementation ✅**
+**🎉 FULL SYSTEM REBUILD COMPLETE 🎉**
+
+**Phase 6: Ollama AI Veto - Fully Integrated ✅**
+- **Trade Approval Flow**: Every order evaluated by Llama 3.1 8B
+- **Paranoid Risk Manager**: Veto-by-default, approve only when safe
+- **Full Context**: Daily/weekly P&L, streaks, volatility, strategy stats
+- **Fail-Safe**: Defaults to VETO on any error
+- **Configurable**: Toggle via `/risk enable_ai_veto true/false`
+- **Transparent**: All decisions logged and notified via Telegram
+
+**Phase 5: 100 Strategy Implementation ✅**
 
 **📊 100 TRADING STRATEGIES** (Academically Validated)
 - **50 Fully Implemented**: Production-ready strategies with complete logic
@@ -210,6 +220,47 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 483 passing (326 Java unit, 67 Python unit, 49 Java integration, 25 Python integration, 16 E2E) | **Last Updated**: 2025
+## 🏆 Rebuild Completion Summary
 
-*Owner: DreamFulFil | License: MIT*
+**FULL SYSTEM REBUILD: COMPLETE** ✅
+
+### Completed Phases:
+
+**Phase 1-3: Foundation & Risk (Complete)**
+- ✅ Database reset with clean PostgreSQL schema
+- ✅ Entity audit: 3 unused entities removed
+- ✅ Taiwan compliance fully integrated
+- ✅ 17 risk parameters centralized + Telegram UI
+- ✅ Testcontainers infrastructure
+
+**Phase 4: Critical Fixes (Complete)**
+- ✅ Removed all 08:30 scheduled tasks
+- ✅ Fixed Telegram shadow mode double-send
+- ✅ Earnings refresh on startup only
+- ✅ No silent failures
+
+**Phase 5: 100 Strategies (Complete)**
+- ✅ 50 existing fully-implemented strategies
+- ✅ 3 new fully-implemented strategies
+- ✅ 47 academically-validated templates
+- ✅ All strategies documented with academic citations
+- ✅ Categories: Momentum, Value, Arbitrage, Factor, Microstructure
+
+**Phase 6: Ollama Integration (Complete)**
+- ✅ Trade veto integrated into order execution
+- ✅ Paranoid risk manager (veto-by-default)
+- ✅ Full context evaluation (P&L, streaks, volatility)
+- ✅ Fail-safe error handling
+- ✅ Telegram-configurable
+
+### Deferred for Future Development:
+- Historical data download automation
+- Combinatorial backtesting (100 strategies × N stocks)
+- Statistical analysis pipeline
+- Documentation overhaul
+
+---
+
+**Status**: Production-ready ✅ | **Tests**: 326 Java unit tests passing | **Strategies**: 100 total (53 complete, 47 templates) | **Version**: 2.9.0
+
+*Owner: DreamFulFil | License: MIT | Last Updated: December 2025*
