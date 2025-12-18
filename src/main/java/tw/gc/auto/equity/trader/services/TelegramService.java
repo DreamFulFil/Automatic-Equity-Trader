@@ -84,6 +84,29 @@ public class TelegramService {
 
     @PostConstruct
     public void init() {
+        // Clear any old pending messages by fetching the latest update ID
+        if (telegramProperties.isEnabled()) {
+            try {
+                String url = String.format(
+                    "https://api.telegram.org/bot%s/getUpdates?offset=-1&limit=1",
+                    telegramProperties.getBotToken()
+                );
+                String response = restTemplate.getForObject(url, String.class);
+                JsonNode root = objectMapper.readTree(response);
+                
+                if (root.path("ok").asBoolean(false)) {
+                    JsonNode results = root.path("result");
+                    if (results.isArray() && results.size() > 0) {
+                        lastUpdateId = results.get(0).path("update_id").asLong();
+                        log.info("📱 Telegram initialized - skipped {} old messages", lastUpdateId);
+                    } else {
+                        log.info("📱 Telegram initialized - no pending messages");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ Could not clear old Telegram messages: {}", e.getMessage());
+            }
+        }
         log.info("📱 Telegram command interface initialized");
     }
     

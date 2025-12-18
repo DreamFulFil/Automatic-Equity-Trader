@@ -163,6 +163,7 @@ public class ShadowModeStockService {
 
         // Clear existing
         shadowModeStockRepository.deleteAll();
+        shadowModeStockRepository.flush();
 
         // Add new configurations with rank
         for (int i = 0; i < topCandidates.size(); i++) {

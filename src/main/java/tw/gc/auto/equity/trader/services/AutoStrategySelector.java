@@ -2,6 +2,7 @@ package tw.gc.auto.equity.trader.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.gc.auto.equity.trader.entities.StrategyPerformance;
@@ -26,9 +27,14 @@ public class AutoStrategySelector {
     private final TelegramService telegramService;
 
     /**
-     * Manual trigger for strategy selection - can be called via REST API or Telegram command.
+     * Daily auto-strategy selection scheduled at 08:30 (before market opens at 09:00).
+     * Can also be triggered manually via REST API or Telegram command.
      * Selection is based on backtest data, simulation stats, and LLM insights.
+     * 
+     * JUSTIFICATION: Analyzes backtest results daily to select optimal strategy-stock combination
+     * before market opens, ensuring the system trades with the best performing setup.
      */
+    @Scheduled(cron = "0 30 8 * * MON-FRI", zone = "Asia/Taipei")
     @Transactional
     public void selectBestStrategyAndStock() {
         log.info("🤖 AUTO-SELECTION: Starting daily strategy and stock selection...");
