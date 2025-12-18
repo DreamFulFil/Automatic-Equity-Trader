@@ -131,11 +131,11 @@ class TestNewsAnalysis:
     
     @patch('app.services.ollama_service.requests.post')
     @patch('app.main.OllamaService')
-    def test_call_llama_news_veto_success(self, MockOllamaService, mock_post):
-        """Should call Ollama and parse response"""
+    def test_call_llama_news_veto_approve(self, MockOllamaService, mock_post):
+        """Should parse APPROVE response correctly"""
         mock_response = Mock()
         mock_response.json.return_value = {
-            'response': '{"veto": false, "score": 0.6, "reason": "Market stable"}'
+            'response': 'APPROVE'
         }
         mock_post.return_value = mock_response
         
@@ -143,33 +143,100 @@ class TestNewsAnalysis:
         result = service.call_llama_news_veto(["Test headline"])
         
         assert result["veto"] == False
-        assert result["score"] == 0.6
-        assert "stable" in result["reason"]
+        assert result["score"] == 1.0
+        assert result["reason"] == "APPROVED"
+    
+    @patch('app.services.ollama_service.requests.post')
+    def test_call_llama_news_veto_veto_response(self, mock_post):
+        """Should parse VETO response correctly"""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'response': 'VETO: negative news keyword'
+        }
+        mock_post.return_value = mock_response
+        
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_llama_news_veto(["股市下跌"])
+        
+        assert result["veto"] == True
+        assert result["score"] == 0.0
+        assert result["reason"] == "negative news keyword"
     
     @patch('app.services.ollama_service.requests.post')
     def test_call_llama_news_veto_handles_timeout(self, mock_post):
-        """Should return safe defaults on timeout"""
+        """Should return VETO on timeout (fail-safe)"""
         mock_post.side_effect = Exception("Timeout")
         
         service = OllamaService("http://localhost:11434", "llama3.1:8b")
         result = service.call_llama_news_veto(["Test headline"])
         
-        assert result["veto"] == False
-        assert result["score"] == 0.5
+        assert result["veto"] == True
+        assert result["score"] == 0.0
         assert "failed" in result["reason"].lower()
     
     @patch('app.services.ollama_service.requests.post')
-    def test_call_llama_news_veto_handles_invalid_json(self, mock_post):
-        """Should return safe defaults on invalid JSON response"""
+    def test_call_llama_news_veto_handles_unexpected_format(self, mock_post):
+        """Should return VETO on unexpected response format (fail-safe)"""
         mock_response = Mock()
-        mock_response.json.return_value = {'response': 'not valid json'}
+        mock_response.json.return_value = {'response': 'some random text'}
         mock_post.return_value = mock_response
         
         service = OllamaService("http://localhost:11434", "llama3.1:8b")
         result = service.call_llama_news_veto(["Test headline"])
         
+        assert result["veto"] == True
+        assert result["score"] == 0.0
+        assert "unexpected" in result["reason"].lower()
+    
+    @patch('app.services.ollama_service.requests.post')
+    def test_call_trade_veto_approve(self, mock_post):
+        """Should parse full trade veto APPROVE response"""
+        mock_response = Mock()
+        mock_response.json.return_value = {'response': 'APPROVE'}
+        mock_post.return_value = mock_response
+        
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_trade_veto({
+            "symbol": "2330",
+            "direction": "LONG",
+            "shares": 50,
+            "entry_logic": "momentum breakout",
+            "strategy_name": "Momentum",
+            "daily_pnl": 100,
+            "weekly_pnl": 500,
+            "drawdown_percent": 1.5,
+            "trades_today": 1,
+            "win_streak": 2,
+            "loss_streak": 0,
+            "volatility_level": "normal",
+            "time_of_day": "10:30",
+            "session_phase": "mid-session",
+            "news_headlines": ["台積電獲利創新高"],
+            "strategy_days_active": 10,
+            "recent_backtest_stats": "WR 60%, PF 1.8"
+        })
+        
         assert result["veto"] == False
-        assert result["score"] == 0.5
+        assert result["reason"] == "APPROVED"
+    
+    @patch('app.services.ollama_service.requests.post')
+    def test_call_trade_veto_reject(self, mock_post):
+        """Should parse full trade veto VETO response"""
+        mock_response = Mock()
+        mock_response.json.return_value = {'response': 'VETO: daily drawdown exceeded'}
+        mock_post.return_value = mock_response
+        
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_trade_veto({
+            "symbol": "2330",
+            "direction": "LONG",
+            "shares": 50,
+            "daily_pnl": -2500,
+            "drawdown_percent": 4.0,
+        })
+        
+        assert result["veto"] == True
+        assert result["reason"] == "daily drawdown exceeded"
 
 
 class TestSignalGeneration:

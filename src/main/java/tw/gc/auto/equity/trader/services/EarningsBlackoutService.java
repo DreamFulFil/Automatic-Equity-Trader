@@ -87,16 +87,30 @@ public class EarningsBlackoutService {
     private final ReentrantLock refreshLock = new ReentrantLock();
 
     /**
-     * Refresh earnings blackout dates daily at 9:00 AM.
-     * JUSTIFICATION: Fetches upcoming earnings dates to enforce trading blackouts.
-     * Runs early morning before market opens to ensure blackout rules are current.
+     * DISABLED: Scheduled refresh removed.
+     * Earnings blackout dates are now refreshed ONLY on application startup via @PostConstruct.
+     * This ensures blackout data is current without scheduled background tasks.
      */
-    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
+    // @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
     public void scheduledRefresh() {
         if (!earningsProperties.getRefresh().isEnabled()) {
             return;
         }
         refreshAndPersist("scheduled-cron");
+    }
+    
+    /**
+     * Refresh earnings on application startup.
+     * JUSTIFICATION: Ensures earnings blackout dates are loaded before trading begins.
+     */
+    @jakarta.annotation.PostConstruct
+    public void refreshOnStartup() {
+        if (!earningsProperties.getRefresh().isEnabled()) {
+            log.info("📅 Earnings refresh disabled in configuration");
+            return;
+        }
+        log.info("📅 Refreshing earnings blackout dates on startup...");
+        refreshAndPersist("startup");
     }
 
     public Optional<EarningsBlackoutMeta> manualRefresh() {
