@@ -57,7 +57,7 @@ This document tracks the complete system rebuild mandate.
 ## OLLAMA INTEGRATION (DONE)
 - [x] #15: System prompt implemented (Python + Java)
 - [x] #16: User prompt format structure ready (LlmService.executeTradeVeto)
-- [ ] #16: Integrate into actual trade execution flow
+- [x] #16: Integrate into actual trade execution flow (OrderExecutionService with fail-safe)
 
 ## RISK CONFIGURATION (DONE)
 - [x] #17: All 17 risk parameters centralized in RiskSettings entity
