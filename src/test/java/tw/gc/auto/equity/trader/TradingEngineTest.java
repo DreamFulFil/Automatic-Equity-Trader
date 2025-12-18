@@ -77,9 +77,9 @@ class TradingEngineTest {
         when(stockSettingsService.getBaseStockQuantity(anyDouble())).thenReturn(55);
 
         RiskSettings riskSettings = RiskSettings.builder()
-                .maxPosition(1)
-                .dailyLossLimit(4500)
-                .weeklyLossLimit(15000)
+                .maxSharesPerTrade(1)
+                .dailyLossLimitTwd(4500)
+                .weeklyLossLimitTwd(15000)
                 .maxHoldMinutes(45)
                 .build();
         when(riskSettingsService.getSettings()).thenReturn(riskSettings);

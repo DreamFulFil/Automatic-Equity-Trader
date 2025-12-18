@@ -40,6 +40,8 @@ class OrderExecutionServiceTest {
     private RiskSettingsService riskSettingsService;
     @Mock
     private EarningsBlackoutService earningsBlackoutService;
+    @Mock
+    private tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService taiwanComplianceService;
 
     private PositionManager positionManager;
     private OrderExecutionService orderExecutionService;
@@ -54,7 +56,7 @@ class OrderExecutionServiceTest {
         orderExecutionService = new OrderExecutionService(
             restTemplate, objectMapper, tradingProperties, telegramService, 
             dataLoggingService, positionManager, riskManagementService, riskSettingsService,
-            earningsBlackoutService
+            earningsBlackoutService, taiwanComplianceService
         );
     }
 

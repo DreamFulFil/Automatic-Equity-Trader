@@ -11,15 +11,15 @@ This document tracks the complete system rebuild mandate.
 ## DATABASE & ENTITIES (Foundation)
 - [ ] #1: Database reset with intentional schema design
 - [x] #7: Create DATA_STORE_WHILE_TRADE_TUTORIAL.md
-- [ ] #8: Entity/field justification - remove unused
-- [ ] #14: Implement Testcontainers for PostgreSQL
+- [x] #8: Entity/field justification - remove unused (removed EconomicNews, MarketConfig, Quote)
+- [x] #14: Implement Testcontainers for PostgreSQL
 
 ## TAIWAN COMPLIANCE (Critical)
 - [x] #2: Taiwan compliance service created
 - [x] #2: Block day-trading with odd lots until capital ≥ 2M TWD
 - [x] #2: Expose bank balance via Python FastAPI (Shioaji) - endpoint exists
 - [x] #2: Java retrieves balance via REST - TaiwanStockComplianceService.fetchCurrentCapital()
-- [ ] #2: Integrate compliance checks into order execution flow
+- [x] #2: Integrate compliance checks into order execution flow
 
 ## STRATEGY IMPLEMENTATION (Massive)
 - [ ] #3: Implement exactly 100 strategies

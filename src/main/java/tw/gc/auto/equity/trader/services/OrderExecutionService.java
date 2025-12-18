@@ -11,6 +11,8 @@ import tw.gc.auto.equity.trader.services.RiskSettingsService;
 import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
+import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
+import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService.ComplianceResult;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,6 +42,7 @@ public class OrderExecutionService {
     private final RiskManagementService riskManagementService;
     private final RiskSettingsService riskSettingsService;
     private final EarningsBlackoutService earningsBlackoutService;
+    private final TaiwanStockComplianceService taiwanComplianceService;
 
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
@@ -108,7 +111,7 @@ public class OrderExecutionService {
 
     /**
      * Execute order with retry wrapper and quantity bug fix.
-     * Enforces earnings blackout check before placing new (non-exit) orders.
+     * Enforces earnings blackout check and Taiwan compliance before placing new (non-exit) orders.
      */
     public void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit, boolean emergencyShutdown, String strategyName) {
         // Earnings blackout check - block new entries but allow exits
@@ -118,6 +121,21 @@ public class OrderExecutionService {
                 "📅 ORDER BLOCKED - EARNINGS BLACKOUT\nAction: %s %d %s @ %.0f\nReason: Earnings blackout window active\nExisting positions can still be closed.",
                 action, quantity, instrument, price));
             return;
+        }
+
+        // Taiwan compliance check - block if odd-lot day trading without sufficient capital
+        if (!isExit && strategyName != null) {
+            boolean isDayTrade = taiwanComplianceService.isIntradayStrategy(strategyName);
+            double currentCapital = taiwanComplianceService.fetchCurrentCapital();
+            ComplianceResult complianceResult = taiwanComplianceService.checkTradeCompliance(quantity, isDayTrade, currentCapital);
+            
+            if (!complianceResult.isApproved()) {
+                log.warn("🇹🇼 TAIWAN COMPLIANCE VETO: {}", complianceResult.getVetoReason());
+                telegramService.sendMessage(String.format(
+                    "🇹🇼 ORDER BLOCKED - TAIWAN COMPLIANCE\nAction: %s %d %s @ %.0f\nReason: %s",
+                    action, quantity, instrument, price, complianceResult.getVetoReason()));
+                return;
+            }
         }
 
         int maxRetries = 3;
