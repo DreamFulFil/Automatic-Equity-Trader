@@ -41,6 +41,9 @@ class BacktestControllerTest {
     
     @MockBean
     private tw.gc.auto.equity.trader.services.TaiwanStockNameService stockNameService;
+    
+    @MockBean
+    private tw.gc.auto.equity.trader.services.AutoStrategySelector autoStrategySelector;
 
     @Test
     void testRunBacktest() throws Exception {
