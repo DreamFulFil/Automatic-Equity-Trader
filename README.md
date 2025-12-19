@@ -21,12 +21,16 @@ Designed for capital preservation with 80,000 TWD starting capital.
 
 ## ✨ What's New in v2.0.2 (2025-12-19)
 
-### 🎯 Stock Name Display Fix
+### 🎯 Stock Name Display & Database Integration Fixes
 
 **Critical Fixes**
 - ✅ Fixed NULL stock names in Telegram messages (created TaiwanStockNameService with 50-stock mapping)
 - ✅ Updated BacktestController to populate stock names when saving backtest results
 - ✅ Synchronized stock name mappings between Java and Python services
+- ✅ Fixed Python bridge database authentication (added POSTGRES_PASSWORD to Fish script)
+- ✅ Fixed circular dependency in strategy selection (Python now calls Java AutoStrategySelector)
+- ✅ Added direct Java strategy selection endpoint (`/api/backtest/select-strategy-direct`)
+- ✅ Removed outdated SQL in Python service (stock_settings table structure changed)
 - ✅ All 333 Java unit tests passing
 - ✅ 70 Python unit tests passing
 
@@ -36,6 +40,12 @@ Designed for capital preservation with 80,000 TWD starting capital.
 - Financial Services: Fubon, Cathay, Mega, CTBC, E.Sun, etc.
 - Petrochemicals & Materials: Formosa Plastics, Nan Ya Plastics, China Steel, etc.
 - Retail & Consumer: Evergreen Marine, Yang Ming, Uni-President, etc.
+
+### 🚀 Validated Features
+- ✅ Full backtest pipeline: data population → backtesting → strategy selection
+- ✅ Successfully tested with 10 stocks × 50 strategies = 500 backtest combinations
+- ✅ Auto-selection of 1 active + 9 shadow strategies with correct stock names
+- ✅ Proper database persistence and selection table population
 
 **New Database Persistence Layer**
 - ✅ **BacktestResult** entity - Stores ~50,000 backtest results (50 stocks × 100 strategies)
