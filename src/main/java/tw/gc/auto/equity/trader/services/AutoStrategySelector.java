@@ -25,6 +25,7 @@ public class AutoStrategySelector {
     private final ActiveStockService activeStockService;
     private final ShadowModeStockService shadowModeStockService;
     private final TelegramService telegramService;
+    private final tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository activeShadowSelectionRepository;
 
     /**
      * DISABLED: Automated daily strategy selection.
@@ -95,13 +96,112 @@ public class AutoStrategySelector {
                 log.info("✅ Keeping current strategy: {} + {}", currentStock, currentStrategy);
             }
             
-            // Auto-select top 5 shadow mode strategies
-            selectShadowModeStrategies();
+            // Auto-select top 10 shadow mode strategies and populate selection table
+            selectShadowModeStrategiesAndPopulateTable(best);
             
         } catch (Exception e) {
             log.error("❌ Auto-selection failed", e);
             telegramService.sendMessage("❌ Auto-selection failed: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Select shadow mode strategies and populate the unified Active/Shadow selection table.
+     * Ensures exactly 11 rows: 1 active + 10 shadow.
+     */
+    @Transactional
+    public void selectShadowModeStrategiesAndPopulateTable(StrategyStockMapping activeMapping) {
+        log.info("🌙 Selecting shadow strategies and populating selection table...");
+        
+        // Get all eligible mappings
+        List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
+            .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
+            .filter(m -> !isIntradayStrategy(m.getStrategyName()))
+            .filter(m -> m.getTotalReturnPct() > 3.0)
+            .filter(m -> m.getSharpeRatio() > 0.8)
+            .toList();
+        
+        // Group by symbol and pick best strategy per stock
+        java.util.Map<String, StrategyStockMapping> bestPerStock = new java.util.HashMap<>();
+        for (StrategyStockMapping mapping : allMappings) {
+            String symbol = mapping.getSymbol();
+            // Exclude the active stock
+            if (symbol.equals(activeMapping.getSymbol())) {
+                continue;
+            }
+            if (!bestPerStock.containsKey(symbol) || 
+                calculateScore(mapping) > calculateScore(bestPerStock.get(symbol))) {
+                bestPerStock.put(symbol, mapping);
+            }
+        }
+        
+        // Select top 10 for shadow mode
+        List<StrategyStockMapping> shadowMappings = bestPerStock.values().stream()
+            .sorted((a, b) -> Double.compare(calculateScore(b), calculateScore(a)))
+            .limit(10)
+            .toList();
+        
+        // Clear existing selection table
+        activeShadowSelectionRepository.deleteAll();
+        
+        // Insert active (rank 1)
+        tw.gc.auto.equity.trader.entities.ActiveShadowSelection activeSelection = 
+            tw.gc.auto.equity.trader.entities.ActiveShadowSelection.builder()
+                .rankPosition(1)
+                .isActive(true)
+                .symbol(activeMapping.getSymbol())
+                .stockName(activeMapping.getStockName() != null ? activeMapping.getStockName() : activeMapping.getSymbol())
+                .strategyName(activeMapping.getStrategyName())
+                .source(tw.gc.auto.equity.trader.entities.ActiveShadowSelection.SelectionSource.BACKTEST)
+                .sharpeRatio(activeMapping.getSharpeRatio())
+                .totalReturnPct(activeMapping.getTotalReturnPct())
+                .winRatePct(activeMapping.getWinRatePct())
+                .maxDrawdownPct(activeMapping.getMaxDrawdownPct())
+                .compositeScore(calculateScore(activeMapping))
+                .build();
+        activeShadowSelectionRepository.save(activeSelection);
+        
+        // Insert shadow (ranks 2-11)
+        int rank = 2;
+        for (StrategyStockMapping mapping : shadowMappings) {
+            tw.gc.auto.equity.trader.entities.ActiveShadowSelection shadowSelection = 
+                tw.gc.auto.equity.trader.entities.ActiveShadowSelection.builder()
+                    .rankPosition(rank++)
+                    .isActive(false)
+                    .symbol(mapping.getSymbol())
+                    .stockName(mapping.getStockName() != null ? mapping.getStockName() : mapping.getSymbol())
+                    .strategyName(mapping.getStrategyName())
+                    .source(tw.gc.auto.equity.trader.entities.ActiveShadowSelection.SelectionSource.BACKTEST)
+                    .sharpeRatio(mapping.getSharpeRatio())
+                    .totalReturnPct(mapping.getTotalReturnPct())
+                    .winRatePct(mapping.getWinRatePct())
+                    .maxDrawdownPct(mapping.getMaxDrawdownPct())
+                    .compositeScore(calculateScore(mapping))
+                    .build();
+            activeShadowSelectionRepository.save(shadowSelection);
+        }
+        
+        // Also update shadow mode stock service for backward compatibility
+        selectShadowModeStrategies();
+        
+        log.info("✅ Selection table populated: 1 active + {} shadow entries", shadowMappings.size());
+        
+        // Send Telegram notification
+        StringBuilder msg = new StringBuilder();
+        msg.append("📊 *Strategy Selection Complete*\n\n");
+        msg.append(String.format("🔥 ACTIVE: %s (%s) - %s\n", 
+            activeMapping.getStockName(), activeMapping.getSymbol(), activeMapping.getStrategyName()));
+        msg.append(String.format("   Return: %.2f%% | Sharpe: %.2f | Win: %.2f%%\n\n", 
+            activeMapping.getTotalReturnPct(), activeMapping.getSharpeRatio(), activeMapping.getWinRatePct()));
+        
+        msg.append(String.format("🌙 SHADOW MODE (%d stocks):\n", shadowMappings.size()));
+        for (int i = 0; i < shadowMappings.size(); i++) {
+            StrategyStockMapping m = shadowMappings.get(i);
+            msg.append(String.format("%d. %s - %s (%.2f%%)\n", 
+                i + 1, m.getStockName(), m.getStrategyName(), m.getTotalReturnPct()));
+        }
+        
+        telegramService.sendMessage(msg.toString());
     }
     
     private Optional<StrategyStockMapping> findBestStrategyStockCombo() {
@@ -187,6 +287,7 @@ public class AutoStrategySelector {
         
         // Build config list with full metrics for upsert
         List<ShadowModeStockService.ShadowModeStockConfig> configs = new java.util.ArrayList<>();
+        int rank = 1;
         for (StrategyStockMapping mapping : topStrategies) {
             double score = calculateScore(mapping);
             configs.add(ShadowModeStockService.ShadowModeStockConfig.builder()
@@ -199,6 +300,7 @@ public class AutoStrategySelector {
                 .maxDrawdownPct(mapping.getMaxDrawdownPct())
                 .selectionScore(score)
                 .build());
+            rank++;
         }
 
         // Upsert top candidates (clears old, inserts new with ranking)

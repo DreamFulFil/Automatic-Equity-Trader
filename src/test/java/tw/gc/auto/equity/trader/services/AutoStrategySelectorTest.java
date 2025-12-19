@@ -43,13 +43,17 @@ class AutoStrategySelectorTest {
 
     @BeforeEach
     void setUp() {
+        tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository selectionRepo = 
+            org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
+        
         autoStrategySelector = new AutoStrategySelector(
             performanceRepository,
             mappingRepository,
             activeStrategyService,
             activeStockService,
             shadowModeStockService,
-            telegramService
+            telegramService,
+            selectionRepo
         );
     }
 

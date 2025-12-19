@@ -21,7 +21,9 @@ class BacktestServiceTest {
 
     @BeforeEach
     void setUp() {
-        backtestService = new BacktestService();
+        tw.gc.auto.equity.trader.repositories.BacktestResultRepository mockRepo = 
+            org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.BacktestResultRepository.class);
+        backtestService = new BacktestService(mockRepo);
         strategies = new ArrayList<>();
         strategies.add(new RSIStrategy(14, 70, 30));
 
@@ -46,14 +48,14 @@ class BacktestServiceTest {
     void testRunBacktest_WithValidData() {
         double initialCapital = 80000.0;
         
-        Map<String, BacktestService.BacktestResult> results = backtestService.runBacktest(
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
                 strategies, historicalData, initialCapital
         );
 
         assertNotNull(results);
         assertEquals(1, results.size());
         
-        BacktestService.BacktestResult result = results.get("RSI (14, 30/70)");
+        BacktestService.InMemoryBacktestResult result = results.get("RSI (14, 30/70)");
         assertNotNull(result);
         assertEquals("RSI (14, 30/70)", result.getStrategyName());
         assertEquals(initialCapital, result.getInitialCapital());
@@ -62,7 +64,7 @@ class BacktestServiceTest {
 
     @Test
     void testBacktestResult_CalculateMetrics() {
-        BacktestService.BacktestResult result = new BacktestService.BacktestResult("Test Strategy", 80000.0);
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 80000.0);
         
         // Simulate some trades
         result.addTrade(1000.0);  // Win
@@ -88,7 +90,7 @@ class BacktestServiceTest {
 
     @Test
     void testBacktestResult_MaxDrawdownCalculation() {
-        BacktestService.BacktestResult result = new BacktestService.BacktestResult("Test Strategy", 100000.0);
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 100000.0);
         
         // Simulate equity curve with drawdown
         result.trackEquity(100000.0);
@@ -107,7 +109,7 @@ class BacktestServiceTest {
 
     @Test
     void testBacktestResult_SharpeRatioWithNoTrades() {
-        BacktestService.BacktestResult result = new BacktestService.BacktestResult("Test Strategy", 80000.0);
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 80000.0);
         
         result.setFinalEquity(80000.0);
         result.calculateMetrics();
@@ -119,7 +121,7 @@ class BacktestServiceTest {
 
     @Test
     void testBacktestResult_WinRateCalculation() {
-        BacktestService.BacktestResult result = new BacktestService.BacktestResult("Test Strategy", 80000.0);
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 80000.0);
         
         result.addTrade(100.0);
         result.addTrade(200.0);

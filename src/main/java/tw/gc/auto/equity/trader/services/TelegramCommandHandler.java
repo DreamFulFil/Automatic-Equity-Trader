@@ -474,10 +474,10 @@ public class TelegramCommandHandler {
                 List<IStrategy> strategies = new ArrayList<>();
                 strategies.addAll(applicationContext.getBeansOfType(IStrategy.class).values());
                 
-                Map<String, BacktestService.BacktestResult> results = 
+                Map<String, BacktestService.InMemoryBacktestResult> results = 
                     backtestService.runBacktest(strategies, history, 80000.0);
                 
-                BacktestService.BacktestResult best = results.values().stream()
+                BacktestService.InMemoryBacktestResult best = results.values().stream()
                     .max((a, b) -> Double.compare(a.getTotalReturnPercentage(), b.getTotalReturnPercentage()))
                     .orElse(null);
                 
