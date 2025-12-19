@@ -144,17 +144,25 @@ Strategy Context:
     def call_llama_news_veto(self, headlines: list) -> dict:
         """
         Call Ollama for news-based veto decision.
-        Uses the centralized paranoid risk manager system prompt.
+        Uses a simplified prompt for faster response.
         """
-        user_prompt = f"""News Headlines to Analyze:
+        # Simple, direct prompt without the massive system prompt
+        full_prompt = f"""Analyze these Taiwan stock market news headlines. Respond ONLY with "APPROVE" or "VETO: reason".
+
+Headlines:
 {chr(10).join(f"- {h}" for h in headlines)}
 
-Based on these headlines only, should trading be allowed?"""
+Rules:
+- If ANY headline mentions: 下跌, 利空, 衰退, 地緣, 貿易戰, crash, decline, warning, negative → VETO
+- If neutral or mildly positive → APPROVE
+- If uncertain → VETO
+
+Response:"""
 
         try:
             result = self.generate(
-                prompt=user_prompt,
-                system=TRADE_VETO_SYSTEM_PROMPT,
+                prompt=full_prompt,
+                system=None,  # No system prompt for speed
                 options={"temperature": 0.1}
             )
             if "error" in result:

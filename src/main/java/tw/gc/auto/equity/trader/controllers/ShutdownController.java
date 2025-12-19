@@ -2,6 +2,7 @@ package tw.gc.auto.equity.trader.controllers;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
@@ -33,6 +34,10 @@ public class ShutdownController {
     @NonNull
     private final ApplicationContext applicationContext;
     
+    // For testing: allows disabling actual System.exit
+    @Setter
+    private boolean exitEnabled = true;
+    
     /**
      * Gracefully shutdown the application
      * Flattens all positions, calculates statistics, and stops the Spring context
@@ -50,7 +55,9 @@ public class ShutdownController {
                 
                 log.info("🛑 Closing Spring application context...");
                 int exitCode = SpringApplication.exit(applicationContext, () -> 0);
-                System.exit(exitCode);
+                if (exitEnabled) {
+                    System.exit(exitCode);
+                }
             } catch (Exception e) {
                 log.error("❌ Error during graceful shutdown", e);
             }

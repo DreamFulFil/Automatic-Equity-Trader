@@ -517,7 +517,8 @@ if [ "$TEST_TIER" != "unit" ]; then
     draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Integration Tests" "RUNNING"
     
     JAVA_INT_START=$(date +%s)
-    JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=false -Dspring.profiles.active=ci 2>&1) || true
+    # Skip unit tests (surefire) but run integration tests (failsafe)
+    JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=true -DskipITs=false -Dspring.profiles.active=ci 2>&1) || true
     JAVA_INT_END=$(date +%s)
     JAVA_INT_DURATION=$((JAVA_INT_END - JAVA_INT_START))
     JAVA_INT_SUMMARY=$(echo "$JAVA_INT_OUTPUT" | grep -E "Tests run:" | tail -1)
@@ -548,7 +549,7 @@ if [ "$TEST_TIER" != "unit" ]; then
     
     PYTHON_INT_START=$(date +%s)
     PYTHON_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-        python/tests/test_integration.py -v -s 2>&1) || true
+        python/tests/test_integration.py -v 2>&1) || true
     PYTHON_INT_END=$(date +%s)
     PYTHON_INT_DURATION=$((PYTHON_INT_END - PYTHON_INT_START))
     
@@ -593,7 +594,7 @@ if [ "$TEST_TIER" = "full" ]; then
     
     E2E_START=$(date +%s)
     E2E_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-        tests/e2e/test_full_session.py -v -s 2>&1) || true
+        tests/e2e/test_full_session.py -v 2>&1) || true
     E2E_EXIT_CODE=$?
     E2E_END=$(date +%s)
     E2E_DURATION=$((E2E_END - E2E_START))

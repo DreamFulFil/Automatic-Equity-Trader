@@ -1,6 +1,7 @@
 package tw.gc.auto.equity.trader.services;
 
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,10 @@ public class TelegramCommandHandler {
     private final MarketDataRepository marketDataRepository;
     private final AutoStrategySelector autoStrategySelector;
     private final SystemConfigService systemConfigService;
+    
+    // For testing: allows disabling actual System.exit
+    @Setter
+    private boolean exitEnabled = true;
 
     public void registerCommands(List<IStrategy> activeStrategies) {
         telegramService.registerCommandHandlers(
@@ -319,7 +324,9 @@ public class TelegramCommandHandler {
                 Thread.sleep(2000); // Give time for messages to send
                 
                 int exitCode = org.springframework.boot.SpringApplication.exit(applicationContext, () -> 0);
-                System.exit(exitCode);
+                if (exitEnabled) {
+                    System.exit(exitCode);
+                }
             } catch (Exception e) {
                 log.error("❌ Error during Telegram-triggered shutdown", e);
             }
