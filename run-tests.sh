@@ -181,9 +181,16 @@ shutdown_gracefully() {
     
     # Don't force kill - let it exit gracefully
     # Only kill if it's still running after 25 seconds
-    if pgrep -f "java.*auto-equity-trader.jar" >/dev/null 2>&1; then
+    if [ -n "$BOT_PID" ] && kill -0 $BOT_PID 2>/dev/null; then
         echo "Java bot still running after 25s, force stopping..."
-        /bin/pkill -9 -f "java.*auto-equity-trader.jar" 2>/dev/null || true
+        kill -9 $BOT_PID 2>/dev/null || true
+    elif pgrep -f "java.*auto-equity-trader.jar" >/dev/null 2>&1; then
+        # Fallback: find and kill by pattern if PID not available
+        echo "Finding bot process by pattern..."
+        BOT_FALLBACK_PID=$(pgrep -f "java.*auto-equity-trader.jar" | head -1)
+        if [ -n "$BOT_FALLBACK_PID" ]; then
+            kill -9 $BOT_FALLBACK_PID 2>/dev/null || true
+        fi
     fi
     
     # Shutdown bridge
@@ -192,11 +199,11 @@ shutdown_gracefully() {
         curl -s -X POST http://localhost:8888/shutdown >/dev/null 2>&1 || true
         sleep 2
         if kill -0 $BRIDGE_PID 2>/dev/null; then
-            /bin/kill -TERM $BRIDGE_PID 2>/dev/null || true
+            kill -TERM $BRIDGE_PID 2>/dev/null || true
             sleep 2
         fi
         if kill -0 $BRIDGE_PID 2>/dev/null; then
-            /bin/kill -9 $BRIDGE_PID 2>/dev/null || true
+            kill -9 $BRIDGE_PID 2>/dev/null || true
         fi
     fi
     
@@ -206,7 +213,7 @@ shutdown_gracefully() {
         ollama stop llama3.1:8b-instruct-q5_K_M 2>/dev/null || true
         sleep 10
         if kill -0 $OLLAMA_PID 2>/dev/null; then
-            /bin/kill -9 $OLLAMA_PID 2>/dev/null || true
+            kill -9 $OLLAMA_PID 2>/dev/null || true
         fi
     fi
     
