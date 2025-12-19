@@ -29,6 +29,9 @@ shioaji = None
 ollama_service = None
 ai_insights_service = None
 
+# News cache to avoid hammering Ollama
+news_cache = {"result": None, "timestamp": None, "ttl_seconds": 300}  # 5 minute cache
+
 # Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,7 +136,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # ============================================================================
 
 def fetch_news_headlines():
-    """Scrape MoneyDJ + UDN RSS feeds"""
+    """Scrape MoneyDJ + UDN RSS feeds - optimized for speed"""
     feeds = [
         "https://www.moneydj.com/rss/RssNews.djhtm",
         "https://udn.com/rssfeed/news/2/6638"
@@ -141,12 +144,13 @@ def fetch_news_headlines():
     headlines = []
     for feed_url in feeds:
         try:
-            feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:5]:
+            # Add timeout to prevent hanging
+            feed = feedparser.parse(feed_url, timeout=5)
+            for entry in feed.entries[:3]:  # Reduced from 5 to 3 per feed
                 headlines.append(entry.title)
         except:
             pass
-    return headlines[:15]
+    return headlines[:8]  # Reduced from 15 to 8 total headlines
 
 @app.get("/health")
 def health():
@@ -222,6 +226,13 @@ def get_signal():
 
 @app.get("/signal/news")
 def get_news_veto():
+    # Check cache first
+    now = time.time()
+    if news_cache["result"] and news_cache["timestamp"]:
+        age = now - news_cache["timestamp"]
+        if age < news_cache["ttl_seconds"]:
+            return news_cache["result"]
+    
     # Fetch headlines
     headlines = fetch_news_headlines()
     
@@ -229,13 +240,19 @@ def get_news_veto():
     if ollama_service:
         news_analysis = ollama_service.call_llama_news_veto(headlines)
     
-    return {
+    result = {
         "news_veto": news_analysis.get("veto", False),
         "news_score": news_analysis.get("score", 0.5),
         "news_reason": news_analysis.get("reason", ""),
         "headlines_count": len(headlines),
         "timestamp": datetime.now().isoformat()
     }
+    
+    # Cache the result
+    news_cache["result"] = result
+    news_cache["timestamp"] = now
+    
+    return result
 
 class OrderRequest(BaseModel):
     action: str
