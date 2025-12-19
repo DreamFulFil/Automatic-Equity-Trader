@@ -255,10 +255,16 @@ jenv exec mvn clean package -DskipTests
 - ✅ Fail-safe error handling
 - ✅ Telegram-configurable
 
-### Operational Tasks (Infrastructure Ready):
-- **Historical Data Population**: Backtest infrastructure complete; data fetching operational via Shioaji
-- **Combinatorial Backtesting**: BacktestService ready; executing 100 strategies × N stocks requires compute time
+### Operational Tasks (Scripts Ready):
+- **Historical Data Population**: `scripts/operational/populate_historical_data.py`
+  - Fetches 2 years of data for 10 Taiwan stocks, stores in PostgreSQL
+- **Combinatorial Backtesting**: `scripts/operational/run_combinatorial_backtests.py`
+  - Tests 50 strategies × 10 stocks, stores results in database
+- **Run All**: `scripts/operational/run_all_operational_tasks.sh <jasypt-password>`
+  - Complete pipeline: data + backtests (~30-60 minutes)
 - **Live Trading Deployment**: System ready; requires API credentials and market hours
+
+See [`scripts/operational/README.md`](scripts/operational/README.md) for detailed usage.
 
 ---
 
