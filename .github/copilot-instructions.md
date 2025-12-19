@@ -36,5 +36,5 @@ Focus on correctness and completion over explanation. Avoid narrating internal r
 6. `git push` to the current branch.
 
 **Claude Model Restriction:**
-* If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files.
+* If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.
 * Only update the main README.MD, and keep it concise and focused on essential changes.
