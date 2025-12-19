@@ -299,6 +299,37 @@ class DataOperationsService:
     def auto_select_best_strategy(self, min_sharpe: float = 0.5, min_return: float = 10.0, 
                                   min_win_rate: float = 50.0) -> Dict:
         """
+        Auto-select best strategy by calling Java AutoStrategySelector endpoint
+        
+        Returns:
+            Dict with selected strategies
+        """
+        try:
+            # Call Java AutoStrategySelector endpoint
+            response = requests.post(f"{self.java_base_url}/api/backtest/select-strategy", timeout=60)
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "message": "Strategy selection delegated to Java AutoStrategySelector",
+                    "java_response": response.json()
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Java AutoStrategySelector returned status {response.status_code}: {response.text}"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to call Java AutoStrategySelector: {str(e)}"
+            }
+    
+    def auto_select_best_strategy_legacy(self, min_sharpe: float = 0.5, min_return: float = 10.0, 
+                                  min_win_rate: float = 50.0) -> Dict:
+        """
+        DEPRECATED: Legacy Python-based selection. Use auto_select_best_strategy() instead.
         Auto-select best strategy for main trading and top 10 for shadow mode
         
         Returns:
@@ -348,18 +379,9 @@ class DataOperationsService:
                   f'Auto-selected: {strategy_name} (Sharpe={sharpe:.2f})',
                   sharpe, max_dd, total_return, win_rate))
             
-            # Update stock settings
-            stock_name = self.STOCK_NAMES.get(symbol.replace('.TW', ''), symbol)
-            cursor.execute("""
-                INSERT INTO stock_settings (id, symbol, name, reason, updated_at)
-                VALUES (1, %s, %s, %s, NOW())
-                ON CONFLICT (id) DO UPDATE SET
-                    symbol = %s,
-                    name = %s,
-                    reason = %s,
-                    updated_at = NOW()
-            """, (symbol, stock_name, f'Auto-selected: {strategy_name}',
-                  symbol, stock_name, f'Auto-selected: {strategy_name}'))
+            # NOTE: Stock settings table only contains shares/share_increment
+            # Active stock selection is managed by Java AutoStrategySelector
+            # via active_shadow_selection table
             
             # Get top 10 for shadow mode (excluding the active one)
             cursor.execute("""
