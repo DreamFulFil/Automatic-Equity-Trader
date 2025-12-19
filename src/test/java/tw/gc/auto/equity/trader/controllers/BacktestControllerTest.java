@@ -37,9 +37,6 @@ class BacktestControllerTest {
     private tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository mappingRepository;
     
     @MockBean
-    private tw.gc.auto.equity.trader.services.DataOperationsService dataOperationsService;
-    
-    @MockBean
     private tw.gc.auto.equity.trader.services.TaiwanStockNameService stockNameService;
     
     @MockBean

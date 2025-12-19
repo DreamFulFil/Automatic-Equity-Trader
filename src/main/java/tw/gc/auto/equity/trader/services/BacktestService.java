@@ -524,4 +524,210 @@ public class BacktestService {
             }
         }
     }
+    
+    // ========================================================================
+    // TASK 4: DATA OPERATIONS (MOVED FROM PYTHON)
+    // ========================================================================
+    
+    /**
+     * Populate historical data for all top 50 stocks.
+     * This replaces the Python /data/populate endpoint.
+     * 
+     * @param days Number of days of historical data to populate
+     * @return Map with status and statistics
+     */
+    @Transactional
+    public Map<String, Object> populateHistoricalDataInternal(int days) {
+        log.info("📊 Populating {} days of historical data for top 50 stocks...", days);
+        
+        Map<String, Object> result = new HashMap<>();
+        List<String> stocks = fetchTop50Stocks();
+        int years = Math.max(1, days / 365);
+        
+        int successCount = 0;
+        int failCount = 0;
+        Map<String, Object> stockResults = new HashMap<>();
+        
+        for (String symbol : stocks) {
+            try {
+                log.info("📥 Downloading data for {}", symbol);
+                HistoryDataService.DownloadResult downloadResult = 
+                    historyDataService.downloadHistoricalData(symbol, years);
+                
+                stockResults.put(symbol, Map.of(
+                    "total", downloadResult.getTotalRecords(),
+                    "inserted", downloadResult.getInserted(),
+                    "skipped", downloadResult.getSkipped()
+                ));
+                successCount++;
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to download data for {}: {}", symbol, e.getMessage());
+                stockResults.put(symbol, Map.of("error", e.getMessage()));
+                failCount++;
+            }
+        }
+        
+        result.put("status", failCount == 0 ? "success" : "partial");
+        result.put("message", String.format("Populated data for %d/%d stocks", successCount, stocks.size()));
+        result.put("total_stocks", stocks.size());
+        result.put("successful", successCount);
+        result.put("failed", failCount);
+        result.put("days", days);
+        result.put("stock_details", stockResults);
+        
+        log.info("✅ Data population complete: {}/{} stocks", successCount, stocks.size());
+        return result;
+    }
+    
+    /**
+     * Run combinatorial backtests for all top 50 stocks with all strategies.
+     * This replaces the Python /data/backtest endpoint.
+     * 
+     * @param capital Initial capital for backtesting
+     * @param days Number of days of data to use
+     * @return Map with status and results summary
+     */
+    @Transactional
+    public Map<String, Object> runCombinationalBacktestsInternal(double capital, int days) {
+        log.info("🧪 Running combinatorial backtests (capital={}, days={})", capital, days);
+        
+        Map<String, Object> result = new HashMap<>();
+        List<String> stocks = fetchTop50Stocks();
+        
+        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime startDate = endDate.minusDays(days);
+        
+        int totalCombinations = 0;
+        int successful = 0;
+        int failed = 0;
+        List<Map<String, Object>> stockSummaries = new ArrayList<>();
+        
+        // Get all strategies (using same list as controller)
+        List<IStrategy> strategies = getAllStrategiesForBacktest();
+        
+        for (String symbol : stocks) {
+            try {
+                // Fetch historical data from database
+                List<MarketData> history = marketDataRepository
+                    .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+                        symbol, MarketData.Timeframe.DAY_1, startDate, endDate);
+                
+                if (history.isEmpty()) {
+                    log.warn("⚠️ No historical data found for {}", symbol);
+                    stockSummaries.add(Map.of(
+                        "symbol", symbol,
+                        "error", "No historical data"
+                    ));
+                    failed++;
+                    continue;
+                }
+                
+                log.info("📊 Running backtest for {} ({} data points, {} strategies)", 
+                    symbol, history.size(), strategies.size());
+                
+                Map<String, InMemoryBacktestResult> results = runBacktest(strategies, history, capital);
+                totalCombinations += results.size();
+                successful += results.size();
+                
+                // Find top strategy for this stock
+                String topStrategy = results.entrySet().stream()
+                    .max((a, b) -> Double.compare(
+                        a.getValue().getSharpeRatio(), 
+                        b.getValue().getSharpeRatio()))
+                    .map(Map.Entry::getKey)
+                    .orElse("N/A");
+                
+                double topSharpe = results.values().stream()
+                    .mapToDouble(InMemoryBacktestResult::getSharpeRatio)
+                    .max()
+                    .orElse(0.0);
+                
+                stockSummaries.add(Map.of(
+                    "symbol", symbol,
+                    "strategies_tested", results.size(),
+                    "top_strategy", topStrategy,
+                    "top_sharpe", topSharpe
+                ));
+                
+            } catch (Exception e) {
+                log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage());
+                stockSummaries.add(Map.of(
+                    "symbol", symbol,
+                    "error", e.getMessage()
+                ));
+                failed++;
+            }
+        }
+        
+        result.put("status", failed == 0 ? "success" : "partial");
+        result.put("message", "Combinatorial backtests completed");
+        result.put("total_combinations", totalCombinations);
+        result.put("successful", successful);
+        result.put("failed", failed);
+        result.put("results", stockSummaries);
+        
+        log.info("✅ Backtests complete: {} combinations across {} stocks", totalCombinations, stocks.size());
+        return result;
+    }
+    
+    /**
+     * Get all strategies for backtesting.
+     * Returns the complete list of 100+ strategies.
+     */
+    private List<IStrategy> getAllStrategiesForBacktest() {
+        List<IStrategy> strategies = new ArrayList<>();
+        
+        // Import strategies dynamically
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.RSIStrategy(14, 70, 30));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.MACDStrategy(12, 26, 9));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.BollingerBandStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.StochasticStrategy(14, 3, 80, 20));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.ATRChannelStrategy(20, 2.0));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.MovingAverageCrossoverStrategy(5, 20, 0.001));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.DCAStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.MomentumTradingStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.KeltnerChannelStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.IchimokuCloudStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.ParabolicSARStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.ADXTrendStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.WilliamsRStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.CCIStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.VolumeWeightedStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.TripleEMAStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.DonchianChannelStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.SupertrendStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.HullMovingAverageStrategy());
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.MeanReversionStrategy(20, 2.0, 0.5));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.BreakoutMomentumStrategy(20, 0.02));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.DualMomentumStrategy(60, 120, 0.0));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.TimeSeriesMomentumStrategy(60, 0.0));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.LowVolatilityAnomalyStrategy(60, 20));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.BollingerSqueezeStrategy(20, 2.0));
+        strategies.add(new tw.gc.auto.equity.trader.strategy.impl.VolumeProfileStrategy(20, 0.70));
+        
+        return strategies;
+    }
+    
+    /**
+     * Get data status - count of records in database.
+     * This replaces the Python data status endpoint.
+     * 
+     * @return Map with database statistics
+     */
+    public Map<String, Object> getDataStatus() {
+        Map<String, Object> status = new HashMap<>();
+        
+        try {
+            long marketDataCount = marketDataRepository.count();
+            status.put("market_data_records", marketDataCount);
+            status.put("status", "success");
+        } catch (Exception e) {
+            log.error("Failed to get data status", e);
+            status.put("status", "error");
+            status.put("message", e.getMessage());
+        }
+        
+        return status;
+    }
 }
