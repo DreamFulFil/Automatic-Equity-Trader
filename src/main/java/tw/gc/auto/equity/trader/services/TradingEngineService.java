@@ -275,7 +275,7 @@ public class TradingEngineService {
             if (veto) {
                 log.warn("🚨 News veto ACTIVE: {} (score: {})", reason, score);
                 telegramService.sendMessage(String.format(
-                        "🚨 NEWS VETO ACTIVE\\nReason: %s\\nScore: %.2f\\nNo new entries until next check",
+                        "🤖 🚨 NEWS VETO ACTIVE%nReason: %s%nScore: %.2f%nNo new entries until next check",
                         reason, score));
             } else {
                 log.info("✅ News check passed (score: {})", score);
