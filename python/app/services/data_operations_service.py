@@ -18,10 +18,19 @@ import requests
 class DataOperationsService:
     """Service for data population and backtest operations"""
     
-    # Taiwan stock symbols (top 10 liquid stocks)
+    # Taiwan stock symbols (50 stocks for comprehensive backtesting)
     TAIWAN_STOCKS = [
-        "2330", "2317", "2454", "2308", "2881",
-        "2882", "2886", "2303", "1303", "1301"
+        # Technology & Electronics
+        "2330", "2454", "2317", "2382", "2308", "2303", "2357", "3008", "2344", "2345",
+        "2347", "2353", "3711", "2356", "2377", "2379", "2408", "3034", "6505", "2301",
+        "2498", "5269", "2395", "3037", "3231", "3443", "4938", "6669", "2327", "3105",
+        "2412", "6770",
+        # Financial Services
+        "2881", "2882", "2886", "2891", "2892", "2884", "2883", "2885", "5880",
+        # Petrochemicals & Materials
+        "1303", "1301", "2002", "1216",
+        # Retail & Consumer
+        "2603", "2609", "2615", "2610", "9910"
     ]
     
     # Realistic base prices for Taiwan stocks (TWD)
