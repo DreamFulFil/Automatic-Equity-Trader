@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(BacktestController.class)
@@ -63,7 +64,7 @@ class BacktestControllerTest {
         when(backtestService.runBacktest(any(), any(), anyDouble())).thenReturn(results);
 
         // Execute
-        mockMvc.perform(get("/api/backtest/run")
+        mockMvc.perform(post("/api/backtest/run")
                 .param("symbol", "2454.TW")
                 .param("start", LocalDateTime.now().minusDays(1).toString())
                 .param("end", LocalDateTime.now().toString()))

@@ -10,6 +10,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TelegramProperties;
+import tw.gc.auto.equity.trader.services.telegram.TelegramCommandRegistry;
+import tw.gc.auto.equity.trader.services.telegram.GoLiveStateManager;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,14 +23,20 @@ import static org.mockito.Mockito.*;
 @SuppressWarnings("unchecked")
 class TelegramServiceTest {
 
-    @Mock
+    @Mock(lenient = true)
     private RestTemplate restTemplate;
 
-    @Mock
+    @Mock(lenient = true)
     private TelegramProperties telegramProperties;
 
-    @Mock
+    @Mock(lenient = true)
     private StockSettingsService stockSettingsService;
+    
+    @Mock(lenient = true)
+    private TelegramCommandRegistry commandRegistry;
+    
+    @Mock(lenient = true)
+    private GoLiveStateManager goLiveStateManager;
 
     private ObjectMapper objectMapper;
 
@@ -37,7 +45,17 @@ class TelegramServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        telegramService = new TelegramService(restTemplate, telegramProperties, objectMapper, stockSettingsService);
+        telegramService = new TelegramService(
+            restTemplate, 
+            telegramProperties, 
+            objectMapper, 
+            stockSettingsService,
+            commandRegistry,
+            goLiveStateManager
+        );
+        
+        // Don't auto-register commands in tests - we'll mock the registry
+        when(telegramProperties.isEnabled()).thenReturn(false); // Disable for setUp to prevent network calls
     }
 
     // ==================== sendMessage() tests ====================
@@ -226,12 +244,18 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean statusCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
             v -> statusCalled.set(true),
             v -> {}, v -> {}, v -> {}, v -> {}
         );
+        
+        // Mock command registry to return the status command
+        tw.gc.auto.equity.trader.services.telegram.commands.StatusCommand statusCommand = 
+            new tw.gc.auto.equity.trader.services.telegram.commands.StatusCommand();
+        when(commandRegistry.getCommand("status")).thenReturn(statusCommand);
         
         String response = "{\"ok\":true,\"result\":[{\"update_id\":1,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/status\"}}]}";
         when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
@@ -249,6 +273,7 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean statusCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
@@ -273,6 +298,8 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
+        when(commandRegistry.getCommand("unknown")).thenReturn(null);
         
         String response = "{\"ok\":true,\"result\":[{\"update_id\":2,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/unknown\"}}]}";
         when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
@@ -290,6 +317,7 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean pauseCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
@@ -297,6 +325,10 @@ class TelegramServiceTest {
             v -> pauseCalled.set(true),
             v -> {}, v -> {}, v -> {}
         );
+        
+        tw.gc.auto.equity.trader.services.telegram.commands.PauseCommand pauseCommand = 
+            new tw.gc.auto.equity.trader.services.telegram.commands.PauseCommand();
+        when(commandRegistry.getCommand("pause")).thenReturn(pauseCommand);
         
         String response = "{\"ok\":true,\"result\":[{\"update_id\":3,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/pause\"}}]}";
         when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
@@ -314,6 +346,7 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean resumeCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
@@ -321,6 +354,10 @@ class TelegramServiceTest {
             v -> resumeCalled.set(true),
             v -> {}, v -> {}
         );
+        
+        tw.gc.auto.equity.trader.services.telegram.commands.ResumeCommand resumeCommand = 
+            new tw.gc.auto.equity.trader.services.telegram.commands.ResumeCommand();
+        when(commandRegistry.getCommand("resume")).thenReturn(resumeCommand);
         
         String response = "{\"ok\":true,\"result\":[{\"update_id\":4,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/resume\"}}]}";
         when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
@@ -338,12 +375,17 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean closeCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
             v -> {}, v -> {}, v -> {},
             v -> closeCalled.set(true), v -> {}
         );
+        
+        tw.gc.auto.equity.trader.services.telegram.commands.CloseCommand closeCommand = 
+            new tw.gc.auto.equity.trader.services.telegram.commands.CloseCommand();
+        when(commandRegistry.getCommand("close")).thenReturn(closeCommand);
         
         String response = "{\"ok\":true,\"result\":[{\"update_id\":5,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/close\"}}]}";
         when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
@@ -361,12 +403,17 @@ class TelegramServiceTest {
         when(telegramProperties.isEnabled()).thenReturn(true);
         when(telegramProperties.getBotToken()).thenReturn("test-token");
         when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommandCount()).thenReturn(10);
         
         AtomicBoolean statusCalled = new AtomicBoolean(false);
         telegramService.registerCommandHandlers(
             v -> statusCalled.set(true),
             v -> {}, v -> {}, v -> {}, v -> {}
         );
+        
+        tw.gc.auto.equity.trader.services.telegram.commands.StatusCommand statusCommand = 
+            new tw.gc.auto.equity.trader.services.telegram.commands.StatusCommand();
+        when(commandRegistry.getCommand("status")).thenReturn(statusCommand);
         
         // First poll with update_id=10
         String response1 = "{\"ok\":true,\"result\":[{\"update_id\":10,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/status\"}}]}";
@@ -379,8 +426,8 @@ class TelegramServiceTest {
         statusCalled.set(false);
         telegramService.pollUpdates();
         
-        // Should not call handler again for same update
-        // Note: This depends on the offset parameter being updated
+        // Should not call handler again for same update (duplicate is filtered out)
+        assertFalse(statusCalled.get());
     }
 }
 
