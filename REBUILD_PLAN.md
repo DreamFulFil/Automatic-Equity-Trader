@@ -35,10 +35,10 @@ This document tracks the complete system rebuild mandate.
 - [x] #9: Statistical metrics calculated (returns, Sharpe, drawdown, win rate)
 - **Note**: Running actual combinatorial backtests (100 strategies × N stocks × 2 years) is an operational task requiring significant compute time and historical data population. Infrastructure is complete and tested.
 
-## RISK CONFIGURATION (Critical)
-- [ ] #17: Centralize all risk parameters in one place
-- [ ] #17: Make Telegram-configurable
-- [ ] #17: Parameters:
+## RISK CONFIGURATION (Complete ✅)
+- [x] #17: All risk parameters centralized in RiskSettings entity
+- [x] #17: Telegram-configurable via /risk commands
+- [x] #17: All 15 core parameters implemented with conservative defaults:
   - max_shares_per_trade = 50
   - daily_loss_limit_twd = 1000
   - weekly_loss_limit_twd = 4000
