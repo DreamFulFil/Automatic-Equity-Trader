@@ -26,14 +26,78 @@ class DataOperationsService:
     
     # Realistic base prices for Taiwan stocks (TWD)
     BASE_PRICES = {
-        "2330": 600.0, "2317": 100.0, "2454": 1100.0, "2308": 300.0, "2881": 70.0,
-        "2882": 50.0, "2886": 35.0, "2303": 45.0, "1303": 65.0, "1301": 95.0
+        # Technology & Electronics
+        "2330": 600.0, "2454": 1100.0, "2317": 100.0, "2382": 180.0, "2308": 300.0,
+        "2303": 45.0, "2357": 350.0, "3008": 2500.0, "2344": 120.0, "2345": 280.0,
+        "2347": 45.0, "2353": 25.0, "3711": 95.0, "2356": 25.0, "2377": 120.0,
+        "2379": 350.0, "2408": 65.0, "3034": 450.0, "6505": 300.0, "2301": 70.0,
+        "2498": 50.0, "5269": 950.0, "2395": 380.0, "3037": 110.0, "3231": 950.0,
+        "3443": 450.0, "4938": 80.0, "6669": 95.0, "2327": 550.0, "3105": 250.0,
+        "2412": 120.0, "6770": 15.0,
+        # Financial Services
+        "2881": 70.0, "2882": 50.0, "2886": 35.0, "2891": 32.0, "2892": 28.0,
+        "2884": 28.0, "2883": 14.0, "2885": 22.0, "5880": 23.0,
+        # Petrochemicals & Materials
+        "1303": 65.0, "1301": 95.0, "2002": 28.0, "1216": 75.0,
+        # Retail & Consumer
+        "2603": 180.0, "2609": 65.0, "2615": 75.0, "2610": 20.0, "9910": 180.0
     }
     
     STOCK_NAMES = {
-        "2330": "TSMC", "2317": "Hon Hai", "2454": "MediaTek", "2308": "Delta Electronics",
-        "2881": "Fubon Financial", "2882": "Cathay Financial", "2886": "Mega Financial",
-        "2303": "UMC", "1303": "Nan Ya Plastics", "1301": "Formosa Plastics"
+        # Technology & Electronics
+        "2330": "Taiwan Semiconductor Manufacturing",
+        "2454": "MediaTek",
+        "2317": "Hon Hai Precision Industry",
+        "2382": "Quanta Computer",
+        "2308": "Delta Electronics",
+        "2303": "United Microelectronics",
+        "2357": "Asustek Computer",
+        "3008": "Largan Precision",
+        "2344": "Advanced Semiconductor Engineering",
+        "2345": "Accton Technology",
+        "2347": "Synnex Technology",
+        "2353": "Acer",
+        "3711": "ASE Technology Holding",
+        "2356": "Inventec",
+        "2377": "Micro-Star International",
+        "2379": "Realtek Semiconductor",
+        "2408": "Nanya Technology",
+        "3034": "Novatek Microelectronics",
+        "6505": "Taiwan Mask",
+        "2301": "Lite-On Technology",
+        "2498": "HTC Corporation",
+        "5269": "Asmedia Technology",
+        "2395": "Advantech",
+        "3037": "Unimicron Technology",
+        "3231": "Wiwynn",
+        "3443": "Global Unichip",
+        "4938": "Pegatron",
+        "6669": "Wistron NeWeb",
+        "2327": "Yageo",
+        "3105": "Walsin Technology",
+        "2412": "Chunghwa Telecom",
+        "6770": "Gintech Energy",
+        # Financial Services
+        "2881": "Fubon Financial Holding",
+        "2882": "Cathay Financial Holding",
+        "2886": "Mega Financial Holding",
+        "2891": "CTBC Financial Holding",
+        "2892": "First Financial Holding",
+        "2884": "E.Sun Financial Holding",
+        "2883": "China Development Financial",
+        "2885": "Yuanta Financial Holding",
+        "5880": "Taiwan Cooperative Bank",
+        # Petrochemicals & Materials
+        "1303": "Nan Ya Plastics",
+        "1301": "Formosa Plastics",
+        "2002": "China Steel",
+        "1216": "Uni-President Enterprises",
+        # Retail & Consumer
+        "2603": "Evergreen Marine",
+        "2609": "Yang Ming Marine Transport",
+        "2615": "Wan Hai Lines",
+        "2610": "China Airlines",
+        "9910": "Feng TAY Enterprise",
     }
     
     def __init__(self, db_config: Dict[str, str], java_base_url: str = "http://localhost:16350"):
