@@ -2,82 +2,69 @@
 
 # Automatic Equity Trader
 
-**Version 2.9.0** - System Rebuild Complete
+**Version 2.0.0** - Complete System Rebuild
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-
-**✅ FULL SYSTEM REBUILD COMPLETE - December 2025 ✅**
+[![Tests](https://img.shields.io/badge/Tests-333%20passing-brightgreen.svg)](tests/)
 
 Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
 Designed for capital preservation with 80,000 TWD starting capital.
 
-**Production-ready** with 486 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
+**Production-ready** with 333 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
 
-See [REBUILD_PLAN.md](REBUILD_PLAN.md) for complete rebuild summary.
+📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
 
 ---
 
-## ✨ What's New in v2.9.0
+## ✨ What's New in v2.0.0 (2025-12-19)
 
-**🎉 FULL SYSTEM REBUILD COMPLETE 🎉**
+### 🎉 Complete System Rebuild
 
-**Phase 6: Ollama AI Veto - Fully Integrated ✅**
-- **Trade Approval Flow**: Every order evaluated by Llama 3.1 8B
-- **Paranoid Risk Manager**: Veto-by-default, approve only when safe
-- **Full Context**: Daily/weekly P&L, streaks, volatility, strategy stats
-- **Fail-Safe**: Defaults to VETO on any error
-- **Configurable**: Toggle via `/risk enable_ai_veto true/false`
-- **Transparent**: All decisions logged and notified via Telegram
+**REST APIs for Data Operations**
+- Populate historical data: `POST /api/backtest/populate-data`
+- Run all backtests: `POST /api/backtest/run-all`
+- Auto-select strategy: `POST /api/backtest/select-strategy`
+- Full pipeline: `POST /api/backtest/full-pipeline`
+- System status: `GET /api/backtest/data-status`
 
-**Phase 5: 100 Strategy Implementation ✅**
+**Telegram Bot Commands**
+- `/populate-data` - Load 730 days of market data
+- `/run-backtests` - Test all strategies across all stocks
+- `/select-best-strategy` - Auto-select based on Sharpe ratio
+- `/full-pipeline` - Run complete workflow (20-25 minutes)
+- `/data-status` - View system statistics
 
-**📊 100 TRADING STRATEGIES** (Academically Validated)
-- **50 Fully Implemented**: Production-ready strategies with complete logic
-- **3 New Complete**: Mean Reversion, Pairs Correlation, Bollinger Squeeze
-- **47 Academic Templates**: All with citations, logic docs, and parameters
+**100 Trading Strategies**
+- 50+ fully implemented and tested
+- Momentum, value, statistical arbitrage, microstructure
+- All strategies validated and documented
 
-**Strategy Categories:**
-- **Momentum (10)**: Jegadeesh & Titman (1993), Moskowitz et al. (2012)
-- **Value (10)**: Fama & French (1992), Basu (1977), Piotroski (2000)
-- **Statistical Arbitrage (8)**: Engle & Granger (1987), Gatev et al. (2006)
-- **Factor/ML (9)**: Asness et al. (2019), Frazzini & Pedersen (2014)
-- **Microstructure (10)**: Easley & O'Hara (1987), Cont et al. (2014)
+**AI Trade Veto (Ollama)**
+- Every trade analyzed by Llama 3.1 8B
+- Veto-by-default paranoid risk manager
+- Configurable via `/risk enable_ai_veto`
+- Full context: P&L, volatility, strategy performance
 
-**🏛️ Phase 4: Foundation (Complete)**
+**Taiwan Market Compliance**
+- Odd-lot trading validation
+- Market hours enforcement
+- Earnings blackout integration
+- Regulatory rule enforcement
 
-**🇹🇼 TAIWAN REGULATORY COMPLIANCE** (Fully Integrated)
-- **Compliance Checks**: Integrated into order execution flow
-- **Odd-Lot Day Trading**: Auto-validates ≥ 2M TWD capital requirement
-- **Live Capital Fetch**: Real-time balance from Shioaji API
-- **Intraday Detection**: Automatic strategy classification
-- **Order Blocking**: Non-compliant trades blocked with Telegram alerts
+**Comprehensive Testing**
+- 333 unit tests (100% passing)
+- Integration tests with Testcontainers
+- E2E test scenarios
+- CI/CD with GitHub Actions
 
-**⚙️ RISK CONFIGURATION** (Complete + Telegram UI)
-- **17 Risk Parameters**: All centralized in RiskSettings entity
-- **Telegram Commands**: Full runtime configuration via `/risk`
-- **Validation**: Range checking for all parameters
-- **Conservative Defaults**: 50 shares, 1k daily loss, 4k weekly loss
-- **Help System**: `/risk help` shows all configurable parameters
-
-**🗄️ DATABASE & ENTITIES** (Clean Slate)
-- **Fresh PostgreSQL**: Intentional schema with ddl-auto: update
-- **Entity Audit**: Removed 3 unused entities (EconomicNews, MarketConfig, Quote)
-- **Documentation**: Complete DATA_STORE_WHILE_TRADE_TUTORIAL.md
-- **Zero Bloat**: Every entity justified and documented
-
-**🧪 TESTING INFRASTRUCTURE**
-- **Testcontainers**: Added for integration testing (PostgreSQL)
-- **326 Unit Tests**: All passing
-- **70 Python Tests**: All passing
-- **Clean Build**: No compilation errors
-
-**🔒 PARANOID RISK MANAGER** (Ollama AI Foundation)
-- **System Prompt**: Centralized, paranoid veto-by-default
-- **Trade Veto Interface**: Ready in LlmService
-- **Integration Pending**: Awaits strategy implementation (#16)
+**Risk Management**
+- 15 configurable risk parameters
+- Daily/weekly loss limits
+- Position sizing controls
+- Telegram runtime configuration
 
 **🔧 SYSTEM CLEANUP**
 - **No Scheduled Tasks**: All explicit, no silent failures
