@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.3** - Complete System Rebuild
+**Version 2.0.4** - Test Suite Enhancement
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -16,6 +16,36 @@ Designed for capital preservation with 80,000 TWD starting capital.
 **Production-ready** with 375 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.4 (2025-12-19)
+
+### 🧪 Test Suite Enhancement & Optimization
+
+**Test Coverage Expansion**
+- ✅ **Added @WebMvcTest slice tests** for all REST controllers
+  - EarningsBlackoutAdminControllerTest (6 tests)
+  - ShadowModeControllerTest (8 tests)
+  - ShutdownControllerTest (4 tests)
+  - AutoSelectionControllerTest (3 tests)
+- ✅ **New service unit tests** for TradingStateService (18 tests) and TradingModeService (7 tests)
+- ✅ **Python edge case tests** (26 new tests) covering signal calculations, date handling, and error paths
+
+**Test Infrastructure Re-engineering**
+- ✅ **Tiered test execution** in `run-tests.sh`:
+  - `--unit`: Fast unit tests only (no containers/external services)
+  - `--integration`: Unit + Integration tests (mocked & container-based)
+  - `--full`: Unit + Integration + E2E (default)
+- ✅ **Visual progress tracking** with ANSI color-coded status (Green=PASS, Red=FAIL, Yellow=RUNNING)
+- ✅ **Real-time progress bar** showing completion percentage
+
+**Usage:**
+```bash
+./run-tests.sh --unit <jasypt-password>         # Fast unit tests (~30s)
+./run-tests.sh --integration <jasypt-password>  # Unit + Integration (~2min)
+./run-tests.sh --full <jasypt-password>         # Full suite (~5min)
+```
 
 ---
 
