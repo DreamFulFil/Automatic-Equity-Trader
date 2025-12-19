@@ -159,6 +159,27 @@ public class TelegramCommandHandler {
         telegramService.registerCustomCommand("/risk", args -> {
             handleRiskCommand(args);
         });
+        
+        // Data Operations Commands
+        telegramService.registerCustomCommand("/populate-data", args -> {
+            handlePopulateDataCommand(args);
+        });
+        
+        telegramService.registerCustomCommand("/run-backtests", args -> {
+            handleRunBacktestsCommand(args);
+        });
+        
+        telegramService.registerCustomCommand("/select-best-strategy", args -> {
+            handleSelectStrategyCommand(args);
+        });
+        
+        telegramService.registerCustomCommand("/full-pipeline", args -> {
+            handleFullPipelineCommand(args);
+        });
+        
+        telegramService.registerCustomCommand("/data-status", args -> {
+            handleDataStatusCommand(args);
+        });
     }
     
     /**
@@ -739,6 +760,146 @@ public class TelegramCommandHandler {
         } else {
             telegramService.sendMessage(String.format("✅ Risk setting updated\n%s = %s", key, value));
             log.info("🔧 Risk setting updated via Telegram: {} = {}", key, value);
+        }
+    }
+    
+    // ========== DATA OPERATIONS COMMANDS ==========
+    
+    private void handlePopulateDataCommand(String args) {
+        telegramService.sendMessage("📊 Populating historical data... This may take a few minutes.");
+        
+        try {
+            DataOperationsService dataOpsService = applicationContext.getBean(DataOperationsService.class);
+            int days = args != null && !args.trim().isEmpty() ? Integer.parseInt(args.trim()) : 730;
+            
+            Map<String, Object> result = dataOpsService.populateHistoricalData(days);
+            
+            if ("success".equals(result.get("status"))) {
+                telegramService.sendMessage(String.format(
+                    "✅ Historical Data Populated\n\n" +
+                    "📊 Total Records: %d\n" +
+                    "📈 Stocks: %d\n" +
+                    "📅 Days: %d",
+                    result.get("total_records"),
+                    result.get("stocks"),
+                    result.get("days")
+                ));
+            } else {
+                telegramService.sendMessage("❌ Failed to populate data: " + result.get("message"));
+            }
+        } catch (Exception e) {
+            log.error("Failed to populate data via Telegram", e);
+            telegramService.sendMessage("❌ Error: " + e.getMessage());
+        }
+    }
+    
+    private void handleRunBacktestsCommand(String args) {
+        telegramService.sendMessage("🧪 Running combinatorial backtests... This will take 10-20 minutes.");
+        
+        try {
+            DataOperationsService dataOpsService = applicationContext.getBean(DataOperationsService.class);
+            
+            Map<String, Object> result = dataOpsService.runCombinationalBacktests(80000, 730);
+            
+            if ("success".equals(result.get("status"))) {
+                telegramService.sendMessage(String.format(
+                    "✅ Backtests Complete\n\n" +
+                    "📊 Total Combinations: %d\n" +
+                    "✅ Successful: %d\n" +
+                    "❌ Failed: %d",
+                    result.get("total_combinations"),
+                    result.get("successful"),
+                    result.get("failed")
+                ));
+            } else {
+                telegramService.sendMessage("❌ Failed to run backtests: " + result.get("message"));
+            }
+        } catch (Exception e) {
+            log.error("Failed to run backtests via Telegram", e);
+            telegramService.sendMessage("❌ Error: " + e.getMessage());
+        }
+    }
+    
+    private void handleSelectStrategyCommand(String args) {
+        telegramService.sendMessage("🎯 Auto-selecting best strategy...");
+        
+        try {
+            DataOperationsService dataOpsService = applicationContext.getBean(DataOperationsService.class);
+            
+            Map<String, Object> result = dataOpsService.autoSelectBestStrategy(0.5, 10.0, 50.0);
+            
+            if ("success".equals(result.get("status"))) {
+                Map<String, Object> active = (Map<String, Object>) result.get("active_strategy");
+                Map<String, Object> shadow = (Map<String, Object>) result.get("shadow_mode");
+                
+                telegramService.sendMessage(String.format(
+                    "✅ Strategy Selection Complete\n\n" +
+                    "🎯 *Active Strategy*\n" +
+                    "Symbol: %s\n" +
+                    "Strategy: %s\n" +
+                    "Sharpe: %.2f\n" +
+                    "Return: %.2f%%\n" +
+                    "Win Rate: %.2f%%\n\n" +
+                    "👻 *Shadow Mode*: %d stocks configured",
+                    active.get("symbol"),
+                    active.get("strategy"),
+                    active.get("sharpe"),
+                    active.get("return"),
+                    active.get("win_rate"),
+                    shadow.get("count")
+                ));
+            } else {
+                telegramService.sendMessage("❌ Failed to select strategy: " + result.get("message"));
+            }
+        } catch (Exception e) {
+            log.error("Failed to select strategy via Telegram", e);
+            telegramService.sendMessage("❌ Error: " + e.getMessage());
+        }
+    }
+    
+    private void handleFullPipelineCommand(String args) {
+        telegramService.sendMessage("🚀 Running full data pipeline...\n\n" +
+            "Steps:\n" +
+            "1️⃣ Populate data (~5 min)\n" +
+            "2️⃣ Run backtests (~15 min)\n" +
+            "3️⃣ Select strategy (~1 min)\n\n" +
+            "Total: ~20-25 minutes");
+        
+        try {
+            DataOperationsService dataOpsService = applicationContext.getBean(DataOperationsService.class);
+            
+            Map<String, Object> result = dataOpsService.runFullPipeline(730);
+            
+            if ("success".equals(result.get("status"))) {
+                telegramService.sendMessage("✅ Full pipeline complete! Check status with /data-status");
+            } else {
+                String failedAt = (String) result.get("failed_at");
+                telegramService.sendMessage("❌ Pipeline failed at: " + failedAt + "\nCheck logs for details");
+            }
+        } catch (Exception e) {
+            log.error("Failed to run pipeline via Telegram", e);
+            telegramService.sendMessage("❌ Error: " + e.getMessage());
+        }
+    }
+    
+    private void handleDataStatusCommand(String args) {
+        try {
+            DataOperationsService dataOpsService = applicationContext.getBean(DataOperationsService.class);
+            
+            Map<String, Object> status = dataOpsService.getDataStatus();
+            
+            telegramService.sendMessage(String.format(
+                "📊 *Data Status*\n\n" +
+                "Historical Data: %d bars\n" +
+                "Backtest Results: %d combinations\n" +
+                "Shadow Mode: %d stocks",
+                status.get("market_data_records"),
+                status.get("backtest_results"),
+                status.get("shadow_mode_stocks")
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get data status via Telegram", e);
+            telegramService.sendMessage("❌ Error: " + e.getMessage());
         }
     }
 }
