@@ -223,7 +223,15 @@ if command -v jenv > /dev/null
     set MVN_CMD "jenv exec mvn"
 end
 
-if not test -f "target/auto-equity-trader.jar"
+# Check if native binary exists and is newer than source
+set NATIVE_BINARY "target/auto-equity-trader"
+set JAR_FILE "target/auto-equity-trader.jar"
+set USE_NATIVE false
+
+if test -f "$NATIVE_BINARY"
+    echo "🚀 Native executable found: $NATIVE_BINARY"
+    set USE_NATIVE true
+else if not test -f "$JAR_FILE"
     echo "Building JAR file (using: $MVN_CMD)..."
     eval $MVN_CMD clean package -DskipTests
     if test $status -ne 0
@@ -231,7 +239,12 @@ if not test -f "target/auto-equity-trader.jar"
         exit 1
     end
 end
-echo "✅ Java app built"
+
+if test "$USE_NATIVE" = true
+    echo "✅ Using native executable (sub-second startup)"
+else
+    echo "✅ Using JAR file (JVM mode)"
+end
 
 # Step 5.5: Create logs directory BEFORE any logging happens
 set BOT_DIR_ABS (pwd)
@@ -350,11 +363,19 @@ echo "📱 Check your Telegram for alerts."
 echo "📈 Mode: $TRADING_MODE"
 echo ""
 
-# Use jenv exec for cron reliability, fallback to java otherwise
-if command -v jenv > /dev/null
-    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+# Prioritize native executable over JAR for faster startup
+if test "$USE_NATIVE" = true
+    echo "🚀 Starting native executable (AOT-compiled)..."
+    ./target/auto-equity-trader \
+        --jasypt.encryptor.password="$JASYPT_SECRET" \
+        --trading.mode="$TRADING_MODE"
 else
-    java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    # Use jenv exec for cron reliability, fallback to java otherwise
+    if command -v jenv > /dev/null
+        jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    else
+        java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    end
 end
 set JAVA_EXIT_CODE $status
 
