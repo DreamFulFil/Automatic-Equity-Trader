@@ -58,7 +58,7 @@ JASYPT_PASSWORD=<secret> python3 bridge.py &
 
 # 4. Start Ollama (for news/AI tests)
 ollama serve &
-ollama pull llama3.1:8b-instruct-q5_K_M
+ollama pull phi3:3.8b
 ```
 
 ---
