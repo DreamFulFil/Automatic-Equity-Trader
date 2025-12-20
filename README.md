@@ -2,20 +2,51 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.6** - Clean Code Refactoring (Command Pattern)
+**Version 2.0.7** - Backtest Architecture Enhancement
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-[![Tests](https://img.shields.io/badge/Tests-375%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-376%20passing-brightgreen.svg)](tests/)
 
 Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
 Designed for capital preservation with 80,000 TWD starting capital.
 
-**Production-ready** with 375 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
+**Production-ready** with 376 passing tests, 99 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.7 (2025-12-20)
+
+### 🏗️ Backtest Architecture Enhancement
+
+**Service Layer Consolidation**
+- ✅ **Moved `getAllStrategies()` from BacktestController to BacktestService**
+  - Controller now delegates to service layer for strategy enumeration
+  - Enables reuse of strategy list across different components
+  - Single source of truth for available strategies (99 total)
+
+**Data Integrity for 10-Year Backtests**
+- ✅ **Added table truncation before historical data ingestion**
+  - `HistoryDataService.downloadHistoricalData()` now truncates tables for clean 10-year window
+  - Truncates `bar`, `market_data`, and `strategy_stock_mapping` tables
+  - Uses atomic flag to ensure truncation happens only once per backtest run
+- ✅ **Added `/data/download-batch` endpoint to Python bridge**
+  - Uses Shioaji `kbars` API for Taiwan stock historical data
+  - Supports date range queries for batched downloads
+  - Returns OHLCV data in JSON format for Java ingestion
+
+**Repository Enhancements**
+- ✅ **Added `truncateTable()` methods** to BarRepository, MarketDataRepository, StrategyStockMappingRepository
+  - Native SQL TRUNCATE with RESTART IDENTITY CASCADE
+  - Ensures clean state for comprehensive backtesting
+
+**Test Coverage**
+- ✅ 376 Java unit tests + 100 Python unit tests passing
+- ✅ New tests for truncation logic and download-batch endpoint
 
 ---
 

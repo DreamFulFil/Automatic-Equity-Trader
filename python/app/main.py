@@ -511,6 +511,124 @@ def ollama_generate(request: OllamaRequest):
 # The Python DataOperationsService and these endpoints are deprecated.
 # They will be removed in a future version.
 
+# ============================================================================
+# HISTORICAL DATA DOWNLOAD ENDPOINT (Required by Java HistoryDataService)
+# Uses Shioaji kbars API for Taiwan stock historical data
+# ============================================================================
+
+class DownloadBatchRequest(BaseModel):
+    symbol: str
+    start_date: str
+    end_date: str
+
+@app.post("/data/download-batch")
+def download_batch(request: DownloadBatchRequest):
+    """
+    Download historical OHLCV data for a stock symbol within a date range.
+    Uses Shioaji kbars API for Taiwan stock historical data.
+    
+    Args:
+        symbol: Stock symbol (e.g., "2330.TW")
+        start_date: Start date in ISO format
+        end_date: End date in ISO format
+    
+    Returns:
+        JSON with historical data points
+    """
+    global shioaji
+    
+    try:
+        # Parse dates
+        start = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
+        end = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
+        
+        # Format dates for Shioaji API (YYYY-MM-DD)
+        start_str = start.strftime("%Y-%m-%d")
+        end_str = end.strftime("%Y-%m-%d")
+        
+        # Extract stock code from symbol (e.g., "2330.TW" -> "2330")
+        # Must replace .TWO before .TW to avoid leaving 'O'
+        stock_code = request.symbol.replace(".TWO", "").replace(".TW", "")
+        
+        if not shioaji or not shioaji.connected:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "error",
+                    "symbol": request.symbol,
+                    "error": "Shioaji not connected",
+                    "data": []
+                }
+            )
+        
+        # Get contract for the stock
+        try:
+            contract = shioaji.api.Contracts.Stocks.TSE[stock_code]
+        except (KeyError, AttributeError):
+            try:
+                contract = shioaji.api.Contracts.Stocks.OTC[stock_code]
+            except (KeyError, AttributeError):
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "status": "error",
+                        "symbol": request.symbol,
+                        "error": f"Stock contract not found for {stock_code}",
+                        "data": []
+                    }
+                )
+        
+        # Download kbars data using Shioaji API
+        kbars = shioaji.api.kbars(
+            contract=contract,
+            start=start_str,
+            end=end_str,
+            timeout=30000
+        )
+        
+        if kbars is None or len(kbars.ts) == 0:
+            return {
+                "status": "success",
+                "symbol": request.symbol,
+                "data": [],
+                "count": 0,
+                "message": "No data found for the specified date range"
+            }
+        
+        # Convert kbars to list of dicts
+        data_points = []
+        for i in range(len(kbars.ts)):
+            # kbars.ts is timestamp in nanoseconds
+            ts = datetime.fromtimestamp(kbars.ts[i] / 1e9)
+            data_points.append({
+                "timestamp": ts.isoformat(),
+                "open": float(kbars.Open[i]),
+                "high": float(kbars.High[i]),
+                "low": float(kbars.Low[i]),
+                "close": float(kbars.Close[i]),
+                "volume": int(kbars.Volume[i])
+            })
+        
+        return {
+            "status": "success",
+            "symbol": request.symbol,
+            "data": data_points,
+            "count": len(data_points),
+            "start_date": request.start_date,
+            "end_date": request.end_date
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": request.symbol,
+                "error": str(e),
+                "data": []
+            }
+        )
+
 if __name__ == "__main__":
     import uvicorn
     print("🐍 Python bridge starting on port 8888...")

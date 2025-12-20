@@ -12,6 +12,7 @@ import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Phaser;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @Slf4j
@@ -31,8 +33,12 @@ public class HistoryDataService {
 
     private final BarRepository barRepository;
     private final MarketDataRepository marketDataRepository;
+    private final StrategyStockMappingRepository strategyStockMappingRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    
+    // Flag to ensure truncation happens only once per backtest run
+    private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
 
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
@@ -42,6 +48,9 @@ public class HistoryDataService {
      * Batches requests in 365-day chunks, defaults to 10 years
      * Uses Phaser for synchronization
      * 
+     * Performs TRUNCATE on historical data tables before first ingestion to ensure 
+     * clean 10-year window for backtesting.
+     * 
      * @param symbol Stock symbol (e.g., "2330.TW")
      * @param years Number of years of history (default: 10)
      * @return DownloadResult with statistics
@@ -49,6 +58,9 @@ public class HistoryDataService {
     @Transactional
     public DownloadResult downloadHistoricalData(String symbol, int years) throws IOException {
         log.info("📥 Downloading {} years of historical data for {} via Python API", years, symbol);
+        
+        // Truncate tables once per backtest run for clean 10-year data window
+        truncateTablesIfNeeded();
 
         // Calculate date ranges for batching (365 days per batch)
         LocalDateTime endDate = LocalDateTime.now();
@@ -267,5 +279,40 @@ public class HistoryDataService {
         private double low;
         private double close;
         private long volume;
+    }
+    
+    /**
+     * Truncate historical data tables once per backtest run to ensure clean 10-year data window.
+     * Uses atomic flag to ensure truncation happens only once even with parallel stock downloads.
+     */
+    @Transactional
+    public void truncateTablesIfNeeded() {
+        if (tablesCleared.compareAndSet(false, true)) {
+            log.info("🗑️ Truncating historical data tables for clean 10-year backtest window...");
+            
+            try {
+                barRepository.truncateTable();
+                log.info("   ✅ Truncated bar table");
+                
+                marketDataRepository.truncateTable();
+                log.info("   ✅ Truncated market_data table");
+                
+                strategyStockMappingRepository.truncateTable();
+                log.info("   ✅ Truncated strategy_stock_mapping table");
+                
+                log.info("🗑️ All historical data tables truncated successfully");
+            } catch (Exception e) {
+                log.error("❌ Failed to truncate tables: {}", e.getMessage());
+                tablesCleared.set(false); // Reset flag to allow retry
+                throw e;
+            }
+        }
+    }
+    
+    /**
+     * Reset the truncation flag. Useful for testing or manual reset scenarios.
+     */
+    public void resetTruncationFlag() {
+        tablesCleared.set(false);
     }
 }

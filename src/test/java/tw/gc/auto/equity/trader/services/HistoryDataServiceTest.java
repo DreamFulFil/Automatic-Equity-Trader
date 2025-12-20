@@ -3,19 +3,18 @@ package tw.gc.auto.equity.trader.services;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +25,9 @@ class HistoryDataServiceTest {
 
     @Mock
     private MarketDataRepository marketDataRepository;
+    
+    @Mock
+    private StrategyStockMappingRepository strategyStockMappingRepository;
 
     @Mock
     private org.springframework.web.client.RestTemplate restTemplate;
@@ -37,7 +39,7 @@ class HistoryDataServiceTest {
 
     @BeforeEach
     void setUp() {
-        historyDataService = new HistoryDataService(barRepository, marketDataRepository, restTemplate, objectMapper);
+        historyDataService = new HistoryDataService(barRepository, marketDataRepository, strategyStockMappingRepository, restTemplate, objectMapper);
     }
 
     @Test
@@ -159,5 +161,36 @@ class HistoryDataServiceTest {
         
         // Then
         assertThat(barExists).isFalse();
+    }
+    
+    @Test
+    void truncateTablesIfNeeded_shouldTruncateOnFirstCall() {
+        // Reset the flag to simulate fresh state
+        historyDataService.resetTruncationFlag();
+        
+        // First call should truncate
+        historyDataService.truncateTablesIfNeeded();
+        
+        // Verify truncation was called
+        verify(barRepository, times(1)).truncateTable();
+        verify(marketDataRepository, times(1)).truncateTable();
+        verify(strategyStockMappingRepository, times(1)).truncateTable();
+    }
+    
+    @Test
+    void truncateTablesIfNeeded_shouldNotTruncateOnSubsequentCalls() {
+        // Reset the flag to simulate fresh state
+        historyDataService.resetTruncationFlag();
+        
+        // First call
+        historyDataService.truncateTablesIfNeeded();
+        
+        // Second call should not truncate again
+        historyDataService.truncateTablesIfNeeded();
+        
+        // Verify truncation was called only once
+        verify(barRepository, times(1)).truncateTable();
+        verify(marketDataRepository, times(1)).truncateTable();
+        verify(strategyStockMappingRepository, times(1)).truncateTable();
     }
 }

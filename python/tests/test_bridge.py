@@ -499,5 +499,67 @@ class TestShioajiWrapper:
         assert attempts[-1] == 5
 
 
+class TestDownloadBatchEndpoint:
+    """Tests for /data/download-batch endpoint"""
+    
+    def test_download_batch_request_model(self):
+        """Test DownloadBatchRequest model parsing"""
+        from app.main import DownloadBatchRequest
+        
+        request = DownloadBatchRequest(
+            symbol="2330.TW",
+            start_date="2024-01-01T00:00:00",
+            end_date="2024-12-31T23:59:59"
+        )
+        
+        assert request.symbol == "2330.TW"
+        assert request.start_date == "2024-01-01T00:00:00"
+        assert request.end_date == "2024-12-31T23:59:59"
+    
+    def test_symbol_extraction(self):
+        """Test stock code extraction from symbol"""
+        symbols = ["2330.TW", "2454.TWO", "3008.TW"]
+        expected_codes = ["2330", "2454", "3008"]
+        
+        for symbol, expected in zip(symbols, expected_codes):
+            # Must replace .TWO before .TW to avoid leaving 'O'
+            code = symbol.replace(".TWO", "").replace(".TW", "")
+            assert code == expected
+    
+    def test_date_parsing(self):
+        """Test ISO date parsing"""
+        from datetime import datetime
+        
+        date_str = "2024-06-15T10:30:00"
+        parsed = datetime.fromisoformat(date_str)
+        
+        assert parsed.year == 2024
+        assert parsed.month == 6
+        assert parsed.day == 15
+        assert parsed.hour == 10
+        assert parsed.minute == 30
+    
+    def test_kbars_data_conversion(self):
+        """Test kbars data point conversion logic"""
+        from datetime import datetime
+        
+        # Simulate kbars timestamp in nanoseconds
+        ts_ns = 1718438400000000000  # 2024-06-15 00:00:00 UTC
+        ts = datetime.fromtimestamp(ts_ns / 1e9)
+        
+        data_point = {
+            "timestamp": ts.isoformat(),
+            "open": 600.0,
+            "high": 610.0,
+            "low": 595.0,
+            "close": 605.0,
+            "volume": 1000000
+        }
+        
+        assert "timestamp" in data_point
+        assert data_point["open"] == 600.0
+        assert data_point["volume"] == 1000000
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

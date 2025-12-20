@@ -1,6 +1,7 @@
 package tw.gc.auto.equity.trader.repositories;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -41,4 +42,11 @@ public interface BarRepository extends JpaRepository<Bar, Long> {
     List<Bar> findBySymbolAndTimeframeAndIsCompleteTrue(String symbol, String timeframe);
     
     boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, String timeframe);
+    
+    /**
+     * Truncate all bar data for clean 10-year backtest ingestion
+     */
+    @Modifying
+    @Query(value = "TRUNCATE TABLE bar RESTART IDENTITY CASCADE", nativeQuery = true)
+    void truncateTable();
 }

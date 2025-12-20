@@ -1,6 +1,7 @@
 package tw.gc.auto.equity.trader.repositories;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -53,4 +54,11 @@ public interface StrategyStockMappingRepository extends JpaRepository<StrategySt
      */
     @Query("SELECT m FROM StrategyStockMapping m WHERE m.sharpeRatio > 1.0 AND ABS(m.maxDrawdownPct) < 10 ORDER BY m.totalReturnPct DESC")
     List<StrategyStockMapping> findSteadyReturnCombinations();
+    
+    /**
+     * Truncate all strategy-stock mappings for clean backtest results
+     */
+    @Modifying
+    @Query(value = "TRUNCATE TABLE strategy_stock_mapping RESTART IDENTITY CASCADE", nativeQuery = true)
+    void truncateTable();
 }
