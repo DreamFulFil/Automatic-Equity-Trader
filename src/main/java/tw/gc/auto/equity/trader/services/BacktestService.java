@@ -671,18 +671,13 @@ public class BacktestService {
     }
     
     /**
-     * Download historical data for a list of stocks
-     * Delegates to HistoryDataService for actual download
+     * Download historical data for a list of stocks concurrently.
+     * Uses Virtual Threads with a global writer for optimal throughput.
      */
     private void downloadHistoricalDataForStocks(List<String> stocks, int years) {
-        for (String symbol : stocks) {
-            try {
-                log.info("📥 Downloading {} years of data for {}", years, symbol);
-                historyDataService.downloadHistoricalData(symbol, years);
-            } catch (Exception e) {
-                log.error("❌ Failed to download data for {}: {}", symbol, e.getMessage());
-            }
-        }
+        log.info("📥 Starting concurrent download for {} stocks ({} years each)", stocks.size(), years);
+        historyDataService.downloadHistoricalDataForMultipleStocks(stocks, years);
+        log.info("✅ Concurrent download complete for {} stocks", stocks.size());
     }
     
     /**
