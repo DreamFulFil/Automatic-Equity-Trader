@@ -42,7 +42,7 @@ management:
         include: health
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: always
 
 trading:
   # Python bridge
