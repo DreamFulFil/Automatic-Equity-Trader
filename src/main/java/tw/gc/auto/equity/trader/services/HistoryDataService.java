@@ -1,8 +1,9 @@
 package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.copy.CopyManager;
+import org.postgresql.core.BaseConnection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,10 @@ import tw.gc.auto.equity.trader.repositories.BarRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
+import javax.sql.DataSource;
 import java.io.IOException;
+import java.io.StringReader;
+import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -28,7 +32,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class HistoryDataService {
 
     private final BarRepository barRepository;
@@ -36,12 +39,27 @@ public class HistoryDataService {
     private final StrategyStockMappingRepository strategyStockMappingRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final DataSource dataSource;
     
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
 
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
+    
+    public HistoryDataService(BarRepository barRepository, 
+                              MarketDataRepository marketDataRepository,
+                              StrategyStockMappingRepository strategyStockMappingRepository,
+                              RestTemplate restTemplate, 
+                              ObjectMapper objectMapper,
+                              DataSource dataSource) {
+        this.barRepository = barRepository;
+        this.marketDataRepository = marketDataRepository;
+        this.strategyStockMappingRepository = strategyStockMappingRepository;
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
+        this.dataSource = dataSource;
+    }
 
     /**
      * Download historical data by calling Python API asynchronously
@@ -206,80 +224,123 @@ public class HistoryDataService {
 
     /**
      * Batch insert historical data into Bar and MarketData tables
-     * Uses saveAll for efficient batch processing
+     * Uses PostgreSQL COPY for ultra-fast bulk inserts (10K rows per batch)
      */
     private int batchInsertToDatabase(String symbol, List<HistoricalDataPoint> data) {
+        int batchSize = 10000; // 10K rows per COPY operation
+        int totalInserted = 0;
+        
+        try (Connection conn = dataSource.getConnection()) {
+            BaseConnection pgConn = conn.unwrap(BaseConnection.class);
+            CopyManager copyManager = new CopyManager(pgConn);
+            
+            // Process in batches of 10K
+            for (int i = 0; i < data.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, data.size());
+                List<HistoricalDataPoint> batch = data.subList(i, end);
+                
+                // Build CSV for bar table
+                StringBuilder barCsv = new StringBuilder();
+                StringBuilder marketDataCsv = new StringBuilder();
+                
+                for (HistoricalDataPoint point : batch) {
+                    // Bar CSV: timestamp, symbol, market, timeframe, open, high, low, close, volume, complete
+                    barCsv.append(point.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                          .append("\t").append(symbol)
+                          .append("\t").append("TSE")
+                          .append("\t").append("1day")
+                          .append("\t").append(point.getOpen())
+                          .append("\t").append(point.getHigh())
+                          .append("\t").append(point.getLow())
+                          .append("\t").append(point.getClose())
+                          .append("\t").append(point.getVolume())
+                          .append("\t").append("true")
+                          .append("\n");
+                    
+                    // MarketData CSV: timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume
+                    marketDataCsv.append(point.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                                 .append("\t").append(symbol)
+                                 .append("\t").append("DAY_1")
+                                 .append("\t").append(point.getOpen())
+                                 .append("\t").append(point.getHigh())
+                                 .append("\t").append(point.getLow())
+                                 .append("\t").append(point.getClose())
+                                 .append("\t").append(point.getVolume())
+                                 .append("\n");
+                }
+                
+                // COPY to bar table
+                String barCopyCmd = "COPY bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, complete) FROM STDIN";
+                copyManager.copyIn(barCopyCmd, new StringReader(barCsv.toString()));
+                
+                // COPY to market_data table
+                String marketDataCopyCmd = "COPY market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume) FROM STDIN";
+                copyManager.copyIn(marketDataCopyCmd, new StringReader(marketDataCsv.toString()));
+                
+                totalInserted += batch.size();
+                log.info("📊 COPY batch: {} records for {} (total: {}/{})", 
+                    batch.size(), symbol, totalInserted, data.size());
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ PostgreSQL COPY failed for {}: {}", symbol, e.getMessage());
+            // Fallback to JPA saveAll if COPY fails
+            log.info("🔄 Falling back to JPA batch insert...");
+            return fallbackBatchInsert(symbol, data);
+        }
+        
+        return totalInserted;
+    }
+    
+    /**
+     * Fallback batch insert using JPA saveAll (slower but more compatible)
+     */
+    private int fallbackBatchInsert(String symbol, List<HistoricalDataPoint> data) {
         int inserted = 0;
-        int batchSize = 1000; // Process in batches of 1000 for efficiency
+        int batchSize = 1000;
         
         List<Bar> barsToSave = new ArrayList<>();
         List<MarketData> marketDataToSave = new ArrayList<>();
         
         for (HistoricalDataPoint point : data) {
-            try {
-                // Check if already exists in Bar table (skip duplicates)
-                if (barRepository.existsBySymbolAndTimestampAndTimeframe(
-                        symbol, point.getTimestamp(), "1day")) {
-                    continue;
-                }
-                
-                // Create Bar entity
-                Bar bar = new Bar();
-                bar.setTimestamp(point.getTimestamp());
-                bar.setSymbol(symbol);
-                bar.setMarket("TSE");
-                bar.setTimeframe("1day");
-                bar.setOpen(point.getOpen());
-                bar.setHigh(point.getHigh());
-                bar.setLow(point.getLow());
-                bar.setClose(point.getClose());
-                bar.setVolume(point.getVolume());
-                bar.setComplete(true);
-                barsToSave.add(bar);
-                
-                // Create MarketData entity (check for duplicates)
-                if (!marketDataRepository.existsBySymbolAndTimestampAndTimeframe(
-                        symbol, point.getTimestamp(), MarketData.Timeframe.DAY_1)) {
-                    MarketData marketData = MarketData.builder()
-                            .timestamp(point.getTimestamp())
-                            .symbol(symbol)
-                            .timeframe(MarketData.Timeframe.DAY_1)
-                            .open(point.getOpen())
-                            .high(point.getHigh())
-                            .low(point.getLow())
-                            .close(point.getClose())
-                            .volume(point.getVolume())
-                            .build();
-                    marketDataToSave.add(marketData);
-                }
-                
-                inserted++;
-                
-                // Flush batch when size threshold reached
-                if (barsToSave.size() >= batchSize) {
-                    barRepository.saveAll(barsToSave);
-                    marketDataRepository.saveAll(marketDataToSave);
-                    log.info("📊 Flushed batch: {} bars, {} market_data records for {}", 
-                        barsToSave.size(), marketDataToSave.size(), symbol);
-                    barsToSave.clear();
-                    marketDataToSave.clear();
-                }
-                
-            } catch (Exception e) {
-                log.error("❌ Failed to prepare data point for {}: {}", symbol, e.getMessage());
+            Bar bar = new Bar();
+            bar.setTimestamp(point.getTimestamp());
+            bar.setSymbol(symbol);
+            bar.setMarket("TSE");
+            bar.setTimeframe("1day");
+            bar.setOpen(point.getOpen());
+            bar.setHigh(point.getHigh());
+            bar.setLow(point.getLow());
+            bar.setClose(point.getClose());
+            bar.setVolume(point.getVolume());
+            bar.setComplete(true);
+            barsToSave.add(bar);
+            
+            MarketData marketData = MarketData.builder()
+                    .timestamp(point.getTimestamp())
+                    .symbol(symbol)
+                    .timeframe(MarketData.Timeframe.DAY_1)
+                    .open(point.getOpen())
+                    .high(point.getHigh())
+                    .low(point.getLow())
+                    .close(point.getClose())
+                    .volume(point.getVolume())
+                    .build();
+            marketDataToSave.add(marketData);
+            
+            inserted++;
+            
+            if (barsToSave.size() >= batchSize) {
+                barRepository.saveAll(barsToSave);
+                marketDataRepository.saveAll(marketDataToSave);
+                barsToSave.clear();
+                marketDataToSave.clear();
             }
         }
         
-        // Save remaining records
         if (!barsToSave.isEmpty()) {
-            try {
-                barRepository.saveAll(barsToSave);
-                marketDataRepository.saveAll(marketDataToSave);
-                log.info("📊 Final flush: {} bars, {} market_data records for {}", 
-                    barsToSave.size(), marketDataToSave.size(), symbol);
-            } catch (Exception e) {
-                log.error("❌ Failed to save final batch for {}: {}", symbol, e.getMessage());
-            }
+            barRepository.saveAll(barsToSave);
+            marketDataRepository.saveAll(marketDataToSave);
         }
         
         return inserted;
