@@ -36,38 +36,94 @@
 1. **Mandatory Verification:**
    - During development, always run only unit tests: `./run-tests.sh --unit <jasypt-password>`
    - Before any commit or push, you must run the full test suite: `./run-tests.sh <jasypt-password>` and all tests must pass. **This is the primary and only test entry point; it executes the full suite (unit, integration, and e2e). A successful exit from this script is the absolute requirement for completion.**
+
 2. Wait for all tests within the script to finish. If any part fails, you must fix the code and restart the verification.
-3. **Semantic Versioning (Automatic):**
-   - After tests pass, update the `VERSION` file according to the commit type:
-     - **Minor bump (+0.1.0):** `feat:`, `perf:`, `refactor:` commits
-     - **Patch bump (+0.0.1):** `fix:`, `chore:`, `docs:`, `ci:`, `test:` commits
-   - Version must remain in `0.x.y` range (never reach 1.0.0)
-   - Example: If current VERSION is `0.79.0` and commit is `feat: add new feature`, update to `0.80.0`
-4. **Git Tag Creation (Minor versions only):**
-   - If the bump is a minor version (feat, perf, refactor), create an annotated git tag:
-     ```bash
-     git tag -a "v0.X.0" -m "Release v0.X.0"
-     ```
-   - Patch versions do NOT get tags (only tracked in VERSION file)
-5. **GitHub Release Creation (Minor versions only):**
-   - For minor version bumps, create a GitHub release:
-     ```bash
-     # Generate release body from commit message (no hashes, clean markdown)
-     # Use GitHub API or gh CLI
-     gh release create "v0.X.0" --title "v0.X.0" --notes "## <Type>\n\n- <commit message>"
-     ```
-   - Release body format:
-     ```markdown
-     ## Features (or Performance/Refactoring)
-     
-     - <commit description>
-     ```
+
+3. **VERSION File Management (MANDATORY - https://semver.org/):**
+   
+   **Step 3a - Read current version:**
+   ```bash
+   CURRENT_VERSION=$(cat VERSION)  # e.g., "0.79.0"
+   ```
+   
+   **Step 3b - Calculate new version based on commit type:**
+   - **Minor bump (+0.1.0):** For `feat:`, `perf:`, `refactor:` commits
+     - Example: `0.79.0` → `0.80.0` (reset patch to 0)
+   - **Patch bump (+0.0.1):** For `fix:`, `chore:`, `docs:`, `ci:`, `test:` commits
+     - Example: `0.79.0` → `0.79.1`
+   - **Version cap:** NEVER reach 1.0.0 (stay in 0.x.y range)
+   
+   **Step 3c - Update VERSION file:**
+   ```bash
+   echo "0.80.0" > VERSION
+   ```
+
+4. **Git Tag Creation (Minor versions ONLY):**
+   
+   **IF** commit type is `feat:`, `perf:`, or `refactor:` (minor bump):
+   ```bash
+   NEW_VERSION=$(cat VERSION)  # e.g., "0.80.0"
+   git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+   ```
+   
+   **ELSE** (patch bump): Skip tag creation
+
+5. **GitHub Release Creation (Minor versions ONLY):**
+   
+   **IF** commit type is `feat:`, `perf:`, or `refactor:` AND tag was created:
+   
+   **Option A - Using gh CLI (preferred):**
+   ```bash
+   # Extract commit message without type prefix
+   COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/^[^:]*: //')
+   
+   # Determine section header
+   case "$TYPE" in
+     feat) SECTION="Features" ;;
+     perf) SECTION="Performance" ;;
+     refactor) SECTION="Refactoring" ;;
+   esac
+   
+   # Create release
+   gh release create "v${NEW_VERSION}" \
+     --title "v${NEW_VERSION}" \
+     --notes "## ${SECTION}\n\n- ${COMMIT_MSG}"
+   ```
+   
+   **Option B - Using curl:**
+   ```bash
+   curl -X POST \
+     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+     -H "Accept: application/vnd.github+json" \
+     -d "{\"tag_name\":\"v${NEW_VERSION}\",\"name\":\"v${NEW_VERSION}\",\"body\":\"## ${SECTION}\\n\\n- ${COMMIT_MSG}\"}" \
+     https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases
+   ```
+   
+   **ELSE** (patch bump): Skip GitHub release creation
+
 6. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
-7. **Commit & Push:**
-   - `git add .` (includes VERSION file)
-   - `git commit` with a clear, descriptive Conventional Commits message
-   - `git push origin <branch>`
-   - `git push origin --tags` (if tag was created)
+
+7. **Commit & Push (with VERSION file):**
+   ```bash
+   git add VERSION <other-changed-files>
+   git commit -m "feat: your commit message"  # Use correct Conventional Commits type
+   git push origin main
+   
+   # If tag was created (minor version only):
+   git push origin --tags
+   ```
+
+**Quick Reference - Version Bump Decision Tree:**
+```
+Commit type?
+├─ feat/perf/refactor → Minor bump (0.79.0 → 0.80.0) → CREATE TAG → CREATE RELEASE
+└─ fix/chore/docs/ci/test → Patch bump (0.79.0 → 0.79.1) → NO TAG → NO RELEASE
+```
+
+**Helper Script (Optional):**
+```bash
+./scripts/bump-version.sh <commit-type>  # Automates steps 3-5
+```
 
 **Test Protection Policy**
 
