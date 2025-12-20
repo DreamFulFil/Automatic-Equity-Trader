@@ -30,12 +30,18 @@
 
 **Completion workflow (must be followed):**
 
-1. **Mandatory Verification:** Run `./run-tests.sh` using the runtime-provided secret. **This is the primary and only test entry point; it executes the full suite (unit, integration, and e2e). A successful exit from this script is the absolute requirement for completion.**
+1. **Mandatory Verification:**
+   - During development, always run only unit tests: `./run-tests.sh --unit <jasypt-password>`
+   - Before any commit or push, you must run the full test suite: `./run-tests.sh <jasypt-password>` and all tests must pass. **This is the primary and only test entry point; it executes the full suite (unit, integration, and e2e). A successful exit from this script is the absolute requirement for completion.**
 2. Wait for all tests within the script to finish. If any part fails, you must fix the code and restart the verification.
 3. **Final Documentation:** If successful, update `README.MD` concisely. Do not add new files to `docs/`.
 4. `git add .`
 5. `git commit` with a clear, descriptive message.
 6. `git push` to the current branch.
+
+**Test execution policy:**
+* During development, always run only unit tests: `./run-tests.sh --unit <jasypt-password>`
+* The full test suite (`./run-tests.sh <jasypt-password>`) must be run and pass before any commit or push.
 
 **Claude Model Restriction:**
 * If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.
