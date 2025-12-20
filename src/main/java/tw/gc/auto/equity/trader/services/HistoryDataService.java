@@ -206,19 +206,24 @@ public class HistoryDataService {
 
     /**
      * Batch insert historical data into Bar and MarketData tables
+     * Uses saveAll for efficient batch processing
      */
     private int batchInsertToDatabase(String symbol, List<HistoricalDataPoint> data) {
         int inserted = 0;
+        int batchSize = 1000; // Process in batches of 1000 for efficiency
+        
+        List<Bar> barsToSave = new ArrayList<>();
+        List<MarketData> marketDataToSave = new ArrayList<>();
         
         for (HistoricalDataPoint point : data) {
             try {
-                // Check if already exists in Bar table
+                // Check if already exists in Bar table (skip duplicates)
                 if (barRepository.existsBySymbolAndTimestampAndTimeframe(
                         symbol, point.getTimestamp(), "1day")) {
-                    continue; // Skip duplicates
+                    continue;
                 }
                 
-                // Insert into Bar table
+                // Create Bar entity
                 Bar bar = new Bar();
                 bar.setTimestamp(point.getTimestamp());
                 bar.setSymbol(symbol);
@@ -230,12 +235,11 @@ public class HistoryDataService {
                 bar.setClose(point.getClose());
                 bar.setVolume(point.getVolume());
                 bar.setComplete(true);
-                barRepository.save(bar);
+                barsToSave.add(bar);
                 
-                // Check if already exists in MarketData table
+                // Create MarketData entity (check for duplicates)
                 if (!marketDataRepository.existsBySymbolAndTimestampAndTimeframe(
                         symbol, point.getTimestamp(), MarketData.Timeframe.DAY_1)) {
-                    // Insert into MarketData table
                     MarketData marketData = MarketData.builder()
                             .timestamp(point.getTimestamp())
                             .symbol(symbol)
@@ -246,13 +250,35 @@ public class HistoryDataService {
                             .close(point.getClose())
                             .volume(point.getVolume())
                             .build();
-                    marketDataRepository.save(marketData);
+                    marketDataToSave.add(marketData);
                 }
                 
                 inserted++;
                 
+                // Flush batch when size threshold reached
+                if (barsToSave.size() >= batchSize) {
+                    barRepository.saveAll(barsToSave);
+                    marketDataRepository.saveAll(marketDataToSave);
+                    log.info("📊 Flushed batch: {} bars, {} market_data records for {}", 
+                        barsToSave.size(), marketDataToSave.size(), symbol);
+                    barsToSave.clear();
+                    marketDataToSave.clear();
+                }
+                
             } catch (Exception e) {
-                log.error("❌ Failed to insert data point for {}: {}", symbol, e.getMessage());
+                log.error("❌ Failed to prepare data point for {}: {}", symbol, e.getMessage());
+            }
+        }
+        
+        // Save remaining records
+        if (!barsToSave.isEmpty()) {
+            try {
+                barRepository.saveAll(barsToSave);
+                marketDataRepository.saveAll(marketDataToSave);
+                log.info("📊 Final flush: {} bars, {} market_data records for {}", 
+                    barsToSave.size(), marketDataToSave.size(), symbol);
+            } catch (Exception e) {
+                log.error("❌ Failed to save final batch for {}: {}", symbol, e.getMessage());
             }
         }
         
