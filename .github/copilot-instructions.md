@@ -11,6 +11,11 @@ Focus on correctness and completion over explanation. Avoid narrating internal r
 * **Documentation Integrity:** Do not generate or modify files in the `docs/` directory unless explicitly instructed by the user. All docs must be in proper subdirectories (usage/, reference/, development/), NOT directly under docs/.
 * **Markdown Restriction:** Do not generate arbitrary markdown files. The only permitted markdown edits are to `README.MD` during the completion workflow.
 * **Telegram Message Formatting:** NEVER use `\n` escape sequences in Telegram messages. Use actual newlines or format strings properly. Users see literal `\n` which is unacceptable.
+* **Commit Message Format:** Follow Conventional Commits specification:
+  - Format: `<type>: <description>`
+  - Types: `feat` (new feature), `fix` (bug fix), `chore` (maintenance), `refactor` (code restructure), `docs` (documentation), `test` (testing), `ci` (CI/CD), `perf` (performance)
+  - Example: `feat: add dynamic stock selection`, `fix: resolve NULL stock names in Telegram`
+  - Keep descriptions concise and imperative mood (e.g., "add" not "added")
 * PostgreSQL is running in Docker. If database inspection is needed, write a temporary Python script under `/tmp`, or use `docker exec`.
 * All code must compile, all existing tests must pass, and all new code must be covered by tests.
 * Never remove tests to make builds pass.
