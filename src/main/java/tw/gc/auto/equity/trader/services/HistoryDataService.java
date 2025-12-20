@@ -1,17 +1,13 @@
 package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import de.bytefish.pgbulkinsert.PgBulkInsert;
 import lombok.extern.slf4j.Slf4j;
-import org.postgresql.PGConnection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.bulk.BarBulkInsertMapping;
-import tw.gc.auto.equity.trader.bulk.MarketDataBulkInsertMapping;
 import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
@@ -20,11 +16,9 @@ import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,9 +47,9 @@ public class HistoryDataService {
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
     
-    // Single-writer queue configuration
-    private static final int QUEUE_CAPACITY = 50_000;
-    private static final int BULK_INSERT_BATCH_SIZE = 10_000;
+    // Single-writer queue configuration - reduced sizes to prevent blocking
+    private static final int QUEUE_CAPACITY = 5_000;
+    private static final int BULK_INSERT_BATCH_SIZE = 1_000;
 
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
@@ -270,37 +264,16 @@ public class HistoryDataService {
     }
     
     /**
-     * Flush batch using PgBulkInsert (primary) with JdbcTemplate fallback.
-     * JPA saveAll is prohibited for bulk operations due to overhead.
+     * Flush batch using JdbcTemplate batch insert.
+     * PgBulkInsert disabled due to connection blocking issues.
      */
     private int flushBatch(List<Bar> bars, List<MarketData> marketDataList) {
-        try {
-            return pgBulkInsert(bars, marketDataList);
-        } catch (Exception e) {
-            log.warn("⚠️ PgBulkInsert failed, falling back to JdbcTemplate batch: {}", e.getMessage());
-            return jdbcBatchInsert(bars, marketDataList);
-        }
+        return jdbcBatchInsert(bars, marketDataList);
     }
     
     /**
-     * Primary strategy: PgBulkInsert using PostgreSQL COPY protocol
-     */
-    private int pgBulkInsert(List<Bar> bars, List<MarketData> marketDataList) throws Exception {
-        PgBulkInsert<Bar> barBulkInsert = new PgBulkInsert<>(new BarBulkInsertMapping());
-        PgBulkInsert<MarketData> marketDataBulkInsert = new PgBulkInsert<>(new MarketDataBulkInsertMapping());
-        
-        try (Connection conn = dataSource.getConnection()) {
-            PGConnection pgConnection = conn.unwrap(PGConnection.class);
-            
-            barBulkInsert.saveAll(pgConnection, bars.stream());
-            marketDataBulkInsert.saveAll(pgConnection, marketDataList.stream());
-            
-            return bars.size();
-        }
-    }
-    
-    /**
-     * Fallback strategy: JdbcTemplate batch insert
+     * JdbcTemplate batch insert - primary and only strategy.
+     * PgBulkInsert disabled due to blocking/deadlock issues with connection pool.
      */
     private int jdbcBatchInsert(List<Bar> bars, List<MarketData> marketDataList) {
         String barSql = "INSERT INTO bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, is_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
