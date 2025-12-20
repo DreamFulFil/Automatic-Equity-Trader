@@ -106,19 +106,53 @@ pip install -r python/requirements.txt
 
 ### GraalVM Native Image (Optional)
 
-For sub-second startup and reduced memory footprint:
+For production deployments requiring sub-second startup times and minimal memory footprint:
 
+**Prerequisites:**
 ```bash
-# Build native executable
-./run-tests.sh --native YOUR_JASYPT_PASSWORD
+# Install GraalVM 21 with native-image support
+./scripts/setup/install-graalvm.sh
 
-# Run native binary
-./target/auto-equity-trader
+# Verify installation
+java -version        # Should show "GraalVM"
+native-image --version
 ```
 
-**Performance:**
-- Startup: 0.1s (native) vs 3s (JVM)
-- Memory: 50MB (native) vs 200MB (JVM)
+**Build Native Executable:**
+```bash
+# Automated build (runs tests + builds native image)
+./scripts/build-native.sh YOUR_JASYPT_PASSWORD
+
+# Manual workflow
+./run-tests.sh --unit YOUR_JASYPT_PASSWORD      # Verify tests pass
+./mvnw clean -Pnative native:compile -DskipTests  # Build native (5-10 min)
+
+# Validate native image
+./mvnw -PnativeTest test  # Optional: Test closed-world assumption
+```
+
+**Run Native Binary:**
+```bash
+# Native binary is prioritized automatically
+./start-auto-trader.fish YOUR_JASYPT_PASSWORD
+
+# Or run directly
+./target/auto-equity-trader --jasypt.encryptor.password=YOUR_PASSWORD
+```
+
+**Performance Comparison:**
+| Metric | Native (AOT) | JVM |
+|--------|-------------|-----|
+| Startup Time | 200-500ms | 3-5s |
+| Memory (RSS) | 150-300MB | 500MB-1GB |
+| Binary Size | ~100MB | 56MB JAR + JVM |
+| Build Time | 5-10 min | 20-30s |
+
+**When to Use:**
+- ✅ Production deployments (fast startup, low memory)
+- ✅ CI/CD pipelines (validate AOT compatibility)
+- ✅ Resource-constrained environments
+- ❌ Active development (slow build cycle)
 
 ---
 
