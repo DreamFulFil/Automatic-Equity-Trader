@@ -44,11 +44,19 @@ class HistoryDataServiceTest {
     
     @Mock
     private JdbcTemplate jdbcTemplate;
+    
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private HistoryDataService historyDataService;
 
     @BeforeEach
     void setUp() {
+        // Create a mock TransactionManager with lenient stubbing
+        transactionManager = mock(org.springframework.transaction.PlatformTransactionManager.class);
+        org.springframework.transaction.TransactionStatus mockStatus = 
+            mock(org.springframework.transaction.TransactionStatus.class);
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(mockStatus);
+        
         historyDataService = new HistoryDataService(
             barRepository, 
             marketDataRepository, 
@@ -56,7 +64,8 @@ class HistoryDataServiceTest {
             restTemplate, 
             objectMapper, 
             dataSource,
-            jdbcTemplate
+            jdbcTemplate,
+            transactionManager
         );
     }
 

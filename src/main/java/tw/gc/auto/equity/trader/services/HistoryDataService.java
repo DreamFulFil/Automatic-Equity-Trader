@@ -70,13 +70,16 @@ public class HistoryDataService {
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
     
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    
     public HistoryDataService(BarRepository barRepository, 
                               MarketDataRepository marketDataRepository,
                               StrategyStockMappingRepository strategyStockMappingRepository,
                               RestTemplate restTemplate, 
                               ObjectMapper objectMapper,
                               DataSource dataSource,
-                              JdbcTemplate jdbcTemplate) {
+                              JdbcTemplate jdbcTemplate,
+                              org.springframework.transaction.PlatformTransactionManager transactionManager) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
@@ -84,6 +87,7 @@ public class HistoryDataService {
         this.objectMapper = objectMapper;
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
     }
     
     /**
@@ -707,21 +711,23 @@ public class HistoryDataService {
     /**
      * Truncate historical data tables once per backtest run to ensure clean 10-year data window.
      * Uses atomic flag to ensure truncation happens only once even with parallel stock downloads.
+     * Uses programmatic transaction to ensure proper transaction boundaries.
      */
-    @Transactional
     public void truncateTablesIfNeeded() {
         if (tablesCleared.compareAndSet(false, true)) {
             log.info("🗑️ Truncating historical data tables for clean 10-year backtest window...");
             
             try {
-                barRepository.truncateTable();
-                log.info("   ✅ Truncated bar table");
-                
-                marketDataRepository.truncateTable();
-                log.info("   ✅ Truncated market_data table");
-                
-                strategyStockMappingRepository.truncateTable();
-                log.info("   ✅ Truncated strategy_stock_mapping table");
+                transactionTemplate.executeWithoutResult(status -> {
+                    barRepository.truncateTable();
+                    log.info("   ✅ Truncated bar table");
+                    
+                    marketDataRepository.truncateTable();
+                    log.info("   ✅ Truncated market_data table");
+                    
+                    strategyStockMappingRepository.truncateTable();
+                    log.info("   ✅ Truncated strategy_stock_mapping table");
+                });
                 
                 log.info("🗑️ All historical data tables truncated successfully");
             } catch (Exception e) {
