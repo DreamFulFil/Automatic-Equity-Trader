@@ -1,12 +1,17 @@
 package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import de.bytefish.pgbulkinsert.PgBulkInsert;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.PGConnection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.auto.equity.trader.bulk.BarBulkInsertMapping;
+import tw.gc.auto.equity.trader.bulk.MarketDataBulkInsertMapping;
 import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
@@ -23,9 +28,15 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Phaser;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @Slf4j
@@ -37,9 +48,14 @@ public class HistoryDataService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
     
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
+    
+    // Single-writer queue configuration
+    private static final int QUEUE_CAPACITY = 50_000;
+    private static final int BULK_INSERT_BATCH_SIZE = 10_000;
 
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
@@ -49,19 +65,21 @@ public class HistoryDataService {
                               StrategyStockMappingRepository strategyStockMappingRepository,
                               RestTemplate restTemplate, 
                               ObjectMapper objectMapper,
-                              DataSource dataSource) {
+                              DataSource dataSource,
+                              JdbcTemplate jdbcTemplate) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.dataSource = dataSource;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
      * Download historical data by calling Python API asynchronously
      * Batches requests in 365-day chunks, defaults to 10 years
-     * Uses Phaser for synchronization
+     * Uses single-writer queue pattern for efficient database writes
      * 
      * Performs TRUNCATE on historical data tables before first ingestion to ensure 
      * clean 10-year window for backtesting.
@@ -70,7 +88,6 @@ public class HistoryDataService {
      * @param years Number of years of history (default: 10)
      * @return DownloadResult with statistics
      */
-    @Transactional
     public DownloadResult downloadHistoricalData(String symbol, int years) throws IOException {
         log.info("📥 Downloading {} years of historical data for {} via Python API", years, symbol);
         
@@ -80,26 +97,41 @@ public class HistoryDataService {
         // Calculate date ranges for batching (365 days per batch)
         LocalDateTime endDate = LocalDateTime.now();
         int daysPerBatch = 365;
-        int totalBatches = years; // 10 years = 10 batches of 365 days
+        int totalBatches = years;
         
-        // Phaser for synchronizing all batches
-        Phaser phaser = new Phaser(1); // Register main thread
+        // Single-writer queue pattern: producers (downloaders) → queue → consumer (writer)
+        BlockingQueue<HistoricalDataPoint> dataQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+        AtomicInteger totalDownloaded = new AtomicInteger(0);
+        AtomicInteger totalInserted = new AtomicInteger(0);
+        AtomicBoolean downloadComplete = new AtomicBoolean(false);
+        CountDownLatch writerLatch = new CountDownLatch(1);
         
-        // Store all downloaded data from all batches
-        List<HistoricalDataPoint> allData = new ArrayList<>();
-        Object dataLock = new Object();
+        // Start single writer thread
+        Thread writerThread = new Thread(() -> {
+            try {
+                int inserted = runSingleWriter(symbol, dataQueue, downloadComplete);
+                totalInserted.set(inserted);
+            } catch (Exception e) {
+                log.error("❌ Writer thread failed for {}: {}", symbol, e.getMessage());
+            } finally {
+                writerLatch.countDown();
+            }
+        }, "HistoryDataWriter-" + symbol);
+        writerThread.start();
         
-        // Launch async downloads for each batch
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        // Launch async downloads for each batch using bounded thread pool
+        ExecutorService downloadExecutor = Executors.newFixedThreadPool(
+            Math.min(totalBatches, Runtime.getRuntime().availableProcessors())
+        );
+        
+        List<CompletableFuture<Integer>> futures = new ArrayList<>();
         
         for (int batch = 0; batch < totalBatches; batch++) {
             final int batchNumber = batch;
             final LocalDateTime batchEnd = endDate.minusDays((long) batch * daysPerBatch);
             final LocalDateTime batchStart = batchEnd.minusDays(daysPerBatch);
             
-            phaser.register(); // Register this batch task
-            
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            CompletableFuture<Integer> future = CompletableFuture.supplyAsync(() -> {
                 try {
                     log.info("📥 Batch {}/{}: Downloading {} from {} to {}", 
                         batchNumber + 1, totalBatches, symbol, 
@@ -108,45 +140,203 @@ public class HistoryDataService {
                     
                     List<HistoricalDataPoint> batchData = downloadBatch(symbol, batchStart, batchEnd);
                     
-                    synchronized (dataLock) {
-                        allData.addAll(batchData);
+                    // Push to queue (will block if queue is full - backpressure)
+                    for (HistoricalDataPoint point : batchData) {
+                        dataQueue.put(point);
                     }
                     
                     log.info("✅ Batch {}/{}: Downloaded {} records for {}", 
                         batchNumber + 1, totalBatches, batchData.size(), symbol);
                     
+                    return batchData.size();
+                    
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("❌ Batch {}/{}: Interrupted while queuing data for {}", 
+                        batchNumber + 1, totalBatches, symbol);
+                    return 0;
                 } catch (Exception e) {
                     log.error("❌ Batch {}/{}: Failed to download data for {}: {}", 
                         batchNumber + 1, totalBatches, symbol, e.getMessage());
-                } finally {
-                    phaser.arriveAndDeregister(); // Signal batch completion
+                    return 0;
                 }
-            });
+            }, downloadExecutor);
             
             futures.add(future);
         }
         
-        // Wait for all batches to complete
-        phaser.arriveAndAwaitAdvance(); // Wait for all registered parties
-        
-        // Wait for all futures to ensure completion
+        // Wait for all downloads to complete
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         
-        log.info("✅ All {} batches completed. Total records downloaded: {}", totalBatches, allData.size());
+        // Sum downloaded records
+        for (CompletableFuture<Integer> future : futures) {
+            try {
+                totalDownloaded.addAndGet(future.get());
+            } catch (Exception e) {
+                log.error("❌ Failed to get download count: {}", e.getMessage());
+            }
+        }
         
-        // Sort aggregated data by timestamp (descending order - newest first)
-        allData.sort(Comparator.comparing(HistoricalDataPoint::getTimestamp).reversed());
+        downloadExecutor.shutdown();
         
-        log.info("📊 Sorted {} records by timestamp (descending)", allData.size());
+        // Signal writer that downloads are complete
+        downloadComplete.set(true);
         
-        // Batch insert into database
-        int inserted = batchInsertToDatabase(symbol, allData);
-        int skipped = allData.size() - inserted;
+        // Wait for writer to finish
+        try {
+            if (!writerLatch.await(5, TimeUnit.MINUTES)) {
+                log.warn("⚠️ Writer thread did not complete within timeout for {}", symbol);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("❌ Interrupted waiting for writer thread: {}", e.getMessage());
+        }
         
-        log.info("✅ Downloaded {} records for {} ({} inserted, {} skipped)", 
-            allData.size(), symbol, inserted, skipped);
+        log.info("✅ All {} batches completed. Total: {} downloaded, {} inserted for {}", 
+            totalBatches, totalDownloaded.get(), totalInserted.get(), symbol);
         
-        return new DownloadResult(symbol, allData.size(), inserted, skipped);
+        int skipped = totalDownloaded.get() - totalInserted.get();
+        return new DownloadResult(symbol, totalDownloaded.get(), totalInserted.get(), skipped);
+    }
+    
+    /**
+     * Single writer thread that drains the queue and performs bulk inserts.
+     * This eliminates database contention by centralizing all write operations.
+     */
+    private int runSingleWriter(String symbol, BlockingQueue<HistoricalDataPoint> dataQueue, 
+                                 AtomicBoolean downloadComplete) {
+        List<Bar> barBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
+        List<MarketData> marketDataBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
+        int totalInserted = 0;
+        
+        while (!downloadComplete.get() || !dataQueue.isEmpty()) {
+            try {
+                // Poll with timeout to allow checking downloadComplete flag
+                HistoricalDataPoint point = dataQueue.poll(100, TimeUnit.MILLISECONDS);
+                
+                if (point != null) {
+                    // Convert to entities
+                    Bar bar = Bar.builder()
+                        .timestamp(point.getTimestamp())
+                        .symbol(symbol)
+                        .market("TSE")
+                        .timeframe("1day")
+                        .open(point.getOpen())
+                        .high(point.getHigh())
+                        .low(point.getLow())
+                        .close(point.getClose())
+                        .volume(point.getVolume())
+                        .isComplete(true)
+                        .build();
+                    barBatch.add(bar);
+                    
+                    MarketData marketData = MarketData.builder()
+                        .timestamp(point.getTimestamp())
+                        .symbol(symbol)
+                        .timeframe(MarketData.Timeframe.DAY_1)
+                        .open(point.getOpen())
+                        .high(point.getHigh())
+                        .low(point.getLow())
+                        .close(point.getClose())
+                        .volume(point.getVolume())
+                        .build();
+                    marketDataBatch.add(marketData);
+                    
+                    // Flush when batch is full
+                    if (barBatch.size() >= BULK_INSERT_BATCH_SIZE) {
+                        int inserted = flushBatch(barBatch, marketDataBatch);
+                        totalInserted += inserted;
+                        log.info("📊 Bulk inserted {} records for {} (total: {})", 
+                            inserted, symbol, totalInserted);
+                        barBatch.clear();
+                        marketDataBatch.clear();
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        // Flush remaining records
+        if (!barBatch.isEmpty()) {
+            int inserted = flushBatch(barBatch, marketDataBatch);
+            totalInserted += inserted;
+            log.info("📊 Final bulk insert: {} records for {} (total: {})", 
+                inserted, symbol, totalInserted);
+        }
+        
+        return totalInserted;
+    }
+    
+    /**
+     * Flush batch using PgBulkInsert (primary) with JdbcTemplate fallback.
+     * JPA saveAll is prohibited for bulk operations due to overhead.
+     */
+    private int flushBatch(List<Bar> bars, List<MarketData> marketDataList) {
+        try {
+            return pgBulkInsert(bars, marketDataList);
+        } catch (Exception e) {
+            log.warn("⚠️ PgBulkInsert failed, falling back to JdbcTemplate batch: {}", e.getMessage());
+            return jdbcBatchInsert(bars, marketDataList);
+        }
+    }
+    
+    /**
+     * Primary strategy: PgBulkInsert using PostgreSQL COPY protocol
+     */
+    private int pgBulkInsert(List<Bar> bars, List<MarketData> marketDataList) throws Exception {
+        PgBulkInsert<Bar> barBulkInsert = new PgBulkInsert<>(new BarBulkInsertMapping());
+        PgBulkInsert<MarketData> marketDataBulkInsert = new PgBulkInsert<>(new MarketDataBulkInsertMapping());
+        
+        try (Connection conn = dataSource.getConnection()) {
+            PGConnection pgConnection = conn.unwrap(PGConnection.class);
+            
+            barBulkInsert.saveAll(pgConnection, bars.stream());
+            marketDataBulkInsert.saveAll(pgConnection, marketDataList.stream());
+            
+            return bars.size();
+        }
+    }
+    
+    /**
+     * Fallback strategy: JdbcTemplate batch insert
+     */
+    private int jdbcBatchInsert(List<Bar> bars, List<MarketData> marketDataList) {
+        String barSql = "INSERT INTO bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, is_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String marketDataSql = "INSERT INTO market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume, asset_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        try {
+            jdbcTemplate.batchUpdate(barSql, bars, bars.size(), (ps, bar) -> {
+                ps.setObject(1, bar.getTimestamp());
+                ps.setString(2, bar.getSymbol());
+                ps.setString(3, bar.getMarket());
+                ps.setString(4, bar.getTimeframe());
+                ps.setDouble(5, bar.getOpen());
+                ps.setDouble(6, bar.getHigh());
+                ps.setDouble(7, bar.getLow());
+                ps.setDouble(8, bar.getClose());
+                ps.setLong(9, bar.getVolume());
+                ps.setBoolean(10, bar.isComplete());
+            });
+            
+            jdbcTemplate.batchUpdate(marketDataSql, marketDataList, marketDataList.size(), (ps, md) -> {
+                ps.setObject(1, md.getTimestamp());
+                ps.setString(2, md.getSymbol());
+                ps.setString(3, md.getTimeframe().name());
+                ps.setDouble(4, md.getOpen());
+                ps.setDouble(5, md.getHigh());
+                ps.setDouble(6, md.getLow());
+                ps.setDouble(7, md.getClose());
+                ps.setLong(8, md.getVolume());
+                ps.setString(9, md.getAssetType() != null ? md.getAssetType().name() : "STOCK");
+            });
+            
+            return bars.size();
+        } catch (Exception e) {
+            log.error("❌ JdbcTemplate batch insert failed: {}", e.getMessage());
+            return 0;
+        }
     }
 
     /**
@@ -217,135 +407,6 @@ public class HistoryDataService {
         }
         
         return dataPoints;
-    }
-
-    /**
-     * Batch insert historical data into Bar and MarketData tables
-     * Uses JDBC batch with 10K rows per commit for optimal performance
-     */
-    private int batchInsertToDatabase(String symbol, List<HistoricalDataPoint> data) {
-        int batchSize = 10000;
-        int totalInserted = 0;
-        
-        String barSql = "INSERT INTO bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        String marketDataSql = "INSERT INTO market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            
-            try (var barStmt = conn.prepareStatement(barSql);
-                 var marketDataStmt = conn.prepareStatement(marketDataSql)) {
-                
-                int count = 0;
-                for (HistoricalDataPoint point : data) {
-                    // Bar insert
-                    barStmt.setObject(1, point.getTimestamp());
-                    barStmt.setString(2, symbol);
-                    barStmt.setString(3, "TSE");
-                    barStmt.setString(4, "1day");
-                    barStmt.setDouble(5, point.getOpen());
-                    barStmt.setDouble(6, point.getHigh());
-                    barStmt.setDouble(7, point.getLow());
-                    barStmt.setDouble(8, point.getClose());
-                    barStmt.setLong(9, point.getVolume());
-                    barStmt.setBoolean(10, true);
-                    barStmt.addBatch();
-                    
-                    // MarketData insert
-                    marketDataStmt.setObject(1, point.getTimestamp());
-                    marketDataStmt.setString(2, symbol);
-                    marketDataStmt.setString(3, "DAY_1");
-                    marketDataStmt.setDouble(4, point.getOpen());
-                    marketDataStmt.setDouble(5, point.getHigh());
-                    marketDataStmt.setDouble(6, point.getLow());
-                    marketDataStmt.setDouble(7, point.getClose());
-                    marketDataStmt.setLong(8, point.getVolume());
-                    marketDataStmt.addBatch();
-                    
-                    count++;
-                    totalInserted++;
-                    
-                    // Execute and commit every 10K rows
-                    if (count >= batchSize) {
-                        barStmt.executeBatch();
-                        marketDataStmt.executeBatch();
-                        conn.commit();
-                        log.info("📊 JDBC batch: {} records for {} (total: {}/{})", 
-                            count, symbol, totalInserted, data.size());
-                        count = 0;
-                    }
-                }
-                
-                // Execute remaining
-                if (count > 0) {
-                    barStmt.executeBatch();
-                    marketDataStmt.executeBatch();
-                    conn.commit();
-                    log.info("📊 JDBC final batch: {} records for {} (total: {}/{})", 
-                        count, symbol, totalInserted, data.size());
-                }
-            }
-            
-        } catch (Exception e) {
-            log.error("❌ JDBC batch insert failed for {}: {}", symbol, e.getMessage());
-            return fallbackBatchInsert(symbol, data);
-        }
-        
-        return totalInserted;
-    }
-    
-    /**
-     * Fallback batch insert using JPA saveAll (slowest but most compatible)
-     */
-    private int fallbackBatchInsert(String symbol, List<HistoricalDataPoint> data) {
-        int inserted = 0;
-        int batchSize = 1000;
-        
-        List<Bar> barsToSave = new ArrayList<>();
-        List<MarketData> marketDataToSave = new ArrayList<>();
-        
-        for (HistoricalDataPoint point : data) {
-            Bar bar = new Bar();
-            bar.setTimestamp(point.getTimestamp());
-            bar.setSymbol(symbol);
-            bar.setMarket("TSE");
-            bar.setTimeframe("1day");
-            bar.setOpen(point.getOpen());
-            bar.setHigh(point.getHigh());
-            bar.setLow(point.getLow());
-            bar.setClose(point.getClose());
-            bar.setVolume(point.getVolume());
-            bar.setComplete(true);
-            barsToSave.add(bar);
-            
-            MarketData marketData = MarketData.builder()
-                    .timestamp(point.getTimestamp())
-                    .symbol(symbol)
-                    .timeframe(MarketData.Timeframe.DAY_1)
-                    .open(point.getOpen())
-                    .high(point.getHigh())
-                    .low(point.getLow())
-                    .close(point.getClose())
-                    .volume(point.getVolume())
-                    .build();
-            marketDataToSave.add(marketData);
-            
-            inserted++;
-            
-            if (barsToSave.size() >= batchSize) {
-                barRepository.saveAll(barsToSave);
-                marketDataRepository.saveAll(marketDataToSave);
-                barsToSave.clear();
-                marketDataToSave.clear();
-            }
-        }
-        
-        if (!barsToSave.isEmpty()) {
-            barRepository.saveAll(barsToSave);
-            marketDataRepository.saveAll(marketDataToSave);
-        }
-        
-        return inserted;
     }
 
     @lombok.Data

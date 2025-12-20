@@ -2,21 +2,51 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.8** - GraalVM Native Image Support
+**Version 2.0.9** - High-Performance Data Ingestion
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 [![GraalVM](https://img.shields.io/badge/AOT-GraalVM%20Native-red.svg)](https://graalvm.org/)
-[![Tests](https://img.shields.io/badge/Tests-376%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-524%20passing-brightgreen.svg)](tests/)
 
 Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
 Designed for capital preservation with 80,000 TWD starting capital.
 
-**Production-ready** with 376 passing tests, 99 strategies, AI trade veto, and Taiwan compliance.
+**Production-ready** with 524 passing tests, 99 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.9 (2025-12-20)
+
+### 🚀 High-Performance Data Ingestion (PgBulkInsert + Single-Writer Pattern)
+
+**Bulk Insert Strategy Refactor**
+- ✅ **PgBulkInsert (COPY protocol)** as primary bulk insert strategy
+  - Uses PostgreSQL binary COPY for maximum throughput
+  - New `BarBulkInsertMapping` and `MarketDataBulkInsertMapping` classes
+- ✅ **JdbcTemplate batching** as mandatory fallback (JPA saveAll prohibited for bulk)
+  - Falls back automatically if PgBulkInsert fails
+  - 10K row batches with proper transaction management
+
+**Concurrency & Thread Management Refactor**
+- ✅ **Replaced Phaser with Single-Writer Queue Pattern**
+  - Eliminates database contention during parallel stock downloads
+  - Producer threads (downloaders) → `BlockingQueue` → Single consumer thread (writer)
+- ✅ **Bounded queue with backpressure** (50K capacity)
+  - Prevents OOM during large data ingestion
+  - Downloaders block when queue is full
+- ✅ **Removed `@Transactional` from download method**
+  - Transactions managed explicitly in writer thread
+  - Prevents connection pool exhaustion
+
+**Performance Benefits**
+- 🚀 Eliminates table-level lock contention
+- 💾 Bounded memory usage during ingestion
+- 🔄 Centralized write-path for auditability
 
 ---
 

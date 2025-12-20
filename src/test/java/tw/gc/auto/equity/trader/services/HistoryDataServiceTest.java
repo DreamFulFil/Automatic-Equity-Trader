@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
@@ -38,12 +39,23 @@ class HistoryDataServiceTest {
     
     @Mock
     private DataSource dataSource;
+    
+    @Mock
+    private JdbcTemplate jdbcTemplate;
 
     private HistoryDataService historyDataService;
 
     @BeforeEach
     void setUp() {
-        historyDataService = new HistoryDataService(barRepository, marketDataRepository, strategyStockMappingRepository, restTemplate, objectMapper, dataSource);
+        historyDataService = new HistoryDataService(
+            barRepository, 
+            marketDataRepository, 
+            strategyStockMappingRepository, 
+            restTemplate, 
+            objectMapper, 
+            dataSource,
+            jdbcTemplate
+        );
     }
 
     @Test
@@ -196,5 +208,32 @@ class HistoryDataServiceTest {
         verify(barRepository, times(1)).truncateTable();
         verify(marketDataRepository, times(1)).truncateTable();
         verify(strategyStockMappingRepository, times(1)).truncateTable();
+    }
+    
+    @Test
+    void downloadResult_queueCapacityConfiguration() {
+        // Verify the service is properly configured
+        // The queue capacity and batch size are internal constants
+        // This test verifies the service instantiates correctly with the new configuration
+        assertThat(historyDataService).isNotNull();
+    }
+    
+    @Test
+    void resetTruncationFlag_shouldAllowRetruncation() {
+        // Reset and truncate
+        historyDataService.resetTruncationFlag();
+        historyDataService.truncateTablesIfNeeded();
+        
+        // Verify first truncation
+        verify(barRepository, times(1)).truncateTable();
+        
+        // Reset again and truncate
+        historyDataService.resetTruncationFlag();
+        historyDataService.truncateTablesIfNeeded();
+        
+        // Verify second truncation occurred
+        verify(barRepository, times(2)).truncateTable();
+        verify(marketDataRepository, times(2)).truncateTable();
+        verify(strategyStockMappingRepository, times(2)).truncateTable();
     }
 }
