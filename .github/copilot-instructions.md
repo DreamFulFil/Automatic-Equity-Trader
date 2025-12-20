@@ -13,6 +13,9 @@
 * All code must compile, all existing tests must pass, and all new code must be covered by tests.
 * Never remove tests to make builds pass.
 
+* Use `exec` exclusively for command execution.
+* If standard shell tools or built-in capabilities are insufficient to complete a task, write and execute custom Python scripts in the `/tmp` directory to bridge the gap.
+
 **Java rules:**
 * Always use Lombok `@Data`, `@AllArgsConstructor`, and `@NoArgsConstructor` instead of explicit getters, setters, or self-written constructors.
 * Always check that there are no compile warnings (e.g., unused imports, unused methods, etc.) before committing.
@@ -39,9 +42,13 @@
 5. `git commit` with a clear, descriptive message.
 6. `git push` to the current branch.
 
-**Test execution policy:**
-* During development, always run only unit tests: `./run-tests.sh --unit <jasypt-password>`
-* The full test suite (`./run-tests.sh <jasypt-password>`) must be run and pass before any commit or push.
+**Test Protection Policy**
+
+* **Coverage:** Unit tests are mandatory for every Java or Python code change.
+* **Integration Testing:** Required for interactions with external components. Mocks are permitted if the external interaction is resource-heavy.
+* **Framework Independence:** Integration tests should be Spring-independent where possible. Avoid `@SpringBootTest`; prioritize **Mockito** for faster, decoupled execution.
+* **Web Layer Testing:** For Java Controllers, prefer **Slice Testing** using `MockMvc`. The agent may exercise discretion to choose the most appropriate testing strategy based on complexity.
+* **Deprecation Warning:** Explicitly forbid the use of `@MockBean`. Note that it is deprecated and slated for removal; use standard Mockito annotations instead.
 
 **Claude Model Restriction:**
 * If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.
