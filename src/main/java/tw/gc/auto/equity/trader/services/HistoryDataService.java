@@ -2,8 +2,6 @@ package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.postgresql.copy.CopyManager;
-import org.postgresql.core.BaseConnection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -17,7 +15,6 @@ import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.io.StringReader;
 import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -224,68 +221,73 @@ public class HistoryDataService {
 
     /**
      * Batch insert historical data into Bar and MarketData tables
-     * Uses PostgreSQL COPY for ultra-fast bulk inserts (10K rows per batch)
+     * Uses JDBC batch with 10K rows per commit for optimal performance
      */
     private int batchInsertToDatabase(String symbol, List<HistoricalDataPoint> data) {
-        int batchSize = 10000; // 10K rows per COPY operation
+        int batchSize = 10000;
         int totalInserted = 0;
         
+        String barSql = "INSERT INTO bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String marketDataSql = "INSERT INTO market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        
         try (Connection conn = dataSource.getConnection()) {
-            BaseConnection pgConn = conn.unwrap(BaseConnection.class);
-            CopyManager copyManager = new CopyManager(pgConn);
+            conn.setAutoCommit(false);
             
-            // Process in batches of 10K
-            for (int i = 0; i < data.size(); i += batchSize) {
-                int end = Math.min(i + batchSize, data.size());
-                List<HistoricalDataPoint> batch = data.subList(i, end);
+            try (var barStmt = conn.prepareStatement(barSql);
+                 var marketDataStmt = conn.prepareStatement(marketDataSql)) {
                 
-                // Build CSV for bar table
-                StringBuilder barCsv = new StringBuilder();
-                StringBuilder marketDataCsv = new StringBuilder();
-                
-                for (HistoricalDataPoint point : batch) {
-                    // Bar CSV: timestamp, symbol, market, timeframe, open, high, low, close, volume, complete
-                    barCsv.append(point.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                          .append("\t").append(symbol)
-                          .append("\t").append("TSE")
-                          .append("\t").append("1day")
-                          .append("\t").append(point.getOpen())
-                          .append("\t").append(point.getHigh())
-                          .append("\t").append(point.getLow())
-                          .append("\t").append(point.getClose())
-                          .append("\t").append(point.getVolume())
-                          .append("\t").append("true")
-                          .append("\n");
+                int count = 0;
+                for (HistoricalDataPoint point : data) {
+                    // Bar insert
+                    barStmt.setObject(1, point.getTimestamp());
+                    barStmt.setString(2, symbol);
+                    barStmt.setString(3, "TSE");
+                    barStmt.setString(4, "1day");
+                    barStmt.setDouble(5, point.getOpen());
+                    barStmt.setDouble(6, point.getHigh());
+                    barStmt.setDouble(7, point.getLow());
+                    barStmt.setDouble(8, point.getClose());
+                    barStmt.setLong(9, point.getVolume());
+                    barStmt.setBoolean(10, true);
+                    barStmt.addBatch();
                     
-                    // MarketData CSV: timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume
-                    marketDataCsv.append(point.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                                 .append("\t").append(symbol)
-                                 .append("\t").append("DAY_1")
-                                 .append("\t").append(point.getOpen())
-                                 .append("\t").append(point.getHigh())
-                                 .append("\t").append(point.getLow())
-                                 .append("\t").append(point.getClose())
-                                 .append("\t").append(point.getVolume())
-                                 .append("\n");
+                    // MarketData insert
+                    marketDataStmt.setObject(1, point.getTimestamp());
+                    marketDataStmt.setString(2, symbol);
+                    marketDataStmt.setString(3, "DAY_1");
+                    marketDataStmt.setDouble(4, point.getOpen());
+                    marketDataStmt.setDouble(5, point.getHigh());
+                    marketDataStmt.setDouble(6, point.getLow());
+                    marketDataStmt.setDouble(7, point.getClose());
+                    marketDataStmt.setLong(8, point.getVolume());
+                    marketDataStmt.addBatch();
+                    
+                    count++;
+                    totalInserted++;
+                    
+                    // Execute and commit every 10K rows
+                    if (count >= batchSize) {
+                        barStmt.executeBatch();
+                        marketDataStmt.executeBatch();
+                        conn.commit();
+                        log.info("📊 JDBC batch: {} records for {} (total: {}/{})", 
+                            count, symbol, totalInserted, data.size());
+                        count = 0;
+                    }
                 }
                 
-                // COPY to bar table
-                String barCopyCmd = "COPY bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, complete) FROM STDIN";
-                copyManager.copyIn(barCopyCmd, new StringReader(barCsv.toString()));
-                
-                // COPY to market_data table
-                String marketDataCopyCmd = "COPY market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume) FROM STDIN";
-                copyManager.copyIn(marketDataCopyCmd, new StringReader(marketDataCsv.toString()));
-                
-                totalInserted += batch.size();
-                log.info("📊 COPY batch: {} records for {} (total: {}/{})", 
-                    batch.size(), symbol, totalInserted, data.size());
+                // Execute remaining
+                if (count > 0) {
+                    barStmt.executeBatch();
+                    marketDataStmt.executeBatch();
+                    conn.commit();
+                    log.info("📊 JDBC final batch: {} records for {} (total: {}/{})", 
+                        count, symbol, totalInserted, data.size());
+                }
             }
             
         } catch (Exception e) {
-            log.error("❌ PostgreSQL COPY failed for {}: {}", symbol, e.getMessage());
-            // Fallback to JPA saveAll if COPY fails
-            log.info("🔄 Falling back to JPA batch insert...");
+            log.error("❌ JDBC batch insert failed for {}: {}", symbol, e.getMessage());
             return fallbackBatchInsert(symbol, data);
         }
         
@@ -293,7 +295,7 @@ public class HistoryDataService {
     }
     
     /**
-     * Fallback batch insert using JPA saveAll (slower but more compatible)
+     * Fallback batch insert using JPA saveAll (slowest but most compatible)
      */
     private int fallbackBatchInsert(String symbol, List<HistoricalDataPoint> data) {
         int inserted = 0;
