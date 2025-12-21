@@ -173,7 +173,7 @@ public class BotModeService {
         ensureSetting(BotSettings.TUTOR_INSIGHTS_PER_DAY, "3", "Max insights from TutorBot per day");
         
         // Ollama model (dynamic, not in application.yml)
-        ensureSetting(BotSettings.OLLAMA_MODEL, "phi3:3.8b", "Ollama model for AI agents");
+        ensureSetting(BotSettings.OLLAMA_MODEL, "mistral:7b-instruct-v0.2-q5_K_M", "Ollama model for AI agents");
     }
     
     private void ensureSetting(String key, String defaultValue, String description) {

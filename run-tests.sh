@@ -239,9 +239,9 @@ start_ollama() {
     OLLAMA_PID=$!
     sleep 3
     
-    if ! ollama list | grep -q "phi3:3.8b"; then
+    if ! ollama list | grep -q "mistral:7b-instruct-v0.2-q5_K_M"; then
         echo "Pulling model..."
-        ollama pull phi3:3.8b
+        ollama pull mistral:7b-instruct-v0.2-q5_K_M
     fi
     
     for i in {1..30}; do
@@ -356,7 +356,7 @@ shutdown_gracefully() {
     # Shutdown Ollama
     if [ -n "$OLLAMA_PID" ] && kill -0 $OLLAMA_PID 2>/dev/null; then
         echo "Shutting down Ollama..."
-        ollama stop phi3:3.8b 2>/dev/null || true
+        ollama stop mistral:7b-instruct-v0.2-q5_K_M 2>/dev/null || true
         sleep 10
         if kill -0 $OLLAMA_PID 2>/dev/null; then
             kill -9 $OLLAMA_PID 2>/dev/null || true

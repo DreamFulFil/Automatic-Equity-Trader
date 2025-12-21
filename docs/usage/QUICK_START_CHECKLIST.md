@@ -49,7 +49,7 @@ source ~/.zshrc  # or ~/.bashrc
 ollama serve &
 
 # Pull the AI model (1-2 min download)
-ollama pull phi3:3.8b
+ollama pull mistral:7b-instruct-v0.2-q5_K_M
 
 # Verify
 curl http://localhost:11434/api/tags
@@ -82,7 +82,7 @@ telegram:
   
 ollama:
   url: "http://localhost:11434"
-  model: "phi3:3.8b"
+  model: "mistral:7b-instruct-v0.2-q5_K_M"
 ```
 - [ ] Configuration file updated
 
