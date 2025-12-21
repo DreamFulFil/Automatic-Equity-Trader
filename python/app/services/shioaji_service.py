@@ -288,6 +288,18 @@ class ShioajiWrapper:
                 return {"status": "error", "error": "Not connected"}
 
         try:
+            # Pre-trade balance check for BUY orders
+            if action == "BUY":
+                account_info = self.get_account_info()
+                if account_info.get("status") == "ok":
+                    available = account_info.get("available_margin", 0)
+                    total_cost = quantity * price
+                    if total_cost > available:
+                        max_quantity = int(available // price)
+                        if max_quantity <= 0:
+                            return {"status": "error", "error": "Insufficient funds for purchase"}
+                        print(f"⚠️ Reducing quantity from {quantity} to {max_quantity} due to insufficient funds.")
+                        quantity = max_quantity
             if self.trading_mode == "stock":
                 return self._place_stock_order(action, quantity, price)
             else:
@@ -305,13 +317,18 @@ class ShioajiWrapper:
             if not self.reconnect():
                 return {"status": "error", "error": "Stock account unavailable"}
 
+        # Determine lot type: round lot (1000 shares) or odd lot
+        if quantity % 1000 == 0:
+            order_lot = sj.constant.StockOrderLot.Common  # Round lot
+        else:
+            order_lot = sj.constant.StockOrderLot.Odd    # Odd lot
         order_obj = self.api.Order(
             price=price,
             quantity=quantity,  # Integer for stocks
             action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
             price_type=sj.constant.StockPriceType.LMT,
             order_type=sj.constant.OrderType.ROD,
-            order_lot=sj.constant.StockOrderLot.Odd,  # Regular odd lot trading (no day trading)
+            order_lot=order_lot,
             account=self.api.stock_account
         )
 
