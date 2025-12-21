@@ -2,10 +2,12 @@ package tw.gc.auto.equity.trader.services;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.impl.RSIStrategy;
 
+import javax.sql.DataSource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,9 +32,14 @@ class BacktestServiceTest {
         HistoryDataService mockHistoryService = 
             org.mockito.Mockito.mock(HistoryDataService.class);
         mockSystemStatusService = org.mockito.Mockito.mock(SystemStatusService.class);
+        DataSource mockDataSource = org.mockito.Mockito.mock(DataSource.class);
+        JdbcTemplate mockJdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
         when(mockSystemStatusService.startBacktest()).thenReturn(true);
         
-        backtestService = new BacktestService(mockRepo, mockMarketDataRepo, mockHistoryService, mockSystemStatusService);
+        backtestService = new BacktestService(
+            mockRepo, mockMarketDataRepo, mockHistoryService, mockSystemStatusService,
+            mockDataSource, mockJdbcTemplate
+        );
         strategies = new ArrayList<>();
         strategies.add(new RSIStrategy(14, 70, 30));
 

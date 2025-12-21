@@ -2,15 +2,12 @@ package tw.gc.auto.equity.trader.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tw.gc.auto.equity.trader.entities.StrategyPerformance;
+import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
-import tw.gc.auto.equity.trader.repositories.StrategyPerformanceRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,12 +16,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AutoStrategySelector {
 
-    private final StrategyPerformanceRepository performanceRepository;
+    private static final double MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING = 2_000_000.0;
+
     private final StrategyStockMappingRepository mappingRepository;
     private final ActiveStrategyService activeStrategyService;
     private final ActiveStockService activeStockService;
     private final ShadowModeStockService shadowModeStockService;
     private final TelegramService telegramService;
+    private final TaiwanStockComplianceService complianceService;
     private final tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository activeShadowSelectionRepository;
 
     /**
@@ -206,19 +205,25 @@ public class AutoStrategySelector {
     }
     
     private Optional<StrategyStockMapping> findBestStrategyStockCombo() {
-        // Criteria: High return, low risk, good Sharpe ratio, high win rate
-        // EXCLUDE intraday strategies - Taiwan stocks don't support odd lot day trading
         List<StrategyStockMapping> all = mappingRepository.findAll();
+        
+        // Get current capital to check compliance
+        double currentCapital = complianceService.fetchCurrentCapital();
+        boolean canTradeIntradayOddLot = currentCapital >= MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING;
+        
+        if (!canTradeIntradayOddLot) {
+            log.info("📊 Capital ({} TWD) < 2,000,000 TWD. Excluding intraday/odd-lot strategies.", 
+                String.format("%.0f", currentCapital));
+        }
         
         return all.stream()
             .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
-            .filter(m -> !isIntradayStrategy(m.getStrategyName())) // Exclude intraday/day trading strategies
-            .filter(m -> m.getTotalReturnPct() > 5.0) // At least 5% return
-            .filter(m -> m.getSharpeRatio() > 1.0) // Good risk-adjusted return
-            .filter(m -> m.getWinRatePct() != null && m.getWinRatePct() > 50.0) // Win rate > 50%
-            .filter(m -> m.getMaxDrawdownPct() != null && m.getMaxDrawdownPct() > -20.0) // Max DD < 20%
+            .filter(m -> !isIntradayStrategy(m.getStrategyName()))
+            .filter(m -> m.getTotalReturnPct() > 5.0)
+            .filter(m -> m.getSharpeRatio() > 1.0)
+            .filter(m -> m.getWinRatePct() != null && m.getWinRatePct() > 50.0)
+            .filter(m -> m.getMaxDrawdownPct() != null && m.getMaxDrawdownPct() > -20.0)
             .max((a, b) -> {
-                // Score = return * sharpe * winRate / abs(maxDrawdown)
                 double scoreA = calculateScore(a);
                 double scoreB = calculateScore(b);
                 return Double.compare(scoreA, scoreB);

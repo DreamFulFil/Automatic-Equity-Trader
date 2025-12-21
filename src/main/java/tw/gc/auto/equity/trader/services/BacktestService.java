@@ -1,24 +1,42 @@
 package tw.gc.auto.equity.trader.services;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.HashSet;
-import java.util.Comparator;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+import javax.sql.DataSource;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.postgresql.PGConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import lombok.RequiredArgsConstructor;
+import de.bytefish.pgbulkinsert.PgBulkInsert;
+import de.bytefish.pgbulkinsert.mapping.AbstractMapping;
 import lombok.extern.slf4j.Slf4j;
 import tw.gc.auto.equity.trader.entities.BacktestResult;
 import tw.gc.auto.equity.trader.entities.MarketData;
@@ -27,28 +45,49 @@ import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
-
-import java.util.stream.Collectors;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import tw.gc.auto.equity.trader.strategy.impl.*;
 
 /**
  * Backtest Service
  * Runs strategies against historical data and tracks performance.
  * All results are persisted to database for auditability.
+ * 
+ * High-Performance Architecture:
+ * - Uses Virtual Threads for parallel backtest computation
+ * - Single dedicated writer thread for BacktestResult persistence
+ * - PgBulkInsert (COPY protocol) with JdbcTemplate fallback
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class BacktestService {
+    
+    private static final int BACKTEST_QUEUE_CAPACITY = 5_000;
+    private static final int BULK_INSERT_BATCH_SIZE = 500;
+    private static final int FLUSH_TIMEOUT_MS = 1_000;
+    private static final int MAX_CONCURRENT_BACKTESTS = 8;
     
     private final BacktestResultRepository backtestResultRepository;
     private final MarketDataRepository marketDataRepository;
     private final HistoryDataService historyDataService;
     private final SystemStatusService systemStatusService;
+    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
+    
+    private volatile PgBulkInsert<BacktestResult> backtestResultBulkInsert;
+    
+    public BacktestService(BacktestResultRepository backtestResultRepository,
+                          MarketDataRepository marketDataRepository,
+                          HistoryDataService historyDataService,
+                          SystemStatusService systemStatusService,
+                          DataSource dataSource,
+                          JdbcTemplate jdbcTemplate) {
+        this.backtestResultRepository = backtestResultRepository;
+        this.marketDataRepository = marketDataRepository;
+        this.historyDataService = historyDataService;
+        this.systemStatusService = systemStatusService;
+        this.dataSource = dataSource;
+        this.jdbcTemplate = jdbcTemplate;
+    }
     
     /**
      * Run backtest and persist results to database
@@ -583,13 +622,10 @@ public class BacktestService {
     
     /**
      * Run parallelized backtest across multiple stocks.
-     * Updates SystemStatusService when backtest starts and completes.
-     * 
-     * Flow:
-     * 1. Fetch top 50 stocks using selection criteria
-     * 2. Download historical data for each stock (10 years, batched by 365 days)
-     * 3. Run backtests in parallel for all stocks
-     * 4. Store results in database
+     * High-performance architecture using:
+     * - Virtual Threads for parallel backtest computation
+     * - Single dedicated writer thread for BacktestResult persistence
+     * - PgBulkInsert (COPY protocol) with JdbcTemplate fallback
      * 
      * @param strategies List of strategies to test
      * @param initialCapital Starting capital for backtest
@@ -603,77 +639,370 @@ public class BacktestService {
         systemStatusService.startBacktest();
         
         try {
-            // Step 1: Fetch top 50 stocks
             List<String> stocks = fetchTop50Stocks();
             log.info("📊 Selected {} stocks for backtesting", stocks.size());
             
-            // Step 2: Download historical data for all stocks
-            log.info("📥 Downloading 10 years of historical data for {} stocks...", stocks.size());
             downloadHistoricalDataForStocks(stocks, 10);
             
-            // Step 3: Run backtests in parallel
-            log.info("🧪 Running backtests in parallel...");
-            Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
-            
-            ExecutorService executor = Executors.newFixedThreadPool(
-                Math.min(stocks.size(), Runtime.getRuntime().availableProcessors())
-            );
-            
-            List<CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>>> futures = 
-                new ArrayList<>();
-            
-            LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
-            LocalDateTime now = LocalDateTime.now();
-            
-            for (String symbol : stocks) {
-                CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future = 
-                    CompletableFuture.supplyAsync(() -> {
-                        try {
-                            // Fetch historical data from database
-                            List<MarketData> history = marketDataRepository
-                                .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
-                                    symbol, 
-                                    MarketData.Timeframe.DAY_1, 
-                                    tenYearsAgo, 
-                                    now
-                                );
-                            
-                            if (history.isEmpty()) {
-                                log.warn("⚠️ No historical data found for {}", symbol);
-                                return Map.entry(symbol, new HashMap<String, InMemoryBacktestResult>());
-                            }
-                            
-                            log.info("📊 Running backtest for {} ({} data points)", symbol, history.size());
-                            Map<String, InMemoryBacktestResult> results = runBacktest(strategies, history, initialCapital);
-                            
-                            return Map.entry(symbol, results);
-                            
-                        } catch (Exception e) {
-                            log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage(), e);
-                            return Map.entry(symbol, new HashMap<String, InMemoryBacktestResult>());
-                        }
-                    }, executor);
-                
-                futures.add(future);
-            }
-            
-            // Wait for all backtests to complete
-            for (CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future : futures) {
-                try {
-                    Map.Entry<String, Map<String, InMemoryBacktestResult>> entry = future.get();
-                    allResults.put(entry.getKey(), entry.getValue());
-                } catch (Exception e) {
-                    log.error("❌ Failed to retrieve backtest result: {}", e.getMessage(), e);
-                }
-            }
-            
-            executor.shutdown();
-            
-            log.info("✅ Parallelized backtest completed. {} stocks tested.", allResults.size());
-            
-            return allResults;
+            return executeParallelBacktests(stocks, strategies, initialCapital);
         } finally {
             systemStatusService.completeBacktest();
+        }
+    }
+    
+    /**
+     * Execute parallel backtests with single-writer persistence pattern.
+     */
+    private Map<String, Map<String, InMemoryBacktestResult>> executeParallelBacktests(
+            List<String> stocks, List<IStrategy> strategies, double initialCapital) {
+        
+        log.info("🧪 Running backtests with single-writer persistence pattern...");
+        
+        String backtestRunId = generateBacktestRunId();
+        BlockingQueue<BacktestResult> resultQueue = new ArrayBlockingQueue<>(BACKTEST_QUEUE_CAPACITY);
+        AtomicBoolean allBacktestsComplete = new AtomicBoolean(false);
+        AtomicInteger totalInserted = new AtomicInteger(0);
+        CountDownLatch writerLatch = new CountDownLatch(1);
+        
+        Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
+        
+        // Start single global writer thread for BacktestResult persistence
+        Thread writerThread = Thread.ofPlatform()
+            .name("BacktestResultWriter")
+            .start(() -> {
+                try {
+                    int inserted = runBacktestResultWriter(resultQueue, allBacktestsComplete);
+                    totalInserted.set(inserted);
+                    log.info("✅ BacktestResult writer completed. Total inserted: {}", inserted);
+                } catch (Exception e) {
+                    log.error("❌ BacktestResult writer failed: {}", e.getMessage(), e);
+                } finally {
+                    writerLatch.countDown();
+                }
+            });
+        
+        // Semaphore to limit concurrent backtests
+        Semaphore backtestPermits = new Semaphore(MAX_CONCURRENT_BACKTESTS);
+        LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
+        LocalDateTime now = LocalDateTime.now();
+        
+        // Launch Virtual Threads for parallel backtest computation
+        try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<Void>> futures = stocks.stream()
+                .map(symbol -> CompletableFuture.runAsync(() -> {
+                    try {
+                        backtestPermits.acquire();
+                        try {
+                            Map<String, InMemoryBacktestResult> results = runBacktestForStock(
+                                symbol, strategies, initialCapital, backtestRunId, 
+                                tenYearsAgo, now, resultQueue
+                            );
+                            synchronized (allResults) {
+                                allResults.put(symbol, results);
+                            }
+                        } finally {
+                            backtestPermits.release();
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.error("❌ Backtest interrupted for {}", symbol);
+                    } catch (Exception e) {
+                        log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage());
+                        synchronized (allResults) {
+                            allResults.put(symbol, new HashMap<>());
+                        }
+                    }
+                }, virtualExecutor))
+                .collect(Collectors.toList());
+            
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        }
+        
+        allBacktestsComplete.set(true);
+        
+        // Wait for writer to finish
+        try {
+            if (!writerLatch.await(10, TimeUnit.MINUTES)) {
+                log.warn("⚠️ BacktestResult writer timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        log.info("✅ Parallelized backtest completed. {} stocks tested, {} results persisted.",
+            allResults.size(), totalInserted.get());
+        
+        return allResults;
+    }
+    
+    /**
+     * Run backtest for a single stock and queue results for persistence.
+     */
+    private Map<String, InMemoryBacktestResult> runBacktestForStock(
+            String symbol, List<IStrategy> strategies, double initialCapital,
+            String backtestRunId, LocalDateTime start, LocalDateTime end,
+            BlockingQueue<BacktestResult> resultQueue) {
+        
+        List<MarketData> history = marketDataRepository
+            .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+                symbol, MarketData.Timeframe.DAY_1, start, end);
+        
+        if (history.isEmpty()) {
+            log.warn("⚠️ No historical data found for {}", symbol);
+            return new HashMap<>();
+        }
+        
+        log.debug("📊 Running backtest for {} ({} data points)", symbol, history.size());
+        
+        Map<String, InMemoryBacktestResult> results = runBacktestCompute(strategies, history, initialCapital);
+        
+        // Queue results for persistence (non-blocking)
+        LocalDateTime periodStart = history.get(0).getTimestamp().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDateTime periodEnd = history.get(history.size() - 1).getTimestamp().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        
+        for (Map.Entry<String, InMemoryBacktestResult> entry : results.entrySet()) {
+            BacktestResult entity = buildBacktestResultEntity(
+                backtestRunId, symbol, entry.getKey(), entry.getValue(),
+                periodStart, periodEnd, history.size()
+            );
+            
+            try {
+                if (!resultQueue.offer(entity, 100, TimeUnit.MILLISECONDS)) {
+                    log.warn("⚠️ Result queue full for {}/{}", symbol, entry.getKey());
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * Run backtest computation only (no persistence).
+     */
+    private Map<String, InMemoryBacktestResult> runBacktestCompute(
+            List<IStrategy> strategies, List<MarketData> history, double initialCapital) {
+        
+        Map<String, InMemoryBacktestResult> results = new HashMap<>();
+        String symbol = history.isEmpty() ? "UNKNOWN" : history.get(0).getSymbol();
+        
+        Map<String, Portfolio> portfolios = new HashMap<>();
+        for (IStrategy strategy : strategies) {
+            strategy.reset();
+            
+            Map<String, Integer> pos = new HashMap<>();
+            pos.put(symbol, 0);
+            
+            Portfolio p = Portfolio.builder()
+                .equity(initialCapital)
+                .availableMargin(initialCapital)
+                .positions(pos)
+                .tradingMode("backtest")
+                .tradingQuantity(1)
+                .build();
+            
+            portfolios.put(strategy.getName(), p);
+            results.put(strategy.getName(), new InMemoryBacktestResult(strategy.getName(), initialCapital));
+        }
+        
+        // Simulation loop
+        for (MarketData data : history) {
+            for (IStrategy strategy : strategies) {
+                Portfolio p = portfolios.get(strategy.getName());
+                InMemoryBacktestResult result = results.get(strategy.getName());
+                
+                try {
+                    TradeSignal signal = strategy.execute(p, data);
+                    processSignal(strategy, p, data, signal, result);
+                    result.trackEquity(p.getEquity());
+                } catch (Exception e) {
+                    log.trace("Error in backtest for strategy {}: {}", strategy.getName(), e.getMessage());
+                }
+            }
+        }
+        
+        // Close positions and calculate metrics
+        if (!history.isEmpty()) {
+            MarketData lastData = history.get(history.size() - 1);
+            for (IStrategy strategy : strategies) {
+                Portfolio p = portfolios.get(strategy.getName());
+                InMemoryBacktestResult result = results.get(strategy.getName());
+                closeAllPositions(p, lastData, result);
+                result.setFinalEquity(p.getEquity());
+                result.calculateMetrics();
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * Build BacktestResult entity from in-memory result.
+     */
+    private BacktestResult buildBacktestResultEntity(String backtestRunId, String symbol,
+            String strategyName, InMemoryBacktestResult result,
+            LocalDateTime periodStart, LocalDateTime periodEnd, int dataPoints) {
+        return BacktestResult.builder()
+            .backtestRunId(backtestRunId)
+            .symbol(symbol)
+            .strategyName(strategyName)
+            .initialCapital(result.getInitialCapital())
+            .finalEquity(result.getFinalEquity())
+            .totalReturnPct(result.getTotalReturnPercentage())
+            .sharpeRatio(result.getSharpeRatio())
+            .maxDrawdownPct(result.getMaxDrawdownPercentage())
+            .totalTrades(result.getTotalTrades())
+            .winningTrades(result.getWinningTrades())
+            .winRatePct(result.getWinRate())
+            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            .backtestPeriodStart(periodStart)
+            .backtestPeriodEnd(periodEnd)
+            .dataPoints(dataPoints)
+            .build();
+    }
+    
+    /**
+     * Single writer thread that drains BacktestResult queue and performs bulk inserts.
+     * Uses PgBulkInsert (COPY protocol) with JdbcTemplate fallback.
+     */
+    private int runBacktestResultWriter(BlockingQueue<BacktestResult> queue, AtomicBoolean complete) {
+        List<BacktestResult> batch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
+        int totalInserted = 0;
+        long lastFlush = System.currentTimeMillis();
+        
+        while (!complete.get() || !queue.isEmpty()) {
+            try {
+                BacktestResult result = queue.poll(100, TimeUnit.MILLISECONDS);
+                
+                if (result != null) {
+                    batch.add(result);
+                }
+                
+                boolean batchFull = batch.size() >= BULK_INSERT_BATCH_SIZE;
+                boolean timeoutReached = System.currentTimeMillis() - lastFlush > FLUSH_TIMEOUT_MS;
+                
+                if ((batchFull || (timeoutReached && !batch.isEmpty())) && !batch.isEmpty()) {
+                    int inserted = flushBacktestResults(batch);
+                    totalInserted += inserted;
+                    
+                    if (totalInserted % 1_000 == 0 || inserted > 100) {
+                        log.info("📊 BacktestResult writer: flushed {} (total: {}, queue: {})",
+                            inserted, totalInserted, queue.size());
+                    }
+                    
+                    batch.clear();
+                    lastFlush = System.currentTimeMillis();
+                }
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        // Final flush
+        if (!batch.isEmpty()) {
+            int inserted = flushBacktestResults(batch);
+            totalInserted += inserted;
+            log.info("📊 BacktestResult writer: final flush {} (total: {})", inserted, totalInserted);
+        }
+        
+        return totalInserted;
+    }
+    
+    /**
+     * Flush BacktestResult batch using PgBulkInsert with JdbcTemplate fallback.
+     */
+    private int flushBacktestResults(List<BacktestResult> results) {
+        try {
+            return pgBulkInsertBacktestResults(results);
+        } catch (Exception e) {
+            log.warn("⚠️ PgBulkInsert failed, falling back to JdbcTemplate: {}", e.getMessage());
+            return jdbcBatchInsertBacktestResults(results);
+        }
+    }
+    
+    /**
+     * High-performance PostgreSQL COPY protocol insert for BacktestResult.
+     */
+    private int pgBulkInsertBacktestResults(List<BacktestResult> results) throws SQLException {
+        initBacktestResultBulkInsert();
+        
+        try (Connection conn = dataSource.getConnection()) {
+            PGConnection pgConn = conn.unwrap(PGConnection.class);
+            backtestResultBulkInsert.saveAll(pgConn, results.stream());
+            return results.size();
+        }
+    }
+    
+    private synchronized void initBacktestResultBulkInsert() {
+        if (backtestResultBulkInsert == null) {
+            backtestResultBulkInsert = new PgBulkInsert<>(new BacktestResultBulkInsertMapping());
+        }
+    }
+    
+    /**
+     * JdbcTemplate batch insert fallback for BacktestResult.
+     */
+    private int jdbcBatchInsertBacktestResults(List<BacktestResult> results) {
+        String sql = """
+            INSERT INTO backtest_results (
+                backtest_run_id, symbol, strategy_name, initial_capital, final_equity,
+                total_return_pct, sharpe_ratio, max_drawdown_pct, total_trades, winning_trades,
+                win_rate_pct, avg_profit_per_trade, backtest_period_start, backtest_period_end,
+                data_points, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+        
+        try {
+            jdbcTemplate.batchUpdate(sql, results, results.size(), (ps, r) -> {
+                ps.setString(1, r.getBacktestRunId());
+                ps.setString(2, r.getSymbol());
+                ps.setString(3, r.getStrategyName());
+                ps.setDouble(4, r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
+                ps.setDouble(5, r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
+                ps.setDouble(6, r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
+                ps.setDouble(7, r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
+                ps.setDouble(8, r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
+                ps.setInt(9, r.getTotalTrades() != null ? r.getTotalTrades() : 0);
+                ps.setInt(10, r.getWinningTrades() != null ? r.getWinningTrades() : 0);
+                ps.setDouble(11, r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
+                ps.setDouble(12, r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+                ps.setObject(13, r.getBacktestPeriodStart());
+                ps.setObject(14, r.getBacktestPeriodEnd());
+                ps.setInt(15, r.getDataPoints() != null ? r.getDataPoints() : 0);
+                ps.setObject(16, r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
+            });
+            return results.size();
+        } catch (Exception e) {
+            log.error("❌ JdbcTemplate batch insert failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * PgBulkInsert mapping for BacktestResult entity.
+     */
+    private static class BacktestResultBulkInsertMapping extends AbstractMapping<BacktestResult> {
+        public BacktestResultBulkInsertMapping() {
+            super("public", "backtest_results");
+            mapText("backtest_run_id", BacktestResult::getBacktestRunId);
+            mapText("symbol", BacktestResult::getSymbol);
+            mapText("strategy_name", BacktestResult::getStrategyName);
+            mapDouble("initial_capital", r -> r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
+            mapDouble("final_equity", r -> r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
+            mapDouble("total_return_pct", r -> r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
+            mapDouble("sharpe_ratio", r -> r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
+            mapDouble("max_drawdown_pct", r -> r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
+            mapInteger("total_trades", r -> r.getTotalTrades() != null ? r.getTotalTrades() : 0);
+            mapInteger("winning_trades", r -> r.getWinningTrades() != null ? r.getWinningTrades() : 0);
+            mapDouble("win_rate_pct", r -> r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
+            mapDouble("avg_profit_per_trade", r -> r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+            mapTimeStamp("backtest_period_start", BacktestResult::getBacktestPeriodStart);
+            mapTimeStamp("backtest_period_end", BacktestResult::getBacktestPeriodEnd);
+            mapInteger("data_points", r -> r.getDataPoints() != null ? r.getDataPoints() : 0);
+            mapTimeStamp("created_at", r -> r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
         }
     }
     
