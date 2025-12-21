@@ -51,6 +51,7 @@ public class HistoryDataService {
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
     private final SystemStatusService systemStatusService;
+    private final BacktestService backtestService;
     
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
@@ -81,7 +82,8 @@ public class HistoryDataService {
                               DataSource dataSource,
                               JdbcTemplate jdbcTemplate,
                               org.springframework.transaction.PlatformTransactionManager transactionManager,
-                              SystemStatusService systemStatusService) {
+                              SystemStatusService systemStatusService,
+                              BacktestService backtestService) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
@@ -91,6 +93,7 @@ public class HistoryDataService {
         this.jdbcTemplate = jdbcTemplate;
         this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         this.systemStatusService = systemStatusService;
+        this.backtestService = backtestService;
     }
     
     /**
@@ -632,10 +635,14 @@ public class HistoryDataService {
         try {
             String url = pythonBridgeUrl + "/data/download-batch";
             
+            // Fetch Taiwan stock symbols from BacktestService
+            List<String> stocks = backtestService.fetchTop50Stocks();
+            
             Map<String, Object> request = new HashMap<>();
             request.put("symbol", symbol);
             request.put("start_date", start.format(DateTimeFormatter.ISO_DATE_TIME));
             request.put("end_date", end.format(DateTimeFormatter.ISO_DATE_TIME));
+            request.put("stocks", stocks);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
