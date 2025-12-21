@@ -48,7 +48,7 @@ public class TelegramCommandRegistry {
         register(new BackToSimCommand());
         
         // Configuration commands
-        register(new ChangeShareCommand());
+        register(new ChangeStockSettingsCommand());
         register(new ChangeIncrementCommand());
         
         log.info("✅ Registered {} Telegram commands", commands.size());

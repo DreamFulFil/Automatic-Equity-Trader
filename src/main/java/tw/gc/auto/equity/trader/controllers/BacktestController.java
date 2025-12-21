@@ -20,12 +20,14 @@ public class BacktestController {
 
     /**
      * Run parallelized backtest across top 50 stocks with all strategies.
-     * This is the ONLY endpoint for backtest operations.
+     * 
+     * IMPORTANT: This endpoint does NOT download historical data.
+     * Data must be downloaded separately via /api/history/download.
      * 
      * Flow:
      * 1. Fetch top 50 Taiwan stocks dynamically from web sources
-     * 2. Download 10 years of historical data for each stock (batched by 365 days)
-     * 3. Run backtests in parallel across all stocks and all strategies
+     * 2. Check which stocks have historical data available
+     * 3. Run backtests in parallel across all stocks with data
      * 4. Store results in database
      * 
      * @param initialCapital Starting capital for backtest (default: 80000 TWD)
@@ -37,12 +39,10 @@ public class BacktestController {
         
         log.info("🚀 Running parallelized backtest with initial capital: {} TWD", initialCapital);
         
-        // Get all strategies from service layer
         List<IStrategy> strategies = backtestService.getAllStrategies();
         
-        log.info("📊 Testing {} strategies across top 50 stocks", strategies.size());
+        log.info("📊 Testing {} strategies across stocks with available data", strategies.size());
         
-        // Run parallelized backtest (fetches stocks, downloads data, runs tests)
         return backtestService.runParallelizedBacktest(strategies, initialCapital);
     }
 }
