@@ -12,7 +12,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.StockSettings;
-import tw.gc.auto.equity.trader.entities.RiskSettings;
+import tw.gc.auto.equity.trader.entities.StockRiskSettings;
 import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
 import tw.gc.auto.equity.trader.services.*;
@@ -38,7 +38,7 @@ class TradingEngineTest {
     @Mock private ContractScalingService contractScalingService;
     @Mock private RiskManagementService riskManagementService;
     @Mock private StockSettingsService stockSettingsService;
-    @Mock private RiskSettingsService riskSettingsService;
+    @Mock private StockRiskSettingsService stockRiskSettingsService;
     @Mock private DataLoggingService dataLoggingService;
     @Mock private EndOfDayStatisticsService endOfDayStatisticsService;
     @Mock private DailyStatisticsRepository dailyStatisticsRepository;
@@ -76,16 +76,16 @@ class TradingEngineTest {
         when(stockSettingsService.getSettings()).thenReturn(stockSettings);
         when(stockSettingsService.getBaseStockQuantity(anyDouble())).thenReturn(55);
 
-        RiskSettings riskSettings = RiskSettings.builder()
+        StockRiskSettings stockRiskSettings = StockRiskSettings.builder()
                 .maxSharesPerTrade(1)
                 .dailyLossLimitTwd(4500)
                 .weeklyLossLimitTwd(15000)
                 .maxHoldMinutes(45)
                 .build();
-        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
-        when(riskSettingsService.getDailyLossLimit()).thenReturn(4500);
-        when(riskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
-        when(riskSettingsService.getMaxHoldMinutes()).thenReturn(45);
+        when(stockRiskSettingsService.getSettings()).thenReturn(stockRiskSettings);
+        when(stockRiskSettingsService.getDailyLossLimit()).thenReturn(4500);
+        when(stockRiskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
+        when(stockRiskSettingsService.getMaxHoldMinutes()).thenReturn(45);
 
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
@@ -101,7 +101,7 @@ class TradingEngineTest {
 
         tradingEngine = new TradingEngineService(
             restTemplate, objectMapper, telegramService, tradingProperties, applicationContext,
-            contractScalingService, riskManagementService, stockSettingsService, riskSettingsService,
+            contractScalingService, riskManagementService, stockSettingsService, stockRiskSettingsService,
             dataLoggingService, endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService,
             tradingStateService, telegramCommandHandler, orderExecutionService, positionManager,
             strategyManager, reportingService, activeStockService
