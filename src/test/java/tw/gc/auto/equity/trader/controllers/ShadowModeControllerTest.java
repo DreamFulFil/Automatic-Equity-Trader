@@ -3,7 +3,7 @@ package tw.gc.auto.equity.trader.controllers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import tw.gc.auto.equity.trader.entities.ShadowModeStock;
@@ -24,10 +24,10 @@ class ShadowModeControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private ShadowModeStockService shadowModeStockService;
 
-    @MockBean
+    @MockitoBean
     private StrategyManager strategyManager;
 
     @Test
