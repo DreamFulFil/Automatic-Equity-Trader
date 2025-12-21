@@ -45,6 +45,9 @@ class HistoryDataServiceTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
     
+    @Mock
+    private SystemStatusService systemStatusService;
+    
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private HistoryDataService historyDataService;
@@ -56,6 +59,7 @@ class HistoryDataServiceTest {
         org.springframework.transaction.TransactionStatus mockStatus = 
             mock(org.springframework.transaction.TransactionStatus.class);
         lenient().when(transactionManager.getTransaction(any())).thenReturn(mockStatus);
+        lenient().when(systemStatusService.startHistoryDownload()).thenReturn(true);
         
         historyDataService = new HistoryDataService(
             barRepository, 
@@ -65,7 +69,8 @@ class HistoryDataServiceTest {
             objectMapper, 
             dataSource,
             jdbcTemplate,
-            transactionManager
+            transactionManager,
+            systemStatusService
         );
     }
 
@@ -276,6 +281,38 @@ class HistoryDataServiceTest {
         verify(barRepository, times(1)).truncateTable();
         verify(marketDataRepository, times(1)).truncateTable();
         verify(strategyStockMappingRepository, times(1)).truncateTable();
+    }
+    
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldUpdateSystemStatus() {
+        // Given
+        historyDataService.resetTruncationFlag();
+        List<String> symbols = List.of("2330.TW");
+        
+        // When
+        historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+        
+        // Then - should start and complete status
+        verify(systemStatusService, times(1)).startHistoryDownload();
+        verify(systemStatusService, times(1)).completeHistoryDownload();
+    }
+    
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldCompleteStatusEvenOnError() {
+        // Given
+        historyDataService.resetTruncationFlag();
+        doThrow(new RuntimeException("Test error")).when(barRepository).truncateTable();
+        List<String> symbols = List.of("2330.TW");
+        
+        // When/Then - should still call completeHistoryDownload even on error
+        try {
+            historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+        } catch (Exception e) {
+            // Expected
+        }
+        
+        verify(systemStatusService, times(1)).startHistoryDownload();
+        verify(systemStatusService, times(1)).completeHistoryDownload();
     }
     
     @Test
