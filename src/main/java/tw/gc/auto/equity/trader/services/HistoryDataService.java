@@ -6,6 +6,7 @@ import de.bytefish.pgbulkinsert.mapping.AbstractMapping;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.PGConnection;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -83,7 +84,7 @@ public class HistoryDataService {
                               JdbcTemplate jdbcTemplate,
                               org.springframework.transaction.PlatformTransactionManager transactionManager,
                               SystemStatusService systemStatusService,
-                              BacktestService backtestService) {
+                              @Lazy BacktestService backtestService) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
