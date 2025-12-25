@@ -1,3 +1,6 @@
+---
+agent: agent
+---
 Commit instruction — Conventional Commits (v1.0.0)
 Follow the Conventional Commits spec: https://www.conventionalcommits.org/en/v1.0.0/#specification
 
@@ -45,7 +48,7 @@ REPOSITORY PROCEDURE (follow exactly)
      ```
    - Commit the `VERSION` change and any code changes, then create an annotated tag: `git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"`
    - Push commits and tags to origin
-   - Create GitHub release via `curl` per repo release steps
+   - Create a release if required by running the prompt [release.prompt.md](./release.prompt.md)
 3. For a patch bump: update the `VERSION` file to the new patch version (e.g., 0.79.0 → 0.79.1), commit, push (no tag). Example:
    ```bash
    echo "0.79.1" > VERSION
@@ -58,6 +61,7 @@ REPOSITORY PROCEDURE (follow exactly)
 PRE-COMMIT CHECKLIST
 - Add/modify unit tests covering the change
 - Run `./run-tests.sh --unit <jasypt-password>` and fix failures
+- If all tests pass, push commits and (for minor bumps) annotated tags to origin
 - Ensure no compile warnings or unused imports
 - Update the `VERSION` file contents when required (e.g., `echo "0.80.0" > VERSION`), or run `./scripts/bump-version.sh <minor|patch>`
 
