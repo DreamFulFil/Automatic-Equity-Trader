@@ -135,16 +135,6 @@
 
 6. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
 
-7. **Commit & Push (with VERSION file):**
-   ```bash
-   git add VERSION <other-changed-files>
-   git commit -m "feat: your commit message"  # Use correct Conventional Commits type
-   git push origin main
-   
-   # If tag was created (minor version only):
-   git push origin --tags
-   ```
-
 **Quick Reference - Version Bump Decision Tree:**
 ```
 Commit type?
