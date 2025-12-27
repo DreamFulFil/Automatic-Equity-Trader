@@ -290,7 +290,14 @@ public class TelegramService {
         help.append("/backtosim - Switch to simulation\n\n");
         
         help.append("🔭 PASSIVE MODE:\n");
-        help.append("/observer [on|off] - Control signal polling\n");
+        help.append("/observer [on|off] - Control signal polling\n\n");
+        
+        help.append("📊 DATA OPERATIONS:\n");
+        help.append("/populate-data [days] - Load historical data\n");
+        help.append("/run-backtests - Test all strategies\n");
+        help.append("/select-best-strategy - Auto-select optimal\n");
+        help.append("/full-pipeline [days] - Run complete workflow\n");
+        help.append("/data-status - Show data statistics\n");
         
         sendMessage(help.toString());
     }
