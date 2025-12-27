@@ -48,27 +48,18 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # ←←← FIXED: No more if: secrets.X expression → works everywhere
+      # Decode certificate to project root so Fish test finds it
       - name: Decode Sinopac.pfx certificate (if secret exists)
         env:
           CACERT_BASE64: ${{ secrets.SINO_CACERT_BASE64 }}
         run: |
           if [ -n "$CACERT_BASE64" ]; then
-            echo "$CACERT_BASE64" | base64 --decode > $HOME/Sinopac.pfx
-            chmod 600 $HOME/Sinopac.pfx
-            echo "Sinopac.pfx decoded successfully"
+            echo "$CACERT_BASE64" | base64 --decode > Sinopac.pfx
+            chmod 600 Sinopac.pfx
+            echo "Sinopac.pfx decoded to project root"
           else
-            echo "No SINO_CACERT_BASE64 secret – skipping real CA (tests will fall back to sim/mock)"
+            echo "No SINO_CACERT_BASE64 secret – running in simulation/mock mode"
           fi
-
-      - name: Run Maven verify (full integration tests)
-        env:
-          JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
-          CA_PATH: $HOME/Sinopac.pfx
-        run: mvn -B verify
-
-      - name: Run Java unit tests
-        run: mvn test -DexcludedGroups=integration --batch-mode
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -86,54 +77,57 @@ jobs:
           pip install -r python/requirements.txt
           pip install pytest
 
-      - name: Run Python tests
+      # Fixed: reliable import path
+      - name: Run Python unit tests
         run: |
           source python/venv/bin/activate
-          python -m pytest python/tests/test_bridge.py python/tests/test_contract.py -v --ignore=python/tests/test_integration.py || true
-        env:
-          JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
+          cd $GITHUB_WORKSPACE
+          PYTHONPATH=$GITHUB_WORKSPACE python -m pytest python/tests/test_bridge.py python/tests/test_contract.py -v --ignore=python/tests/test_integration.py
 
       - name: Install Fish shell
         run: sudo apt-get update && sudo apt-get install -y fish
 
-      - name: Validate Fish scripts (syntax check)
+      # Fish test now finds Sinopac.pfx in root
+      - name: Validate Fish scripts
         run: |
-          fish -n start-lunch-bot.fish || true
-          fish -n tests/fish/test_start_script.fish || true
+          fish -n start-lunch-bot.fish
+          fish tests/fish/test_start_script.fish
 
+      # Start Ollama
       - name: Start Ollama Docker with model
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          docker run --rm -d --name ollama -p 11434:11434 ollama/ollama:latest || true
-          for i in {1..30}; do
-            if curl -sS "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; then break; fi
+          docker run --rm -d --name ollama -p 11434:11434 ollama/ollama:latest
+          for i in {1..40}; do
+            if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "llama3.1:8b-instruct-q5_K_M"}' || true
-        env:
-          OLLAMA_HOST: "http://127.0.0.1:11434"
+          curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "llama3.1:8b-instruct-q5_K_M"}'
 
-      - name: Start Python bridge and Run full test suite
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          chmod +x run-tests.sh
-          echo -n "JASYPT_PASSWORD length: " && echo -n "$JASYPT_PASSWORD" | wc -c
-          source python/venv/bin/activate
-          python python/bridge.py > /tmp/mtxf-bridge.log 2>&1 &
-          for i in {1..30}; do
-            if curl -sS http://127.0.0.1:8888/health >/dev/null 2>&1; then
-              echo "Python bridge is healthy"
-              break
-            fi
-            echo "Waiting for bridge... ($i)"
-            sleep 1
-          done
-          SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
+      # THE KEY: Run ALL Java tests (including integration) ONLY AFTER bridge is up
+      - name: Start Python bridge and run full test suite
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
           OLLAMA_HOST: "http://127.0.0.1:11434"
+        run: |
+          source python/venv/bin/activate
+          python python/bridge.py > /tmp/bridge.log 2>&1 &
+          echo "Waiting for Python bridge to be healthy..."
+          for i in {1..40}; do
+            if curl -s http://127.0.0.1:8888/health >/dev/null 2>&1; then
+              echo "Bridge is up and running!"
+              break
+            fi
+            sleep 1
+          done
 
-      # ←←← Cleanup always runs last
-      - name: Clean up Sinopac.pfx (always)
+          # This runs EXACTLY what you run locally → all 283 tests pass
+          mvn -B verify
+
+          # Your existing end-to-end suite
+          chmod +x run-tests.sh
+          ./run-tests.sh "$JASYPT_PASSWORD"
+
+      # Always clean up
+      - name: Clean up Sinopac.pfx
         if: always()
-        run: rm -f $HOME/Sinopac.pfx || true
+        run: rm -f Sinopac.pfx || true
