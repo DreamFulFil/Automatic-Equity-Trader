@@ -276,9 +276,25 @@ def run_watchdog_check():
         send_telegram_alert(f"🚨 Watchdog check failed:\n\n{str(e)}")
 
 
+def is_market_hours():
+    """Check if it's during Taiwan market hours (09:00-14:30 Mon-Fri)"""
+    now = datetime.now()
+    
+    # Skip weekends
+    if now.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    
+    # Market hours: 09:00-14:30
+    market_open = now.replace(hour=9, minute=0, second=0)
+    market_close = now.replace(hour=14, minute=30, second=0)
+    
+    return market_open <= now <= market_close
+
+
 def main():
-    """Main watchdog loop"""
+    """Main watchdog loop - runs only during market hours"""
     print("🐕 Automation Watchdog Starting...")
+    print(f"Mode: Market Hours Only (Mon-Fri 09:00-14:30)")
     print(f"Check interval: {CHECK_INTERVAL_MINUTES} minutes")
     print("Press Ctrl+C to stop\n")
     
@@ -287,9 +303,29 @@ def main():
     
     while True:
         try:
-            run_watchdog_check()
-            print(f"\n😴 Sleeping for {CHECK_INTERVAL_MINUTES} minutes...\n")
-            time.sleep(CHECK_INTERVAL_MINUTES * 60)
+            # Only run during market hours
+            if is_market_hours():
+                run_watchdog_check()
+                print(f"\n😴 Sleeping for {CHECK_INTERVAL_MINUTES} minutes...\n")
+                time.sleep(CHECK_INTERVAL_MINUTES * 60)
+            else:
+                now = datetime.now()
+                # If it's a weekday but outside market hours, wait until next market open
+                if now.weekday() < 5:
+                    next_open = now.replace(hour=9, minute=0, second=0)
+                    if now.hour >= 14:  # After market close, wait until tomorrow
+                        next_open += timedelta(days=1)
+                    wait_seconds = (next_open - now).total_seconds()
+                    print(f"⏸️  Outside market hours. Sleeping until {next_open.strftime('%Y-%m-%d %H:%M')}")
+                    time.sleep(min(wait_seconds, 3600))  # Sleep max 1 hour at a time
+                else:
+                    # Weekend - sleep until Monday 9am
+                    days_until_monday = (7 - now.weekday()) % 7
+                    if days_until_monday == 0:
+                        days_until_monday = 1
+                    next_open = (now + timedelta(days=days_until_monday)).replace(hour=9, minute=0, second=0)
+                    print(f"📅 Weekend. Sleeping until {next_open.strftime('%Y-%m-%d %H:%M')}")
+                    time.sleep(3600)  # Check every hour during weekend
             
         except KeyboardInterrupt:
             print("\n\n🛑 Watchdog stopped by user")
