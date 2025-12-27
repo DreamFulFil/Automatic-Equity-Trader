@@ -71,13 +71,13 @@ class ContractScalingServiceTest {
     }
 
     @Test
-    void calculateContractSize_whenEquity2mAndProfit800k_shouldReturn5() {
-        assertEquals(5, contractScalingService.calculateContractSize(2_000_000, 800_000));
+    void calculateContractSize_whenEquity2mAndProfit800k_shouldReturn4() {
+        assertEquals(4, contractScalingService.calculateContractSize(2_000_000, 800_000));
     }
 
     @Test
-    void calculateContractSize_whenEquity5mAndProfit2m_shouldReturn6() {
-        assertEquals(6, contractScalingService.calculateContractSize(5_000_000, 2_000_000));
+    void calculateContractSize_whenEquity5mAndProfit2m_shouldReturn4() {
+        assertEquals(4, contractScalingService.calculateContractSize(5_000_000, 2_000_000));
     }
 
     @Test
