@@ -107,6 +107,7 @@ These patterns are phrased for humans; they map cleanly to checks in Sonar, Spot
 - Duplicated literals — Extract repeated strings and numbers into named constants or enums to reduce errors and ease changes.
 - Dead code — Remove unused variables and assignments. They confuse readers and can hide bugs.
 - Magic numbers — Replace numeric literals with named constants that explain intent (e.g., MAX_RETRIES).
+- Use imports - Avoid fully qualified class names in code; use imports instead for readability.
 
 ### Common Patterns to Follow
 - Clean Code Principles — Follow principles from "Clean Code" by Robert C. Martin, such as meaningful names, single responsibility, and small functions.

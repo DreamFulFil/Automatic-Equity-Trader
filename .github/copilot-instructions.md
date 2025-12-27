@@ -52,6 +52,8 @@
 
 3. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
 
+**Release workflow note:** For release steps and required release body format, refer to the prompt templates at `.github/prompts/commit.prompt.md` and `.github/prompts/release.prompt.md` and use `./scripts/operational/bump-version.sh` to perform the version bump and tag.
+
 **Test Protection Policy**
 * **Coverage:** Unit tests are mandatory for every Java or Python code change.
 * **Integration Testing:** Required for interactions with external components. Mocks are permitted if the external interaction is resource-heavy.
