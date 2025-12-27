@@ -48,6 +48,9 @@ class HistoryDataServiceTest {
     @Mock
     private SystemStatusService systemStatusService;
     
+    @Mock
+    private BacktestService backtestService;
+    
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private HistoryDataService historyDataService;
@@ -70,7 +73,8 @@ class HistoryDataServiceTest {
             dataSource,
             jdbcTemplate,
             transactionManager,
-            systemStatusService
+            systemStatusService,
+            backtestService
         );
     }
 
