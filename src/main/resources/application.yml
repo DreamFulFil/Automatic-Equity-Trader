@@ -1,6 +1,12 @@
 server:
   port: 8080
 
+# Jasypt encryption configuration
+jasypt:
+  encryptor:
+    algorithm: PBEWithMD5AndDES
+    iv-generator-classname: org.jasypt.iv.NoIvGenerator
+
 trading:
   # Trading window: 11:30 - 13:00 Taipei time
   window:
@@ -19,19 +25,19 @@ trading:
     url: "http://localhost:8888"
     timeout-ms: 3000
 
-# Telegram bot configuration
+# Telegram bot configuration (encrypted with Jasypt)
 telegram:
   bot-token: "ENC(zhPmZqsWyPszF/4uiTNaqVhibSgO7LgXcAvITv3vL2KZt5R9BG+F9c6yOjy8lsjt7VmbKMRHt+w=)"
-  chat-id: ENC(OWDtjgnAjrtdlx+XBMO/neVd30Wc8nX7)
+  chat-id: "ENC(OWDtjgnAjrtdlx+XBMO/neVd30Wc8nX7)"
   enabled: true
 
-# Shioaji credentials (used by Python bridge)
+# Shioaji credentials (encrypted with Jasypt)
 shioaji:
   api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
   secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
   ca-path: "/Users/gc/Downloads/work/stock/mtxf-bot/Sinopac.pfx"
   ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
-  person-id: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
+  person-id: "ENC(fNJEeUmwdyu2PCWL6YfIwbpLYY3XKmmI)"
   # Set to true for paper trading
   simulation: false
 
