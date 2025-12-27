@@ -17,6 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import load_config_with_decryption
 from app.services.shioaji_service import ShioajiWrapper, latest_tick, streaming_quotes, streaming_quotes_lock, order_book, order_book_lock
 from app.services.ollama_service import OllamaService
+from app.services.ai_insights_service import AIInsightsService
 from app.services.earnings_service import scrape_earnings_dates
 from app.strategies.legacy_strategy import get_signal_legacy, notify_exit_order
 
@@ -26,6 +27,7 @@ TRADING_MODE = None
 config = None
 shioaji = None
 ollama_service = None
+ai_insights_service = None
 
 # Lifespan event handler
 @asynccontextmanager
@@ -47,7 +49,7 @@ app = FastAPI(lifespan=lifespan)
 
 def init_trading_mode():
     """Initialize Shioaji and config"""
-    global JASYPT_PASSWORD, TRADING_MODE, config, shioaji, ollama_service
+    global JASYPT_PASSWORD, TRADING_MODE, config, shioaji, ollama_service, ai_insights_service
     
     JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
     if not JASYPT_PASSWORD:
@@ -67,6 +69,7 @@ def init_trading_mode():
     ollama_url = config['ollama']['url']
     ollama_model = config['ollama']['model']
     ollama_service = OllamaService(ollama_url, ollama_model)
+    ai_insights_service = AIInsightsService(ollama_service)
 
 # ============================================================================
 # ERROR HANDLING
@@ -353,10 +356,117 @@ def subscribe_streaming():
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "error": str(e), "timestamp": datetime.now().isoformat()})
 
-# New endpoint for generic Ollama usage (for other strategies)
+# ============================================================================
+# AI INSIGHTS ENDPOINTS - For Beginner-Friendly Analysis
+# ============================================================================
+
 class OllamaRequest(BaseModel):
     prompt: str
     options: dict = None
+
+class StrategyPerformanceRequest(BaseModel):
+    performances: list
+
+class StockPerformanceRequest(BaseModel):
+    stock_data: list
+
+class DailyReportRequest(BaseModel):
+    report_data: dict
+
+class PositionSizingRequest(BaseModel):
+    capital: float
+    stock_price: float
+    risk_level: str
+    equity: float
+
+class RiskMetricsRequest(BaseModel):
+    metrics: dict
+
+class StrategyExplainRequest(BaseModel):
+    current_strategy: str
+    recommended_strategy: str
+    reason: str
+
+@app.post("/ai/analyze-strategies")
+def analyze_strategies(request: StrategyPerformanceRequest):
+    """Analyze strategy performance and provide beginner-friendly insights"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.analyze_strategy_performance(request.performances)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/ai/analyze-stocks")
+def analyze_stocks(request: StockPerformanceRequest):
+    """Analyze stock performance and suggest best stocks to trade"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.analyze_stock_performance(request.stock_data)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/ai/daily-insights")
+def daily_insights(request: DailyReportRequest):
+    """Generate daily performance insights in simple language"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.analyze_daily_report(request.report_data)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/ai/position-sizing")
+def position_sizing_advice(request: PositionSizingRequest):
+    """Get beginner-friendly position sizing advice"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.generate_position_sizing_advice(
+            request.capital, 
+            request.stock_price,
+            request.risk_level,
+            request.equity
+        )
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/ai/risk-analysis")
+def risk_analysis(request: RiskMetricsRequest):
+    """Analyze risk metrics and provide warnings"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.analyze_risk_metrics(request.metrics)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/ai/explain-strategy-switch")
+def explain_strategy_switch(request: StrategyExplainRequest):
+    """Explain strategy switch in beginner-friendly terms"""
+    if not ai_insights_service:
+        return JSONResponse(status_code=503, content={"error": "AI insights service not initialized"})
+    
+    try:
+        result = ai_insights_service.explain_strategy_switch(
+            request.current_strategy,
+            request.recommended_strategy,
+            request.reason
+        )
+        return {"explanation": result}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/ollama/generate")
 def ollama_generate(request: OllamaRequest):

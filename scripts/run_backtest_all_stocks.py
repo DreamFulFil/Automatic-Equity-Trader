@@ -16,33 +16,65 @@ API_BASE_URL = "http://localhost:16350/api/backtest"
 CAPITAL = 80000  # 80k TWD
 OUTPUT_FILE = "/tmp/backtest-result-20251214.md"
 
-# 18 Major Taiwan Stocks
+# 50+ Taiwan Stocks for Comprehensive Analysis
 STOCKS = [
     ("2330.TW", "TSMC"),
     ("2454.TW", "MediaTek"),
-    ("2317.TW", "Hon Hai (Foxconn)"),
+    ("2317.TW", "Hon Hai"),
     ("2303.TW", "UMC"),
-    ("3711.TW", "ASE Technology"),
-    ("2412.TW", "Chunghwa Telecom"),
-    ("2882.TW", "Cathay Financial"),
-    ("2881.TW", "Fubon Financial"),
+    ("3711.TW", "ASE Tech"),
+    ("2412.TW", "Chunghwa Tel"),
+    ("2882.TW", "Cathay Fin"),
+    ("2881.TW", "Fubon Fin"),
     ("1301.TW", "Formosa Plastics"),
     ("2002.TW", "China Steel"),
-    ("2891.TW", "CTBC Financial"),
-    ("2886.TW", "Mega Financial"),
-    ("2308.TW", "Delta Electronics"),
+    ("2891.TW", "CTBC Fin"),
+    ("2886.TW", "Mega Fin"),
+    ("2308.TW", "Delta Elec"),
     ("1303.TW", "Nan Ya Plastics"),
-    ("2382.TW", "Quanta Computer"),
-    ("2357.TW", "Asustek Computer"),
-    ("3008.TW", "Largan Precision"),
-    ("2912.TW", "President Chain Store"),
+    ("2382.TW", "Quanta"),
+    ("2357.TW", "Asustek"),
+    ("3008.TW", "Largan"),
+    ("2912.TW", "President Chain"),
+    ("2880.TW", "Hua Nan Fin"),
+    ("2884.TW", "E.Sun Fin"),
+    ("2892.TW", "First Fin"),
+    ("2395.TW", "Advantech"),
+    ("2379.TW", "Realtek"),
+    ("2377.TW", "MSI"),
+    ("2408.TW", "Nanya Tech"),
+    ("2474.TW", "Catcher"),
+    ("3045.TW", "Taiwan Mobile"),
+    ("3034.TW", "Novatek"),
+    ("2885.TW", "Yuanta Fin"),
+    ("2883.TW", "DBS Taiwan"),
+    ("2609.TW", "Yang Ming"),
+    ("2615.TW", "Wan Hai"),
+    ("2610.TW", "China Airlines"),
+    ("2888.TW", "Shin Kong Fin"),
+    ("2887.TW", "Taishin Fin"),
+    ("1402.TW", "Far Eastern"),
+    ("1216.TW", "Uni-President"),
+    ("1326.TW", "Formosa Chem"),
+    ("2105.TW", "Cheng Shin"),
+    ("2801.TW", "Chang Hwa Bank"),
+    ("2834.TW", "Taiwan Bus Bank"),
+    ("2823.TW", "China Dev Fin"),
+    ("2845.TW", "Far East Bank"),
+    ("3037.TW", "Unimicron"),
+    ("6505.TW", "Taiwan Secom"),
+    ("2327.TW", "Yageo"),
+    ("2301.TW", "Lite-On"),
+    ("2409.TW", "AU Optronics"),
+    ("2324.TW", "Compal"),
+    ("2353.TW", "Acer"),
 ]
 
 def run_backtest_for_stock(symbol: str, stock_name: str) -> Dict:
     """Run backtest for a single stock"""
-    # Use last 90 days of data
+    # Use last 365 days of data (1 year for comprehensive analysis)
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=90)
+    start_date = end_date - timedelta(days=365)
     
     params = {
         'symbol': symbol,

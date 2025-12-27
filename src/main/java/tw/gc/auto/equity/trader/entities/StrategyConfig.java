@@ -100,6 +100,36 @@ public class StrategyConfig {
     private Double dailyLossLimit;
     
     /**
+     * Base number of shares for this strategy (for stock trading)
+     * If null, uses global settings
+     */
+    @Column(name = "base_shares")
+    private Integer baseShares;
+    
+    /**
+     * Share increment per 20k equity growth (for stock trading)
+     * If null, uses global settings
+     */
+    @Column(name = "share_increment")
+    private Integer shareIncrement;
+    
+    /**
+     * Maximum risk percentage per trade (for position sizing)
+     * Default: 10% for risk-averse approach
+     */
+    @Column(name = "max_risk_pct")
+    @Builder.Default
+    private Double maxRiskPct = 10.0;
+    
+    /**
+     * Target monthly return percentage
+     * Default: 5% for steady growth
+     */
+    @Column(name = "target_monthly_return_pct")
+    @Builder.Default
+    private Double targetMonthlyReturnPct = 5.0;
+    
+    /**
      * Weekly loss limit for this strategy
      */
     @Column(name = "weekly_loss_limit")

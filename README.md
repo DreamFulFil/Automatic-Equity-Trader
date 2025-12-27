@@ -19,12 +19,16 @@ Advanced trading platform supporting Taiwan stocks/futures with indefinite lifec
 
 ## 📋 Quick Links
 
-- **[Quick Start](#-quick-start)** - Get running in 5 minutes
-- **[Release Notes](docs/RELEASE-20251213.md)** - Detailed feature list and performance benchmarks
+**👉 NEW USERS START HERE:**
+- **[Beginner's Guide](docs/BEGINNER_GUIDE.md)** - Complete walkthrough for non-traders ⭐
+- **[Automation Features](docs/AUTOMATION_FEATURES.md)** - Set it and forget it guide
+- **[Quick Start](#-quick-start)** - 5-minute installation
+
+**For Advanced Users:**
+- **[Release Notes](docs/RELEASE-20251213.md)** - Detailed feature list
 - **[Testing Guide](docs/tests/TESTING.md)** - Comprehensive test documentation
-- **[System Re-Creation Prompts](docs/prompts/)** - Complete 5-prompt series to rebuild from scratch
-- **[Architecture Q&A](docs/misc/ANSWERS_TO_QUESTIONS.md)** - Stock/strategy independence, capital management, lot types
-- **[Performance Reports](#-performance-reporting)** - Daily and weekly analysis scripts
+- **[Architecture Q&A](docs/misc/guides/ANSWERS_TO_QUESTIONS.md)** - Technical details
+- **[Performance Reports](#-performance-reporting)** - Analysis scripts
 
 ---
 
@@ -81,9 +85,32 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
+## ✨ What's New - December 2024 Update
+
+### 🤖 Beginner-Friendly AI Features
+✅ **AI-Powered Insights** - Ollama explains everything in simple language  
+✅ **Daily AI Reports** - Know exactly how you're doing in 2 minutes  
+✅ **Position Sizing Advice** - AI tells you how many shares to buy safely  
+✅ **Risk Warnings** - Get alerts before problems become serious  
+✅ **Strategy Explanations** - Understand why system makes decisions
+
+### 📊 Enhanced Coverage
+✅ **50+ Taiwan Stocks** - Expanded from 18 to 50+ for diversification  
+✅ **1-Year Backtests** - Extended from 90 to 365 days for reliability  
+✅ **Strategy-Stock Mapping** - Automatic tracking of best combinations  
+✅ **Per-Strategy Settings** - Each strategy has optimized position sizing
+
+### ⚙️ Full Automation
+✅ **Real-Time Capital Management** - Fetches equity from Shioaji API automatically  
+✅ **Smart Position Scaling** - Grows positions safely as your capital increases  
+✅ **Watchdog Service** - Monitors system health 24/7  
+✅ **Emergency Controls** - Telegram commands for instant pause/resume
+
+---
+
 ## ✨ Key Features
 
-### Trading Capabilities
+### Trading Capabilities  
 ✅ **50+ Concurrent Strategies** - Comprehensive library including:
    - **Trend Following**: MA Crossover (4 variants), MACD, Parabolic SAR, Ichimoku Cloud, Supertrend, ADX
    - **Mean Reversion**: Bollinger Bands, RSI (2 variants), Williams %R, CCI, Envelope Channel

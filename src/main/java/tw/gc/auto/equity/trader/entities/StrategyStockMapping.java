@@ -9,26 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * StrategyStockMapping Entity - Tracks optimal strategy-stock combinations.
+ * Strategy-Stock Performance Mapping
  * 
- * <h3>Trading Lifecycle Role:</h3>
- * <ul>
- *   <li><b>Backtesting Results</b>: Stores performance of each strategy-stock combination</li>
- *   <li><b>Auto-Selection</b>: Data source for {@link AutoStrategySelector} to pick best combo</li>
- *   <li><b>Shadow Mode Selection</b>: Top 10 combinations are dynamically selected for shadow trading</li>
- *   <li><b>Risk Assessment</b>: Auto-calculated risk level (LOW/MEDIUM/HIGH) based on metrics</li>
- * </ul>
- * 
- * <h3>Selection Criteria:</h3>
- * <ul>
- *   <li>Total Return > 5%</li>
- *   <li>Sharpe Ratio > 1.0</li>
- *   <li>Win Rate > 50%</li>
- *   <li>Max Drawdown < 20%</li>
- * </ul>
- * 
- * @see AutoStrategySelector for selection logic
- * @see ShadowModeStockService for shadow mode management
+ * Tracks which strategies work best for which stocks.
+ * Helps users understand optimal strategy-stock combinations.
  */
 @Entity
 @Table(name = "strategy_stock_mapping", indexes = {
