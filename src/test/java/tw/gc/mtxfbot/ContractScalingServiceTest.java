@@ -12,7 +12,6 @@ import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
