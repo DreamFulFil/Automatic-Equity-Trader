@@ -2,8 +2,6 @@
 agent: agent
 ---
 Commit instruction — Conventional Commits (v1.0.0)
-
-**Note:** This file is an operational prompt template for maintainers. Before bumping versions, run unit tests and prefer `./scripts/operational/bump-version.sh` to perform the bump.
 Follow the Conventional Commits spec: https://www.conventionalcommits.org/en/v1.0.0/#specification
 
 FORMAT
@@ -46,10 +44,7 @@ REPOSITORY PROCEDURE (follow exactly)
      ```
      or use the helper script to pick the correct new version:
      ```bash
-     # Run bump helper and capture a timestamped log for audit
-     mkdir -p logs
-     LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-     ./scripts/operational/bump-version.sh minor 2>&1 | tee "logs/bump-${LOG_TS}.log"
+     ./scripts/bump-version.sh minor
      ```
    - Commit the `VERSION` change and any code changes, then create an annotated tag: `git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"`
    - Push commits and tags to origin
@@ -60,7 +55,7 @@ REPOSITORY PROCEDURE (follow exactly)
    ```
    Or use the helper script:
    ```bash
-   ./scripts/operational/bump-version.sh patch
+   ./scripts/bump-version.sh patch
    ```
 
 PRE-COMMIT CHECKLIST
@@ -68,19 +63,7 @@ PRE-COMMIT CHECKLIST
 - Run `./run-tests.sh --unit <jasypt-password>` and fix failures
 - If all tests pass, push commits and (for minor bumps) annotated tags to origin
 - Ensure no compile warnings or unused imports
-- Update the `VERSION` file contents when required (e.g., `echo "0.80.0" > VERSION`), or run `./scripts/operational/bump-version.sh <minor|patch>`
-
-Enforcement & local hooks
-- To avoid forgetting VERSION updates, enable the local commit hook which validates commit messages and ensures a `VERSION` update is staged for minor-bump commits:
-  ```bash
-  git config core.hooksPath .githooks
-  chmod +x .githooks/commit-msg
-  ```
-- You can run the validator manually before committing:
-  ```bash
-  ./scripts/operational/validate-commit-and-version.sh <commit-msg-file>
-  ```
-- The validator will instruct you to run `./scripts/operational/bump-version.sh minor` if a VERSION update is required but missing.
+- Update the `VERSION` file contents when required (e.g., `echo "0.80.0" > VERSION`), or run `./scripts/bump-version.sh <minor|patch>`
 
 EXAMPLES
 - feat(selection): add dynamic stock selection algorithm
@@ -91,7 +74,7 @@ EXAMPLES
 
 HELPFUL SCRIPTS & COMMANDS
 - Run full test suite: `./run-tests.sh <jasypt-password>`
-- Bump version helper: `./scripts/operational/bump-version.sh <commit-type>`
+- Bump version helper: `./scripts/bump-version.sh <commit-type>`
 
 NOTES
 - Keep commit messages concise and focused — the summary is the release note title.
