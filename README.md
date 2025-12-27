@@ -37,11 +37,12 @@ This is a **production-ready** trading system that has been battle-tested in Tai
 
 1. **11:15 AM**: Cron launches bot (15 min before trading window)
 2. **11:30 AM**: Trading window opens, bot starts monitoring MTXF price
-3. **Every signal check**: AI scrapes Taiwan financial news (MoneyDJ, UDN) and vetoes trades if major events detected
-4. **Trade Execution**: Places orders via Sinopac Shioaji API when conditions met
-5. **13:00 PM**: Auto-flattens all positions, sends daily summary to Telegram
-6. **13:00 PM**: Java app shuts down Python bridge and Ollama, then exits
-7. **Real-time**: Every order, fill, P&L sent to your Telegram
+3. **Every 30 seconds**: Signal calculation (price/momentum/volume/confidence)
+4. **Every 10 minutes**: News veto check via Ollama Llama 3.1 8B (to avoid false vetoes)
+5. **Trade Execution**: Places orders via Sinopac Shioaji API when conditions met
+6. **13:00 PM**: Auto-flattens all positions, sends daily summary to Telegram
+7. **13:00 PM**: Java app shuts down Python bridge and Ollama, then exits
+8. **Real-time**: Every order, fill, P&L sent to your Telegram
 
 ### Key Features
 

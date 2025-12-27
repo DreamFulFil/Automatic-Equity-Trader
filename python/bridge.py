@@ -200,7 +200,7 @@ def shutdown():
 
 @app.get("/signal")
 def get_signal():
-    """Generate trading signal with strategy + news veto
+    """Generate trading signal with strategy (NO news veto - use /signal/news separately)
     
     UNLIMITED UPSIDE STRATEGY:
     - Clean trend continuation (3/5-min momentum alignment)
@@ -209,10 +209,6 @@ def get_signal():
     - Exit ONLY on: stop-loss OR trend reversal
     - NO profit targets - let winners run!
     """
-    
-    # News veto check (every call for real-time risk)
-    headlines = fetch_news_headlines()
-    news_analysis = call_llama_news_veto(headlines)
     
     price = latest_tick["price"]
     direction = "NEUTRAL"
@@ -238,9 +234,20 @@ def get_signal():
         "direction": direction,
         "confidence": confidence,
         "exit_signal": exit_signal,  # TRUE only on trend reversal
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/signal/news")
+def get_news_veto():
+    """Check news veto via Ollama Llama 3.1 8B - call every 10 minutes only"""
+    headlines = fetch_news_headlines()
+    news_analysis = call_llama_news_veto(headlines)
+    
+    return {
         "news_veto": news_analysis.get("veto", False),
         "news_score": news_analysis.get("score", 0.5),
         "news_reason": news_analysis.get("reason", ""),
+        "headlines_count": len(headlines),
         "timestamp": datetime.now().isoformat()
     }
 
