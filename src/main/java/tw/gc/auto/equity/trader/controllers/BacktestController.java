@@ -17,6 +17,7 @@ import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.services.BacktestService;
 import tw.gc.auto.equity.trader.services.DataOperationsService;
+import tw.gc.auto.equity.trader.services.TaiwanStockNameService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.impl.*;
 
@@ -30,6 +31,7 @@ public class BacktestController {
     private final MarketDataRepository marketDataRepository;
     private final StrategyStockMappingRepository mappingRepository;
     private final DataOperationsService dataOperationsService;
+    private final TaiwanStockNameService stockNameService;
 
     // ========================================================================
     // SINGLE STOCK BACKTEST
@@ -135,6 +137,7 @@ public class BacktestController {
                 
                 // Update mapping
                 mapping.setSymbol(symbol);
+                mapping.setStockName(stockNameService.getStockName(symbol));
                 mapping.setStrategyName(strategyName);
                 mapping.setTotalReturnPct(result.getTotalReturnPercentage());
                 mapping.setSharpeRatio(result.getSharpeRatio());

@@ -19,9 +19,49 @@ Designed for capital preservation with 80,000 TWD starting capital.
 
 ---
 
-## ✨ What's New in v2.0.0 (2025-12-19)
+## ✨ What's New in v2.0.2 (2025-12-19)
 
-### 🎉 Complete System Rebuild
+### 🎯 Stock Name Display Fix
+
+**Critical Fixes**
+- ✅ Fixed NULL stock names in Telegram messages (created TaiwanStockNameService with 50-stock mapping)
+- ✅ Updated BacktestController to populate stock names when saving backtest results
+- ✅ Synchronized stock name mappings between Java and Python services
+- ✅ All 333 Java unit tests passing
+- ✅ 70 Python unit tests passing
+
+### 🏢 Stock Universe Coverage
+- Comprehensive Taiwan stock name mappings for 50 major stocks
+- Technology & Electronics: TSMC, MediaTek, Hon Hai, Delta Electronics, etc.
+- Financial Services: Fubon, Cathay, Mega, CTBC, E.Sun, etc.
+- Petrochemicals & Materials: Formosa Plastics, Nan Ya Plastics, China Steel, etc.
+- Retail & Consumer: Evergreen Marine, Yang Ming, Uni-President, etc.
+
+**New Database Persistence Layer**
+- ✅ **BacktestResult** entity - Stores ~50,000 backtest results (50 stocks × 100 strategies)
+- ✅ **BacktestRanking** entity - Ranked results for strategy selection
+- ✅ **StockUniverse** entity - ~50 selected stocks with selection criteria
+- ✅ **ActiveShadowSelection** entity - 11 rows (1 active + 10 shadow stock+strategy pairs)
+- ✅ All results persisted with full auditability and source attribution (BACKTEST/FRONTTEST/COMBINATION)
+
+**Automatic Startup Initialization**
+- ✅ Checks for persisted backtest data on startup
+- ✅ If data exists: automatically loads rankings and selects 1 active + 10 shadow strategies
+- ✅ If data missing: prompts for manual backtest execution via `/run-backtests` or REST API
+- ✅ **NO hardcoded defaults** - fully data-driven selection
+- ✅ Deterministic first-start behavior
+
+**Enhanced Auto-Selection**
+- ✅ Populates unified Active/Shadow selection table
+- ✅ Exactly 11 entries with proper ranking (1 active, ranks 2-11 shadow)
+- ✅ Full metrics tracked: Sharpe ratio, return %, win rate, max drawdown
+- ✅ Source attribution for explainability
+- ✅ Shadow mode now correctly shows 10 stocks (not 3)
+
+**Improved Logging**
+- ✅ Clear distinction between active and shadow entries
+- ✅ Ranking position explicitly labeled
+- ✅ Reason logged when fewer than 10 shadow entries exist
 
 **REST APIs for Data Operations**
 - Populate historical data: `POST /api/backtest/populate-data`
@@ -30,46 +70,17 @@ Designed for capital preservation with 80,000 TWD starting capital.
 - Full pipeline: `POST /api/backtest/full-pipeline`
 - System status: `GET /api/backtest/data-status`
 
-**Telegram Bot Commands**
-- `/populate-data` - Load 730 days of market data
-- `/run-backtests` - Test all strategies across all stocks
-- `/select-best-strategy` - Auto-select based on Sharpe ratio
-- `/full-pipeline` - Run complete workflow (20-25 minutes)
-- `/data-status` - View system statistics
-
-**100 Trading Strategies**
-- 50+ fully implemented and tested
-- Momentum, value, statistical arbitrage, microstructure
-- All strategies validated and documented
-
 **AI Trade Veto (Ollama)**
-- Every trade analyzed by Llama 3.1 8B
+- Every trade analyzed by Llama 3.1 8B (120s timeout)
 - Veto-by-default paranoid risk manager
 - Configurable via `/risk enable_ai_veto`
 - Full context: P&L, volatility, strategy performance
 
-**Taiwan Market Compliance**
-- Odd-lot trading validation
-- Market hours enforcement
-- Earnings blackout integration
-- Regulatory rule enforcement
-
 **Comprehensive Testing**
-- 333 unit tests (100% passing)
+- 333 unit tests (100% passing after fixes)
 - Integration tests with Testcontainers
 - E2E test scenarios
-- CI/CD with GitHub Actions
-
-**Risk Management**
-- 15 configurable risk parameters
-- Daily/weekly loss limits
-- Position sizing controls
-- Telegram runtime configuration
-
-**🔧 SYSTEM CLEANUP**
-- **No Scheduled Tasks**: All explicit, no silent failures
-- **Earnings on Startup**: @PostConstruct only
-- **Test Fixes**: Updated for new risk parameter names
+- All BacktestResult type references updated
 
 ---
 
