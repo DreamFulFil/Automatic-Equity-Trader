@@ -1,0 +1,22 @@
+name: Validate commits
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run commit validation
+        env:
+          # GITHUB_TOKEN is provided by Actions automatically
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/operational/ci-validate-commit.sh
+          scripts/operational/ci-validate-commit.sh
