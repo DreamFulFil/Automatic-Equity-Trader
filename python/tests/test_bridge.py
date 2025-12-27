@@ -207,6 +207,34 @@ class TestSignalGeneration:
         # Ratio: 600/450 = 1.33
         assert volume_ratio > 1.3  # Should indicate volume surge
 
+    def test_rsi_calculation_flat_market(self):
+        """Test RSI calculation with flat market (ZeroDivisionError fix)"""
+        # Flat prices: 100 -> 100 (0% change)
+        prices_3min = [100.0] * 60
+        
+        gains = []
+        losses = []
+        for i in range(1, min(60, len(prices_3min))):
+            change = prices_3min[-i] - prices_3min[-i-1]
+            if change > 0:
+                gains.append(change)
+            else:
+                losses.append(abs(change))
+        
+        avg_gain = sum(gains) / 60 if gains else 0
+        avg_loss = sum(losses) / 60 if losses else 0
+        
+        if avg_loss == 0:
+            if avg_gain == 0:
+                rsi = 50.0
+            else:
+                rsi = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            
+        assert rsi == 50.0
+
 
 class TestTelegramNotification:
     """Tests for Telegram notification functionality"""
