@@ -37,7 +37,7 @@ class OrderExecutionServiceTest {
     @Mock
     private RiskManagementService riskManagementService;
     @Mock
-    private RiskSettingsService riskSettingsService;
+    private StockRiskSettingsService stockRiskSettingsService;
     @Mock
     private EarningsBlackoutService earningsBlackoutService;
     @Mock
@@ -53,12 +53,12 @@ class OrderExecutionServiceTest {
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         when(earningsBlackoutService.isDateBlackout(any())).thenReturn(false);
-        when(riskSettingsService.isAiVetoEnabled()).thenReturn(false); // Disable AI veto in tests by default
+        when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(false); // Disable AI veto in tests by default
         
         positionManager = new PositionManager();
         orderExecutionService = new OrderExecutionService(
             restTemplate, objectMapper, tradingProperties, telegramService, 
-            dataLoggingService, positionManager, riskManagementService, riskSettingsService,
+            dataLoggingService, positionManager, riskManagementService, stockRiskSettingsService,
             earningsBlackoutService, taiwanComplianceService, llmService
         );
     }

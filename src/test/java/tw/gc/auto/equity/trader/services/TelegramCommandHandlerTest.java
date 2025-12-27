@@ -10,11 +10,11 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
 import tw.gc.auto.equity.trader.services.ContractScalingService;
 import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
 import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 import tw.gc.auto.equity.trader.services.StockSettingsService;
 import tw.gc.auto.equity.trader.services.TelegramService;
-import tw.gc.auto.equity.trader.entities.RiskSettings;
+import tw.gc.auto.equity.trader.entities.StockRiskSettings;
 import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.entities.StockSettings;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
@@ -40,7 +40,7 @@ class TelegramCommandHandlerTest {
     @Mock private LlmService llmService;
     @Mock private OrderExecutionService orderExecutionService;
     @Mock private ApplicationContext applicationContext;
-    @Mock private RiskSettingsService riskSettingsService;
+    @Mock private StockRiskSettingsService stockRiskSettingsService;
 
     private TelegramCommandHandler telegramCommandHandler;
 
@@ -57,8 +57,8 @@ class TelegramCommandHandlerTest {
         StockSettings stockSettings = StockSettings.builder().shares(100).shareIncrement(10).build();
         when(stockSettingsService.getSettings()).thenReturn(stockSettings);
         
-        RiskSettings riskSettings = RiskSettings.builder().dailyLossLimitTwd(5000).weeklyLossLimitTwd(15000).build();
-        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
+        StockRiskSettings stockRiskSettings = StockRiskSettings.builder().dailyLossLimitTwd(5000).weeklyLossLimitTwd(15000).build();
+        when(stockRiskSettingsService.getSettings()).thenReturn(stockRiskSettings);
         
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
@@ -72,7 +72,7 @@ class TelegramCommandHandlerTest {
         telegramCommandHandler = new TelegramCommandHandler(
             telegramService, tradingStateService, positionManager, riskManagementService,
             contractScalingService, stockSettingsService, shioajiSettingsService, llmService,
-            orderExecutionService, applicationContext, riskSettingsService,
+            orderExecutionService, applicationContext, stockRiskSettingsService,
             mockActiveStrategyService, mockStrategyPerformanceService, mockActiveStockService,
             mock(tw.gc.auto.equity.trader.services.BacktestService.class),
             mock(tw.gc.auto.equity.trader.services.HistoryDataService.class),

@@ -40,7 +40,7 @@ public class TradingEngineService {
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
     private final StockSettingsService stockSettingsService;
-    private final RiskSettingsService riskSettingsService;
+    private final StockRiskSettingsService stockRiskSettingsService;
     private final DataLoggingService dataLoggingService;
     private final EndOfDayStatisticsService endOfDayStatisticsService;
     private final DailyStatisticsRepository dailyStatisticsRepository;
@@ -135,9 +135,9 @@ public class TradingEngineService {
             tradingModeLabel,
             modeDescription,
             scalingInfo,
-            riskSettingsService.getDailyLossLimit(),
-            riskSettingsService.getWeeklyLossLimit(),
-            riskSettingsService.getMaxHoldMinutes(),
+            stockRiskSettingsService.getDailyLossLimit(),
+            stockRiskSettingsService.getWeeklyLossLimit(),
+            stockRiskSettingsService.getMaxHoldMinutes(),
             riskManagementService.getWeeklyPnL(),
             riskManagementService.isWeeklyLimitHit() ? "\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
             riskManagementService.isEarningsBlackout() ? String.format("\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
@@ -248,7 +248,7 @@ public class TradingEngineService {
         if (entryTime == null) return;
         
         long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
-        int maxHold = riskSettingsService.getMaxHoldMinutes();
+        int maxHold = stockRiskSettingsService.getMaxHoldMinutes();
         
         if (minutesHeld >= maxHold) {
             log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
@@ -287,7 +287,7 @@ public class TradingEngineService {
     }
     
     void checkRiskLimits() { // package-private for testing
-        if (riskManagementService.isDailyLimitExceeded(riskSettingsService.getDailyLossLimit())) {
+        if (riskManagementService.isDailyLimitExceeded(stockRiskSettingsService.getDailyLossLimit())) {
             log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(
                     "🚨 EMERGENCY SHUTDOWN\\nDaily loss: %.0f TWD\\nFlattening all positions!", 
