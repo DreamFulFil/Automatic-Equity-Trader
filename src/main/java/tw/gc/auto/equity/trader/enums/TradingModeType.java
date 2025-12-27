@@ -54,19 +54,6 @@ public enum TradingModeType {
         }
         throw new IllegalArgumentException("Unknown trading mode code: " + code);
     }
-
-    /**
-     * Parse from any string (case-insensitive, matches code or enum name)
-     */
-    public static TradingModeType fromStringIgnoreCase(String value) {
-        if (value == null) return null;
-        for (TradingModeType type : values()) {
-            if (type.code.equalsIgnoreCase(value) || type.name().equalsIgnoreCase(value)) {
-                return type;
-            }
-        }
-        return null;
-    }
     
     /**
      * Check if this mode includes stock trading

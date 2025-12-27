@@ -6,14 +6,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.AppConstants;
-import tw.gc.auto.equity.trader.RiskManagementService;
-import tw.gc.auto.equity.trader.RiskSettingsService;
-import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.services.RiskManagementService;
+import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -128,7 +128,7 @@ public class OrderExecutionService {
                 }
 
                 if (!isExit) {
-                    positionManager.updateEntry(instrument, price, LocalDateTime.now(AppConstants.TAIPEI_ZONE));
+                    positionManager.updateEntry(instrument, price, LocalDateTime.now(ZoneId.of("Asia/Taipei")));
                 }
                 
                 telegramService.sendMessage(String.format(
@@ -137,7 +137,7 @@ public class OrderExecutionService {
                 
                 if (!isExit) {
                     Trade trade = Trade.builder()
-                            .timestamp(LocalDateTime.now(AppConstants.TAIPEI_ZONE))
+                            .timestamp(LocalDateTime.now(ZoneId.of("Asia/Taipei")))
                             .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
                             .quantity(quantity)
                             .entryPrice(price)
@@ -192,7 +192,7 @@ public class OrderExecutionService {
             double originalEntryPrice = positionManager.getEntryPrice(instrument);
             LocalDateTime entryTime = positionManager.getEntryTime(instrument);
             int holdDurationMinutes = entryTime == null ? 0 :
-                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(AppConstants.TAIPEI_ZONE)).toMinutes();
+                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(ZoneId.of("Asia/Taipei"))).toMinutes();
             
             executeOrderWithRetry(action, Math.abs(pos), currentPrice, instrument, true, emergencyShutdown); // isExit=true triggers cooldown
             

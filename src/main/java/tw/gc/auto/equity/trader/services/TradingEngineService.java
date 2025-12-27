@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.MarketData;
@@ -40,7 +39,7 @@ public class TradingEngineService {
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
     private final StockSettingsService stockSettingsService;
-    private final StockRiskSettingsService stockRiskSettingsService;
+    private final RiskSettingsService riskSettingsService;
     private final DataLoggingService dataLoggingService;
     private final EndOfDayStatisticsService endOfDayStatisticsService;
     private final DailyStatisticsRepository dailyStatisticsRepository;
@@ -53,7 +52,6 @@ public class TradingEngineService {
     private final PositionManager positionManager;
     private final StrategyManager strategyManager;
     private final ReportingService reportingService;
-    private final ActiveStockService activeStockService;
 
     @PostConstruct
     public void initialize() {
@@ -64,7 +62,7 @@ public class TradingEngineService {
         // Strategies are initialized by StrategyManager @PostConstruct
         
         log.info("📈 Trading Mode: {} ({})", tradingStateService.getTradingMode().toUpperCase(), 
-            "stock".equals(tradingStateService.getTradingMode()) ? activeStockService.getActiveStock() + " odd lots" : "MTXF futures");
+            "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW odd lots" : "MTXF futures");
         
         telegramCommandHandler.registerCommands(strategyManager.getActiveStrategies());
         
@@ -107,7 +105,7 @@ public class TradingEngineService {
         String tradingModeLabel = getTradingModeLabel();
         
         String modeDescription = "stock".equals(tradingStateService.getTradingMode()) 
-            ? String.format("Mode: STOCK (%s odd lots)", activeStockService.getActiveStock())
+            ? "Mode: STOCK (2454.TW odd lots)" 
             : "Mode: FUTURES (MTXF)";
         
         String scalingInfo = "stock".equals(tradingStateService.getTradingMode())
@@ -135,9 +133,9 @@ public class TradingEngineService {
             tradingModeLabel,
             modeDescription,
             scalingInfo,
-            stockRiskSettingsService.getDailyLossLimit(),
-            stockRiskSettingsService.getWeeklyLossLimit(),
-            stockRiskSettingsService.getMaxHoldMinutes(),
+            riskSettingsService.getSettings().getDailyLossLimit(),
+            riskSettingsService.getSettings().getWeeklyLossLimit(),
+            riskSettingsService.getSettings().getMaxHoldMinutes(),
             riskManagementService.getWeeklyPnL(),
             riskManagementService.isWeeklyLimitHit() ? "\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
             riskManagementService.isEarningsBlackout() ? String.format("\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
@@ -152,7 +150,7 @@ public class TradingEngineService {
     }
 
     private String getActiveSymbol() {
-        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
+        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
     }
     
     private String getBridgeUrl() {
@@ -166,11 +164,6 @@ public class TradingEngineService {
      */
     @Scheduled(fixedRate = 30000)
     public void tradingLoop() {
-        if (!tradingStateService.isActivePolling()) {
-            log.debug("Passive mode: Signal polling disabled");
-            return;
-        }
-        
         // Try to reconnect to bridge if not connected
         if (!tradingStateService.isMarketDataConnected()) {
             try {
@@ -229,10 +222,17 @@ public class TradingEngineService {
                 updateNewsVetoCache();
             }
             
-        } catch (RestClientException e) {
-            // Bridge connection error - mark as disconnected and skip this cycle
-            tradingStateService.setMarketDataConnected(false);
-            log.debug("Bridge connection lost, will retry: {}", e.getMessage());
+            // Legacy Bridge Strategy (Default if activeStrategyName is "LegacyBridge")
+            if ("LegacyBridge".equalsIgnoreCase(tradingStateService.getActiveStrategyName())) {
+                if (positionManager.getPosition(getActiveSymbol()) == 0) {
+                    if (!tradingStateService.isTradingPaused() && !riskManagementService.isWeeklyLimitHit()) {
+                        evaluateEntry(); // Legacy entry logic
+                    }
+                } else {
+                    evaluateExit(); // Legacy exit logic
+                }
+            }
+            
         } catch (Exception e) {
             log.error("🚨 Trading loop error", e);
             telegramService.sendMessage("🚨 Trading loop error: " + e.getMessage());
@@ -248,12 +248,12 @@ public class TradingEngineService {
         if (entryTime == null) return;
         
         long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
-        int maxHold = stockRiskSettingsService.getMaxHoldMinutes();
+        int maxHold = riskSettingsService.getMaxHoldMinutes();
         
         if (minutesHeld >= maxHold) {
             log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
             telegramService.sendMessage(String.format(
-                "⏰ 45-MIN HARD EXIT\nPosition held %d minutes\nForce-flattening now!",
+                "⏰ 45-MIN HARD EXIT\\nPosition held %d minutes\\nForce-flattening now!",
                 minutesHeld
             ));
             orderExecutionService.flattenPosition("45-minute time limit", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
@@ -275,7 +275,7 @@ public class TradingEngineService {
             if (veto) {
                 log.warn("🚨 News veto ACTIVE: {} (score: {})", reason, score);
                 telegramService.sendMessage(String.format(
-                        "🤖 🚨 NEWS VETO ACTIVE%nReason: %s%nScore: %.2f%nNo new entries until next check",
+                        "🚨 NEWS VETO ACTIVE\\nReason: %s\\nScore: %.2f\\nNo new entries until next check",
                         reason, score));
             } else {
                 log.info("✅ News check passed (score: {})", score);
@@ -287,7 +287,7 @@ public class TradingEngineService {
     }
     
     void checkRiskLimits() { // package-private for testing
-        if (riskManagementService.isDailyLimitExceeded(stockRiskSettingsService.getDailyLossLimit())) {
+        if (riskManagementService.isDailyLimitExceeded(riskSettingsService.getDailyLossLimit())) {
             log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(
                     "🚨 EMERGENCY SHUTDOWN\\nDaily loss: %.0f TWD\\nFlattening all positions!", 
@@ -351,11 +351,7 @@ public class TradingEngineService {
         }
         
         if ("LONG".equals(direction)) {
-            new tw.gc.auto.equity.trader.command.BuyCommand(
-    orderExecutionService,
-    signalEntity,
-    new tw.gc.auto.equity.trader.command.StockOrderCommandParams(quantity, currentPrice, instrument, tradingStateService.isEmergencyShutdown())
-).execute();
+            orderExecutionService.executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
         } else if ("SHORT".equals(direction)) {
             if ("stock".equals(tradingMode)) {
                 log.warn("⚠️ SHORT signal ignored - Taiwan retail investors cannot short sell stocks");
@@ -367,11 +363,7 @@ public class TradingEngineService {
                     log.warn("⚠️ Insufficient margin for SHORT order - skipping futures SHORT order");
                     return;
                 }
-                new tw.gc.auto.equity.trader.command.SellCommand(
-    orderExecutionService,
-    signalEntity,
-    new tw.gc.auto.equity.trader.command.StockOrderCommandParams(quantity, currentPrice, instrument, tradingStateService.isEmergencyShutdown())
-).execute();
+                orderExecutionService.executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
             }
         }
     }

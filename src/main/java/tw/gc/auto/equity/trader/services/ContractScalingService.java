@@ -41,8 +41,6 @@ public class ContractScalingService {
     private final TelegramService telegramService;
     @NonNull
     private final TradingProperties tradingProperties;
-    @NonNull
-    private final TradingStateService tradingStateService;
     
     private final AtomicInteger maxContracts = new AtomicInteger(1);
     private final AtomicReference<Double> lastEquity = new AtomicReference<>(0.0);
@@ -116,24 +114,19 @@ public class ContractScalingService {
             maxContracts.set(newContracts);
             
             String message = String.format(
-                "Contract sizing updated: %d contract%s | Equity: %.0f TWD | 30d profit: %.0f TWD%s",
+                "Contract sizing updated: %d contract%s\n" +
+                "Equity: %.0f TWD\n" +
+                "30d profit: %.0f TWD%s",
                 newContracts,
                 newContracts > 1 ? "s" : "",
                 equity,
                 profit30d,
                 newContracts != previousContracts ? 
-                    String.format(" | %s Changed from %d", newContracts > previousContracts ? "UP" : "DOWN", previousContracts) : ""
+                    String.format("\n%s Changed from %d", newContracts > previousContracts ? "UP" : "DOWN", previousContracts) : ""
             );
             
-            log.info(message);
-            
-            // Only send Telegram notification if contracts changed
-            if (newContracts != previousContracts) {
-                telegramService.sendMessage(String.format(
-                    "🤖 Contract Scaling Changed: %d → %d\nEquity: %.0f TWD\n30d profit: %.0f TWD",
-                    previousContracts, newContracts, equity, profit30d
-                ));
-            }
+            log.info(message.replace("\n", " | "));
+            telegramService.sendMessage(message);
             
         } catch (Exception e) {
             log.error("Contract sizing update failed: {} - defaulting to 1 contract", e.getMessage());
@@ -146,14 +139,9 @@ public class ContractScalingService {
      * Daily update at 11:15 (before trading window opens at 11:30).
      * JUSTIFICATION: Updates contract sizing based on account equity before market opens.
      * Runs before 11:30 trading window to ensure correct position sizes are ready.
-     * Only runs in FUTURES mode.
      */
     @Scheduled(cron = "0 15 11 * * MON-FRI", zone = "Asia/Taipei")
     public void dailyContractSizingUpdate() {
-        if (!"futures".equals(tradingStateService.getTradingMode())) {
-            log.debug("Skipping contract sizing update - not in futures mode");
-            return;
-        }
         log.info("11:15 Daily contract sizing update triggered");
         updateContractSizing();
     }

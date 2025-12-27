@@ -4,17 +4,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import tw.gc.auto.equity.trader.AppConstants;
-import tw.gc.auto.equity.trader.ContractScalingService;
-import tw.gc.auto.equity.trader.RiskManagementService;
-import tw.gc.auto.equity.trader.StockSettingsService;
-import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.services.ContractScalingService;
+import tw.gc.auto.equity.trader.services.RiskManagementService;
+import tw.gc.auto.equity.trader.services.StockSettingsService;
+import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.entities.DailyStatistics;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Service
 @Slf4j
@@ -36,11 +36,11 @@ public class ReportingService {
      * JUSTIFICATION: Generates comprehensive daily reports for shadow-mode strategies.
      * Runs 30 minutes after close to allow EndOfDayStatisticsService to complete first.
      */
-    @Scheduled(cron = "0 30 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
+    @Scheduled(cron = "0 30 13 * * MON-FRI", zone = "Asia/Taipei")
     public void calculateDailyStatistics() {
         log.info("📊 Calculating end-of-day statistics...");
         try {
-            LocalDate today = LocalDate.now(AppConstants.TAIPEI_ZONE);
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
             String symbol = getActiveSymbol();
             endOfDayStatisticsService.calculateAndSaveStatisticsForDay(today, symbol);
             
@@ -72,7 +72,7 @@ public class ReportingService {
                 
             String insight = llmService.generateInsight(prompt);
             stats.setLlamaInsight(insight);
-            stats.setInsightGeneratedAt(LocalDateTime.now(AppConstants.TAIPEI_ZONE));
+            stats.setInsightGeneratedAt(LocalDateTime.now(ZoneId.of("Asia/Taipei")));
             dailyStatisticsRepository.save(stats);
             log.info("🧠 Generated LLM Insight: {}", insight);
         } catch (Exception e) {
@@ -88,7 +88,7 @@ public class ReportingService {
         // Fetch insight if available
         String insight = "";
         try {
-            LocalDate today = LocalDate.now(AppConstants.TAIPEI_ZONE);
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
             String symbol = getActiveSymbol();
             insight = dailyStatisticsRepository.findByTradeDateAndSymbol(today, symbol)
                 .map(DailyStatistics::getLlamaInsight)

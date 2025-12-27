@@ -4,15 +4,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
-import tw.gc.auto.equity.trader.TelegramService;
-import tw.gc.auto.equity.trader.RiskManagementService;
-import tw.gc.auto.equity.trader.RiskSettingsService;
-import tw.gc.auto.equity.trader.StockSettingsService;
-import tw.gc.auto.equity.trader.ShioajiSettingsService;
-import tw.gc.auto.equity.trader.ContractScalingService;
+import tw.gc.auto.equity.trader.services.TelegramService;
+import tw.gc.auto.equity.trader.services.RiskManagementService;
+import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.StockSettingsService;
+import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
+import tw.gc.auto.equity.trader.services.ContractScalingService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -133,7 +134,7 @@ public class TelegramCommandHandler {
                 posRef.get(),
                 entryRef.get(),
                 entryTimeRef.get() != null ?
-                    java.time.Duration.between(entryTimeRef.get(), LocalDateTime.now(tw.gc.auto.equity.trader.AppConstants.TAIPEI_ZONE)).toMinutes() : 0
+                    java.time.Duration.between(entryTimeRef.get(), LocalDateTime.now(ZoneId.of("Asia/Taipei"))).toMinutes() : 0
             );
         
         String tradingMode = tradingStateService.getTradingMode();

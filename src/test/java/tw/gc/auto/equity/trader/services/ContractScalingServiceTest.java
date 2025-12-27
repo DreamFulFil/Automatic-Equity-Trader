@@ -30,9 +30,6 @@ class ContractScalingServiceTest {
     @Mock
     private TradingProperties.Bridge bridge;
 
-    @Mock
-    private TradingStateService tradingStateService;
-
     private ObjectMapper objectMapper;
     private ContractScalingService contractScalingService;
 
@@ -46,8 +43,7 @@ class ContractScalingServiceTest {
                 restTemplate,
                 objectMapper,
                 telegramService,
-                tradingProperties,
-                tradingStateService
+                tradingProperties
         );
     }
 
@@ -142,8 +138,7 @@ class ContractScalingServiceTest {
         assertEquals(2, contractScalingService.getMaxContracts());
         assertEquals(300000, contractScalingService.getLastEquity());
         assertEquals(100000, contractScalingService.getLast30DayProfit());
-        // Now only sends message if contracts changed (from 1 to 2)
-        verify(telegramService).sendMessage(contains("Contract Scaling Changed"));
+        verify(telegramService).sendMessage(contains("Contract sizing updated"));
     }
 
     @Test
@@ -175,31 +170,5 @@ class ContractScalingServiceTest {
     @Test
     void getLast30DayProfit_shouldReturnDefault0() {
         assertEquals(0.0, contractScalingService.getLast30DayProfit());
-    }
-
-    // ==================== dailyContractSizingUpdate() tests ====================
-
-    @Test
-    void dailyContractSizingUpdate_whenInStockMode_shouldSkipUpdate() {
-        when(tradingStateService.getTradingMode()).thenReturn("stock");
-
-        contractScalingService.dailyContractSizingUpdate();
-
-        verify(restTemplate, never()).getForObject(anyString(), eq(String.class));
-    }
-
-    @Test
-    void dailyContractSizingUpdate_whenInFuturesMode_shouldPerformUpdate() throws Exception {
-        when(tradingStateService.getTradingMode()).thenReturn("futures");
-        String accountJson = "{\"status\":\"ok\",\"equity\":300000}";
-        String profitJson = "{\"status\":\"ok\",\"total_pnl\":100000}";
-        
-        when(restTemplate.getForObject(contains("/account"), eq(String.class))).thenReturn(accountJson);
-        when(restTemplate.getForObject(contains("/account/profit-history"), eq(String.class))).thenReturn(profitJson);
-
-        contractScalingService.dailyContractSizingUpdate();
-
-        verify(restTemplate, atLeastOnce()).getForObject(anyString(), eq(String.class));
-        assertEquals(2, contractScalingService.getMaxContracts());
     }
 }

@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.entities.*;
 import tw.gc.auto.equity.trader.repositories.*;
-import tw.gc.auto.equity.trader.AppConstants;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,7 +28,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EndOfDayStatisticsService {
 
-    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
+    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
 
     @NonNull
     private final TradeRepository tradeRepository;
@@ -44,7 +43,7 @@ public class EndOfDayStatisticsService {
     @NonNull
     private final RestTemplate restTemplate;
     @NonNull
-    private final tw.gc.auto.equity.trader.TelegramService telegramService;
+    private final TelegramService telegramService;
 
     /**
      * Calculate and store end-of-day statistics.
@@ -52,7 +51,7 @@ public class EndOfDayStatisticsService {
      * JUSTIFICATION: Calculates and persists daily statistics (OHLCV, trades, P&L) for historical analysis.
      * Runs after market close (13:00) to ensure all data is captured.
      */
-    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
+    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
     @Transactional
     public void calculateEndOfDayStatistics() {
         log.info("📊 Calculating end-of-day statistics...");
