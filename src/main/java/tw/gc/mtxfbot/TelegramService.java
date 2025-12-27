@@ -8,7 +8,12 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.mtxfbot.agents.AgentService;
+import tw.gc.mtxfbot.agents.RiskManagerAgent;
+import tw.gc.mtxfbot.agents.TutorBotAgent;
 import tw.gc.mtxfbot.config.TelegramProperties;
+import tw.gc.mtxfbot.entities.AgentInteraction.InteractionType;
+import tw.gc.mtxfbot.entities.Trade.TradingMode;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +31,11 @@ import java.util.function.Consumer;
  * - /pause → pause new entries until /resume (still flattens at 13:00)
  * - /resume → re-enable trading
  * - /close → immediately flatten everything
+ * - /agent → list available agents
+ * - /talk <question> → ask TutorBot a trading question
+ * - /insight → get daily trading insight
+ * - /golive → check eligibility to switch to live mode
+ * - /backtosim → switch back to simulation mode
  */
 @Service
 @Slf4j
@@ -42,12 +52,30 @@ public class TelegramService {
     private Consumer<Void> resumeHandler;
     private Consumer<Void> closeHandler;
     
+    // Agent service for agent commands (set via setter to avoid circular dependency)
+    private AgentService agentService;
+    private BotModeService botModeService;
+    
     // Track last processed update ID to avoid duplicate processing
     private long lastUpdateId = 0;
 
     @PostConstruct
     public void init() {
         log.info("📱 Telegram command interface initialized");
+    }
+    
+    /**
+     * Set agent service (called by AgentService to avoid circular dependency)
+     */
+    public void setAgentService(AgentService agentService) {
+        this.agentService = agentService;
+    }
+    
+    /**
+     * Set bot mode service
+     */
+    public void setBotModeService(BotModeService botModeService) {
+        this.botModeService = botModeService;
     }
 
     /**
@@ -110,28 +138,158 @@ public class TelegramService {
             return;
         }
         
-        String text = message.path("text").asText("").trim().toLowerCase();
+        String text = message.path("text").asText("").trim();
         if (!text.startsWith("/")) return;
         
+        String lowerText = text.toLowerCase();
         log.info("📥 Received command: {}", text);
         
-        // Process commands (case-insensitive)
-        switch (text) {
-            case "/status":
-                if (statusHandler != null) statusHandler.accept(null);
-                break;
-            case "/pause":
-                if (pauseHandler != null) pauseHandler.accept(null);
-                break;
-            case "/resume":
-                if (resumeHandler != null) resumeHandler.accept(null);
-                break;
-            case "/close":
-                if (closeHandler != null) closeHandler.accept(null);
-                break;
-            default:
-                sendMessage("❓ Unknown command: " + text + "\n\nAvailable:\n/status\n/pause\n/resume\n/close");
+        // Process commands (case-insensitive for command, preserve case for arguments)
+        if (lowerText.equals("/status")) {
+            if (statusHandler != null) statusHandler.accept(null);
+        } else if (lowerText.equals("/pause")) {
+            if (pauseHandler != null) pauseHandler.accept(null);
+        } else if (lowerText.equals("/resume")) {
+            if (resumeHandler != null) resumeHandler.accept(null);
+        } else if (lowerText.equals("/close")) {
+            if (closeHandler != null) closeHandler.accept(null);
+        } else if (lowerText.equals("/agent") || lowerText.equals("/agents")) {
+            handleAgentCommand(chatId);
+        } else if (lowerText.startsWith("/talk ")) {
+            String question = text.substring(6).trim();
+            handleTalkCommand(chatId, question);
+        } else if (lowerText.equals("/insight")) {
+            handleInsightCommand(chatId);
+        } else if (lowerText.equals("/golive")) {
+            handleGoLiveCommand(chatId);
+        } else if (lowerText.equals("/backtosim")) {
+            handleBackToSimCommand(chatId);
+        } else {
+            sendMessage("❓ Unknown command: " + text + "\n\nAvailable:\n" +
+                    "/status - Bot status\n" +
+                    "/pause - Pause trading\n" +
+                    "/resume - Resume trading\n" +
+                    "/close - Close position\n" +
+                    "/agent - List agents\n" +
+                    "/talk <question> - Ask TutorBot\n" +
+                    "/insight - Daily insight\n" +
+                    "/golive - Check live eligibility\n" +
+                    "/backtosim - Switch to simulation");
         }
+    }
+    
+    private void handleAgentCommand(String chatId) {
+        if (agentService == null) {
+            sendMessage("⚠️ Agent service not initialized");
+            return;
+        }
+        sendMessage(agentService.getAgentListMessage());
+    }
+    
+    private void handleTalkCommand(String chatId, String question) {
+        if (agentService == null) {
+            sendMessage("⚠️ Agent service not initialized");
+            return;
+        }
+        
+        if (question.isEmpty()) {
+            sendMessage("❓ Usage: /talk <your question>\n\nExample: /talk What is momentum trading?");
+            return;
+        }
+        
+        sendMessage("🤔 Thinking...");
+        
+        TutorBotAgent tutor = agentService.getTutorBot();
+        Map<String, Object> input = new HashMap<>();
+        input.put("question", question);
+        input.put("userId", chatId);
+        input.put("type", InteractionType.QUESTION);
+        
+        Map<String, Object> result = tutor.safeExecute(input);
+        
+        if ((boolean) result.getOrDefault("success", false)) {
+            String response = (String) result.get("response");
+            int remaining = (int) result.getOrDefault("remaining", 0);
+            sendMessage(String.format("📚 TutorBot:\n\n%s\n\n[%d questions remaining today]", 
+                    response, remaining));
+        } else {
+            sendMessage("❌ " + result.getOrDefault("error", "TutorBot unavailable"));
+        }
+    }
+    
+    private void handleInsightCommand(String chatId) {
+        if (agentService == null) {
+            sendMessage("⚠️ Agent service not initialized");
+            return;
+        }
+        
+        sendMessage("💡 Generating insight...");
+        
+        TutorBotAgent tutor = agentService.getTutorBot();
+        Map<String, Object> result = tutor.generateDailyInsight(chatId);
+        
+        if ((boolean) result.getOrDefault("success", false)) {
+            String response = (String) result.get("response");
+            int remaining = (int) result.getOrDefault("remaining", 0);
+            sendMessage(String.format("💡 Daily Insight:\n\n%s\n\n[%d insights remaining today]", 
+                    response, remaining));
+        } else {
+            sendMessage("❌ " + result.getOrDefault("error", "Could not generate insight"));
+        }
+    }
+    
+    private void handleGoLiveCommand(String chatId) {
+        if (agentService == null || botModeService == null) {
+            sendMessage("⚠️ Services not initialized");
+            return;
+        }
+        
+        if (botModeService.isLiveMode()) {
+            sendMessage("ℹ️ Already in LIVE mode!\nUse /backtosim to switch back to simulation.");
+            return;
+        }
+        
+        RiskManagerAgent riskManager = agentService.getRiskManager();
+        Map<String, Object> result = riskManager.checkGoLiveEligibility();
+        
+        boolean eligible = (boolean) result.getOrDefault("eligible", false);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("🎯 GO-LIVE ELIGIBILITY CHECK\n");
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n\n");
+        sb.append(String.format("Total Trades: %d\n", result.get("total_trades")));
+        sb.append(String.format("Win Rate: %s %s\n", result.get("win_rate"), 
+                (boolean) result.get("win_rate_ok") ? "✅" : "❌"));
+        sb.append(String.format("Max Drawdown: %s %s\n", result.get("max_drawdown"),
+                (boolean) result.get("drawdown_ok") ? "✅" : "❌"));
+        sb.append(String.format("Has Enough Trades: %s\n\n", 
+                (boolean) result.get("has_enough_trades") ? "✅" : "❌"));
+        sb.append(String.format("Requirements: %s\n\n", result.get("requirements")));
+        
+        if (eligible) {
+            sb.append("🟢 ELIGIBLE FOR LIVE TRADING!\n");
+            sb.append("⚠️ Type /confirmlive to switch (real money at risk!)");
+        } else {
+            sb.append("🔴 NOT YET ELIGIBLE\n");
+            sb.append("Keep trading in simulation to build your track record.");
+        }
+        
+        sendMessage(sb.toString());
+    }
+    
+    private void handleBackToSimCommand(String chatId) {
+        if (botModeService == null) {
+            sendMessage("⚠️ Bot mode service not initialized");
+            return;
+        }
+        
+        if (botModeService.isSimulationMode()) {
+            sendMessage("ℹ️ Already in SIMULATION mode!");
+            return;
+        }
+        
+        botModeService.switchToSimulationMode();
+        sendMessage("✅ Switched back to SIMULATION mode\nNo real money at risk.");
     }
 
     public void sendMessage(String message) {
