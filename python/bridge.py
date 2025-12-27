@@ -31,11 +31,16 @@ if config['shioaji']['simulation']:
     api.activate_ca(
         ca_path=config['shioaji']['ca-path'],
         ca_passwd=config['shioaji']['ca-password'],
-        person_id=config['shioaji']['api-key'][:10]
+        person_id=config['shioaji']['person-id']
     )
     print("📄 Paper trading mode activated")
 else:
-    print("💰 LIVE TRADING MODE")
+    print("💰 LIVE TRADING MODE - Using real account")
+    api.activate_ca(
+        ca_path=config['shioaji']['ca-path'],
+        ca_passwd=config['shioaji']['ca-password'],
+        person_id=config['shioaji']['person-id']
+    )
 
 # Subscribe to MTXF
 mtxf_contract = api.Contracts.Futures.TXF.TXFR1  # Current month Mini-TXF

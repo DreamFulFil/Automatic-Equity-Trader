@@ -217,3 +217,32 @@ MIT License - See LICENSE file
 ---
 
 **Built with ❤️ for Taiwan retail traders. May your P&L always be green! 🚀📈**
+
+---
+
+## 🐟 Fish Shell Users
+
+This bot is **fully optimized for Fish shell**!
+
+### Quick Start
+
+```fish
+# Setup (once)
+fish scripts/setup-fish.fish
+
+# Run bot
+fish start-lunch-bot.fish
+
+# Or double-click start-lunch-bot.fish in Finder!
+```
+
+### Fish-Specific Features
+
+- ✅ Uses `activate.fish` for virtual environment
+- ✅ Fish syntax for all scripts
+- ✅ Double-click to run (fully automated)
+- ✅ Auto-start with launchd (Fish-aware)
+
+**Read**: [FISH-SHELL-GUIDE.md](FISH-SHELL-GUIDE.md) for complete Fish documentation.
+
+---

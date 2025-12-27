@@ -1,0 +1,229 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║    🐟 MTXF BOT - FISH SHELL EDITION - QUICK START 🐟               ║
+║                                                                      ║
+║         Optimized for macOS Apple Silicon + Fish Shell              ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+🎯 FOR FISH SHELL USERS ONLY
+
+This version is specifically built for users running Fish shell.
+All scripts use Fish syntax and activate.fish for virtual environments.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ SUPER QUICK START (3 Steps)
+
+1. Setup (one time):
+   fish scripts/setup-fish.fish
+
+2. Configure credentials:
+   Edit: src/main/resources/application.yml
+   - Add Shioaji API key & secret
+   - Add Telegram bot token & chat ID
+   - Set ca-password to your 身分證字號
+   - Keep simulation: true
+
+3. Run:
+   fish start-lunch-bot.fish
+
+Done! Bot trades 11:30-13:00 daily. Press Ctrl+C to stop.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🐟 KEY FISH SHELL FEATURES
+
+✅ Uses activate.fish (not activate)
+✅ Fish syntax for all scripts
+✅ $last_pid for background jobs
+✅ Double-click to run .fish scripts
+✅ Fish-friendly environment variables
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 WHAT'S INCLUDED
+
+Scripts:
+  start-lunch-bot.fish      Main launcher (double-click!)
+  scripts/setup-fish.fish   One-time setup
+  scripts/tw.gc.mtxfbot.plist  Auto-start config
+
+Code:
+  Java Trading Engine       Spring Boot 3.3 + Java 21
+  Python Bridge             FastAPI + Shioaji + Ollama
+  Llama 3.1 8B             News veto (local)
+
+Docs:
+  FISH-SHELL-GUIDE.md       Complete Fish guide
+  FISH-QUICKSTART.txt       This file
+  UNLIMITED-STRATEGY.md     Trading strategy
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 CONFIGURATION EXAMPLE
+
+src/main/resources/application.yml:
+
+shioaji:
+  api-key: "YOUR_API_KEY"
+  secret-key: "YOUR_SECRET"
+  ca-path: "/Users/YOUR_USERNAME/Documents/Sinopac.pfx"
+  ca-password: "A123456789"  # Your 身分證字號
+  person-id: "A123456789"    # Same as ca-password
+  simulation: true           # Paper trading
+
+telegram:
+  bot-token: "123456789:ABC..."
+  chat-id: "987654321"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 DOUBLE-CLICK TO RUN
+
+Make executable:
+  chmod +x start-lunch-bot.fish
+
+Then:
+  1. Open Finder
+  2. Navigate to mtxf-bot folder
+  3. Double-click "start-lunch-bot.fish"
+  4. Terminal opens, bot starts!
+
+Or run in terminal:
+  fish start-lunch-bot.fish
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🤖 AUTO-START (Optional)
+
+Install launchd agent (runs at 11:15 AM weekdays):
+
+fish:
+  cp scripts/tw.gc.mtxfbot.plist ~/Library/LaunchAgents/
+  launchctl load ~/Library/LaunchAgents/tw.gc.mtxfbot.plist
+
+Uninstall:
+  launchctl unload ~/Library/LaunchAgents/tw.gc.mtxfbot.plist
+  rm ~/Library/LaunchAgents/tw.gc.mtxfbot.plist
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 MONITORING COMMANDS (Fish)
+
+# View logs
+tail -f logs/mtxf-bot.log
+
+# Check Python bridge
+curl http://localhost:8888/health
+
+# Check Ollama
+curl http://localhost:11434/api/tags
+
+# Stop bot
+pkill -f "mtxf-bot"
+
+# Find processes
+pgrep -f "bridge.py"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 FISH SHELL TROUBLESHOOTING
+
+Issue: "source: Error encountered"
+Fix: Use activate.fish (not activate)
+  source venv/bin/activate.fish
+
+Issue: "command not found: java"
+Fix: Add to ~/.config/fish/config.fish
+  set -x PATH /opt/homebrew/opt/openjdk@21/bin $PATH
+
+Issue: Background job syntax error
+Fix: Use $last_pid (not $!)
+  nohup python3 script.py &
+  set PID $last_pid
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎓 FISH SHELL HELPERS
+
+Add to ~/.config/fish/config.fish:
+
+# Quick bot commands
+function mtxf
+    cd /Users/gc/Downloads/work/stock/mtxf-bot
+    fish start-lunch-bot.fish
+end
+
+function mtxf-logs
+    tail -f /Users/gc/Downloads/work/stock/mtxf-bot/logs/mtxf-bot.log
+end
+
+function mtxf-stop
+    pkill -f "mtxf-bot"
+    pkill -f "bridge.py"
+end
+
+Then use:
+  mtxf        # Start
+  mtxf-logs   # View logs
+  mtxf-stop   # Stop
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+Read in order:
+  1. FISH-QUICKSTART.txt (this file)
+  2. FISH-SHELL-GUIDE.md (full Fish guide)
+  3. UNLIMITED-STRATEGY.md (trading strategy)
+  4. DEPLOYMENT.md (production setup)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 PERFORMANCE
+
+Capital:     100,000 TWD
+Baseline:    30,000 TWD/month (30%)
+Best Month:  50,000-70,000+ TWD (no caps!)
+Risk:        Max -4,500 TWD/day
+
+Exit Strategy:
+  ✅ Stop-loss: -500 TWD
+  ✅ Trend reversal: momentum flip
+  ✅ Time stop: 13:00
+  ❌ NO profit caps!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  LEGAL DISCLAIMER
+
+This bot trades REAL MONEY in Taiwan futures markets.
+
+- Test thoroughly in simulation mode (2-4 weeks)
+- ca-password = your 身分證字號 (National ID)
+- Unlimited upside ≠ guaranteed profits
+- Daily loss limit: -4,500 TWD enforced
+- Trading involves risk of loss
+- NOT FINANCIAL ADVICE
+
+ALWAYS start with simulation: true
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ NEXT STEPS
+
+1. fish scripts/setup-fish.fish
+2. Edit application.yml (add credentials)
+3. fish start-lunch-bot.fish
+4. Check Telegram alerts
+5. Paper trade 2-4 weeks
+6. Switch to live trading
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+           🐟 Built for Fish Shell users 🐟
+
+        Good luck and maximum gains! 🚀📈🇹🇼
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
