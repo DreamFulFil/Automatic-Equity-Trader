@@ -286,9 +286,24 @@ This document explains **every piece of data** stored during trading operations,
 
 ---
 
-### 14. ECONOMIC_NEWS (REMOVED - Not Implemented)
-**Removed:** 2025-12-18
-**Reason:** Not implemented, no concrete plan. Will be recreated if/when news sentiment analysis is implemented.
+### 14. ECONOMIC_NEWS (Sentiment Analysis)
+**Purpose:** Store scraped news headlines
+
+**Storage:** `economic_news` table
+
+**Fields:**
+- `id` - Unique identifier
+- `timestamp` - When scraped
+- `headline` - News title
+- `content` - Article text (if available)
+- `source` - RSS feed URL
+- `sentiment_score` - AI-analyzed sentiment (-1 to 1)
+- `impact_score` - AI-analyzed impact (0 to 1)
+- `affected_symbols` - Stocks mentioned (JSON array)
+
+**Why:** Feed to Ollama for trade veto decisions. Track market sentiment.
+
+**When Stored:** Periodic scraping (implementation TBD)
 
 ---
 
@@ -351,9 +366,24 @@ This document explains **every piece of data** stored during trading operations,
 
 ---
 
-### 18. QUOTE (REMOVED - Redundant)
-**Removed:** 2025-12-18
-**Reason:** Redundant with Bar entity which already stores OHLCV data. Quote provided no additional value.
+### 18. QUOTE (Market Data)
+**Purpose:** Store historical price quotes
+
+**Storage:** `quote` table
+
+**Fields:**
+- `id` - Unique identifier
+- `timestamp` - Quote time
+- `symbol` - Stock/futures
+- `open` - Opening price
+- `high` - High price
+- `low` - Low price
+- `close` - Closing price
+- `volume` - Volume
+
+**Why:** Historical data for backtesting, charting, analysis.
+
+**When Stored:** Fetched periodically or on-demand
 
 ---
 
@@ -396,9 +426,22 @@ This document explains **every piece of data** stored during trading operations,
 
 ---
 
-### 21. MARKET_CONFIG (REMOVED - Premature)
-**Removed:** 2025-12-18
-**Reason:** Multi-market support not needed. System is Taiwan-only. Will be recreated if multi-market support is added.
+### 21. MARKET_CONFIG (System Config)
+**Purpose:** Market-specific settings (Taiwan vs others)
+
+**Storage:** `market_config` table
+
+**Fields:**
+- `market_name` - "Taiwan_Stock", "Taiwan_Futures"
+- `trading_hours_start` - Market open time
+- `trading_hours_end` - Market close time
+- `timezone` - "Asia/Taipei"
+- `odd_lot_trading_allowed` - Boolean
+- `min_capital_for_day_trading` - 2000000 TWD for Taiwan
+
+**Why:** Enforce market-specific rules (e.g., Taiwan odd-lot restrictions).
+
+**When Stored:** On application startup (static config)
 
 ---
 
@@ -421,16 +464,11 @@ This document explains **every piece of data** stored during trading operations,
 
 ---
 
-## REMOVED ENTITIES
-**Removed 2025-12-18 during entity audit (#8):**
-- `EconomicNews` - News sentiment analysis not implemented
-- `MarketConfig` - Multi-market support not needed (Taiwan-only)
-- `Quote` - Redundant with Bar entity
-
-## UNUSED / RESERVED ENTITIES
+## UNUSED / EMPTY ENTITIES
 **As of 2025-12-18:**
 - `AgentInteraction` - Reserved for future multi-agent system (not yet used)
-- `VetoEvent` - Reserved for Ollama veto logging (not yet integrated into trade flow)
+
+All other entities are actively used or serve specific future-proofing purposes.
 
 ---
 

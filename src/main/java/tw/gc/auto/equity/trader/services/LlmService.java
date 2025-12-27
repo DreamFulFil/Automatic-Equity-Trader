@@ -378,6 +378,145 @@ public class LlmService {
         
         return (String) result.get("insight");
     }
+
+    /**
+     * Execute trade veto decision using the paranoid risk manager system prompt.
+     * Returns APPROVE or VETO with reason.
+     * 
+     * @param tradeProposal Map containing trade details, system state, market context, news, strategy info
+     * @return Map with "veto" (boolean), "reason" (String)
+     */
+    public Map<String, Object> executeTradeVeto(Map<String, Object> tradeProposal) {
+        String systemPrompt = tw.gc.auto.equity.trader.agents.RiskManagerAgent.getRiskManagerSystemPrompt();
+        
+        String userPrompt = String.format("""
+Trade Proposal:
+- Symbol: %s
+- Direction: %s
+- Shares: %s
+- Entry Logic: %s
+- Strategy: %s
+
+System State:
+- Daily P&L: %s TWD
+- Weekly P&L: %s TWD
+- Current Drawdown: %s%%
+- Trades Today: %s
+- Win Streak: %s
+- Loss Streak: %s
+
+Market Context:
+- Volatility: %s
+- Time: %s
+- Session Phase: %s
+
+News Headlines:
+%s
+
+Strategy Context:
+- Days Active: %s
+- Recent Backtest Stats: %s""",
+            tradeProposal.getOrDefault("symbol", "N/A"),
+            tradeProposal.getOrDefault("direction", "N/A"),
+            tradeProposal.getOrDefault("shares", "N/A"),
+            tradeProposal.getOrDefault("entry_logic", "N/A"),
+            tradeProposal.getOrDefault("strategy_name", "N/A"),
+            tradeProposal.getOrDefault("daily_pnl", "N/A"),
+            tradeProposal.getOrDefault("weekly_pnl", "N/A"),
+            tradeProposal.getOrDefault("drawdown_percent", "N/A"),
+            tradeProposal.getOrDefault("trades_today", "N/A"),
+            tradeProposal.getOrDefault("win_streak", "N/A"),
+            tradeProposal.getOrDefault("loss_streak", "N/A"),
+            tradeProposal.getOrDefault("volatility_level", "N/A"),
+            tradeProposal.getOrDefault("time_of_day", "N/A"),
+            tradeProposal.getOrDefault("session_phase", "N/A"),
+            formatNewsHeadlines(tradeProposal.get("news_headlines")),
+            tradeProposal.getOrDefault("strategy_days_active", "N/A"),
+            tradeProposal.getOrDefault("recent_backtest_stats", "N/A")
+        );
+
+        long startTime = System.currentTimeMillis();
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", ollamaProperties.getModel());
+            request.put("system", systemPrompt);
+            request.put("prompt", userPrompt);
+            request.put("stream", false);
+            
+            Map<String, Object> options = new HashMap<>();
+            options.put("temperature", 0.1);
+            request.put("options", options);
+            
+            String response = restTemplate.postForObject(
+                ollamaProperties.getUrl() + "/api/generate",
+                request,
+                String.class
+            );
+            
+            if (response == null) {
+                result.put("veto", true);
+                result.put("reason", "LLM returned null response - defaulting to VETO");
+                return result;
+            }
+            
+            JsonNode responseNode = objectMapper.readTree(response);
+            String llmOutput = responseNode.path("response").asText().trim();
+            
+            long processingTime = System.currentTimeMillis() - startTime;
+            log.info("✅ Trade veto LLM call completed in {}ms: {}", processingTime, llmOutput);
+            
+            return parseVetoResponse(llmOutput);
+            
+        } catch (Exception e) {
+            log.error("❌ Trade veto LLM call failed: {}", e.getMessage());
+            result.put("veto", true);
+            result.put("reason", "Analysis failed: " + e.getMessage());
+            return result;
+        }
+    }
+    
+    private Map<String, Object> parseVetoResponse(String responseText) {
+        Map<String, Object> result = new HashMap<>();
+        String text = responseText.trim();
+        
+        if (text.equals("APPROVE") || text.startsWith("APPROVE")) {
+            result.put("veto", false);
+            result.put("reason", "APPROVED");
+            return result;
+        }
+        
+        if (text.toUpperCase().startsWith("VETO:")) {
+            String reason = text.substring(5).trim();
+            result.put("veto", true);
+            result.put("reason", reason);
+            return result;
+        }
+        
+        result.put("veto", true);
+        result.put("reason", "unexpected response format - defaulting to VETO");
+        return result;
+    }
+    
+    @SuppressWarnings("unchecked")
+    private String formatNewsHeadlines(Object headlines) {
+        if (headlines == null) {
+            return "- No news available";
+        }
+        if (headlines instanceof java.util.List) {
+            java.util.List<String> list = (java.util.List<String>) headlines;
+            if (list.isEmpty()) {
+                return "- No news available";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (String h : list) {
+                sb.append("- ").append(h).append("\n");
+            }
+            return sb.toString().trim();
+        }
+        return "- " + headlines.toString();
+    }
     
     // Utility methods
     

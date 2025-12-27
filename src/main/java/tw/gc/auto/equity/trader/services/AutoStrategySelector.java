@@ -27,14 +27,14 @@ public class AutoStrategySelector {
     private final TelegramService telegramService;
 
     /**
-     * Daily auto-strategy selection scheduled at 08:30 (before market opens at 09:00).
-     * Can also be triggered manually via REST API or Telegram command.
-     * Selection is based on backtest data, simulation stats, and LLM insights.
+     * DISABLED: Automated daily strategy selection.
      * 
-     * JUSTIFICATION: Analyzes backtest results daily to select optimal strategy-stock combination
-     * before market opens, ensuring the system trades with the best performing setup.
+     * Manual trigger only via REST API or Telegram /selectstrategy command.
+     * Automated time-based selection removed per system rebuild mandate (no 08:30 schedules).
+     * 
+     * Selection is based on backtest data, simulation stats, and LLM insights.
      */
-    @Scheduled(cron = "0 30 8 * * MON-FRI", zone = "Asia/Taipei")
+    // @Scheduled(cron = "0 30 8 * * MON-FRI", zone = "Asia/Taipei")
     @Transactional
     public void selectBestStrategyAndStock() {
         log.info("🤖 AUTO-SELECTION: Starting daily strategy and stock selection...");
