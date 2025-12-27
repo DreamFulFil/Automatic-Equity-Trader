@@ -50,6 +50,12 @@ class TradingEngineTest {
     @Mock
     private ApplicationContext applicationContext;
 
+    @Mock
+    private ContractScalingService contractScalingService;
+
+    @Mock
+    private RiskManagementService riskManagementService;
+
     private TradingEngine tradingEngine;
 
     @BeforeEach
@@ -64,13 +70,24 @@ class TradingEngineTest {
         when(risk.getWeeklyLossLimit()).thenReturn(15000);
         when(risk.getMaxHoldMinutes()).thenReturn(45);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
+        
+        when(contractScalingService.getMaxContracts()).thenReturn(1);
+        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(contractScalingService.getLast30DayProfit()).thenReturn(0.0);
+        
+        when(riskManagementService.getWeeklyPnL()).thenReturn(0.0);
+        when(riskManagementService.getDailyPnL()).thenReturn(0.0);
+        when(riskManagementService.isWeeklyLimitHit()).thenReturn(false);
+        when(riskManagementService.isEarningsBlackout()).thenReturn(false);
 
         tradingEngine = new TradingEngine(
                 restTemplate,
                 objectMapper,
                 telegramService,
                 tradingProperties,
-                applicationContext
+                applicationContext,
+                contractScalingService,
+                riskManagementService
         );
     }
 
@@ -138,8 +155,8 @@ class TradingEngineTest {
     void checkRiskLimits_whenDailyLossLimitHit_shouldTriggerEmergencyShutdown() throws Exception {
         // Given
         setFieldValue(tradingEngine, "marketDataConnected", true);
-        AtomicReference<Double> dailyPnL = getAtomicField(tradingEngine, "dailyPnL");
-        dailyPnL.set(-5000.0); // Exceeds -4500 limit
+        when(riskManagementService.isDailyLimitExceeded(4500)).thenReturn(true);
+        when(riskManagementService.getDailyPnL()).thenReturn(-5000.0);
 
         // When
         invokePrivateMethod(tradingEngine, "checkRiskLimits");
@@ -153,8 +170,7 @@ class TradingEngineTest {
     void checkRiskLimits_whenWithinLimit_shouldNotTriggerShutdown() throws Exception {
         // Given
         setFieldValue(tradingEngine, "marketDataConnected", true);
-        AtomicReference<Double> dailyPnL = getAtomicField(tradingEngine, "dailyPnL");
-        dailyPnL.set(-2000.0); // Within -4500 limit
+        when(riskManagementService.isDailyLimitExceeded(4500)).thenReturn(false);
 
         // When
         invokePrivateMethod(tradingEngine, "checkRiskLimits");
@@ -434,8 +450,7 @@ class TradingEngineTest {
     @Test
     void sendDailySummary_whenProfitable_shouldShowProfitableStatus() throws Exception {
         // Given
-        AtomicReference<Double> dailyPnL = getAtomicField(tradingEngine, "dailyPnL");
-        dailyPnL.set(1500.0);
+        when(riskManagementService.getDailyPnL()).thenReturn(1500.0);
 
         // When
         invokePrivateMethod(tradingEngine, "sendDailySummary");
@@ -448,8 +463,7 @@ class TradingEngineTest {
     @Test
     void sendDailySummary_whenLoss_shouldShowLossStatus() throws Exception {
         // Given
-        AtomicReference<Double> dailyPnL = getAtomicField(tradingEngine, "dailyPnL");
-        dailyPnL.set(-1000.0);
+        when(riskManagementService.getDailyPnL()).thenReturn(-1000.0);
 
         // When
         invokePrivateMethod(tradingEngine, "sendDailySummary");
@@ -461,8 +475,7 @@ class TradingEngineTest {
     @Test
     void sendDailySummary_whenExceptionalDay_shouldCelebrate() throws Exception {
         // Given
-        AtomicReference<Double> dailyPnL = getAtomicField(tradingEngine, "dailyPnL");
-        dailyPnL.set(5000.0);
+        when(riskManagementService.getDailyPnL()).thenReturn(5000.0);
 
         // When
         invokePrivateMethod(tradingEngine, "sendDailySummary");
