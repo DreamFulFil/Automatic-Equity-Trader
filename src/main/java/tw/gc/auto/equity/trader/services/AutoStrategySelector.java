@@ -141,8 +141,9 @@ public class AutoStrategySelector {
             .limit(10)
             .toList();
         
-        // Clear existing selection table
-        activeShadowSelectionRepository.deleteAll();
+        // Clear existing selection table (use deleteAllInBatch for immediate execution)
+        activeShadowSelectionRepository.deleteAllInBatch();
+        log.debug("🗑️ Cleared existing active_shadow_selection entries");
         
         // Insert active (rank 1)
         tw.gc.auto.equity.trader.entities.ActiveShadowSelection activeSelection = 
