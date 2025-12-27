@@ -2,11 +2,14 @@ package tw.gc.mtxfbot;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -30,12 +33,17 @@ public class TelegramService {
         }
 
         try {
-            String encodedMessage = URLEncoder.encode(message, StandardCharsets.UTF_8);
-            String url = String.format(
-                    "https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s",
-                    botToken, chatId, encodedMessage);
+            String url = String.format("https://api.telegram.org/bot%s/sendMessage", botToken);
 
-            restTemplate.getForObject(url, String.class);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("chat_id", chatId);
+            body.put("text", message);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            restTemplate.postForObject(url, request, String.class);
             log.debug("Telegram message sent");
 
         } catch (Exception e) {
