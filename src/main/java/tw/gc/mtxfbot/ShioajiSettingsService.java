@@ -27,9 +27,6 @@ public class ShioajiSettingsService {
         log.info("🔧 ShioajiSettingsService initialized");
     }
 
-    /**
-     * Ensure default Shioaji settings exist in database
-     */
     @Transactional
     public void ensureDefaultSettings() {
         if (shioajiSettingsRepo.findFirst() == null) {

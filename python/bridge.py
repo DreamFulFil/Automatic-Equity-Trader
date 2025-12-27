@@ -128,9 +128,15 @@ def load_config_with_decryption(password: str):
                 config['shioaji']['simulation'] = java_settings.get('simulation', True)
                 print(f"✅ Simulation mode from Java: {config['shioaji']['simulation']}")
             else:
-                print(f"⚠️ Failed to fetch simulation from Java, using config default: {config['shioaji'].get('simulation', True)}")
+                # Fallback to existing config or default True
+                if 'simulation' not in config['shioaji']:
+                    config['shioaji']['simulation'] = True
+                print(f"⚠️ Failed to fetch simulation from Java, using config default: {config['shioaji']['simulation']}")
         except Exception as e:
-            print(f"⚠️ Error fetching simulation from Java: {e}, using config default: {config['shioaji'].get('simulation', True)}")
+            # Fallback to existing config or default True
+            if 'simulation' not in config['shioaji']:
+                config['shioaji']['simulation'] = True
+            print(f"⚠️ Error fetching simulation from Java: {e}, using config default: {config['shioaji']['simulation']}")
     
     return config
 

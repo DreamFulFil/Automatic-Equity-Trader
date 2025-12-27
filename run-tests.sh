@@ -293,8 +293,8 @@ echo "Earnings blackout data is now managed by EarningsBlackoutService (DB-backe
 echo "Use /admin/earnings-blackout/seed to migrate legacy JSON if needed."
 
 start_ollama || exit 1
-start_bridge || exit 1
 start_bot || exit 1
+start_bridge || exit 1
 
 echo ""
 echo -e "${GREEN}✅ Full system running${NC}"
