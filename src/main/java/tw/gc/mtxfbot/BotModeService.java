@@ -1,12 +1,6 @@
 package tw.gc.mtxfbot;
 
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import tw.gc.mtxfbot.entities.BotSettings;
-import tw.gc.mtxfbot.entities.Trade.TradingMode;
-import tw.gc.mtxfbot.repositories.BotSettingsRepository;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -23,6 +17,8 @@ import java.util.Optional;
 public class BotModeService {
     
     private final BotSettingsRepository settingsRepo;
+    private final ShioajiSettingsService shioajiSettingsService;
+    private final RestTemplate restTemplate;
     
     @PostConstruct
     public void initialize() {
@@ -30,6 +26,8 @@ public class BotModeService {
         ensureDefaultSettings();
         
         TradingMode mode = getTradingMode();
+        // Sync Shioaji simulation with trading mode
+        shioajiSettingsService.setSimulation(mode == TradingMode.SIMULATION);
         log.info("🎯 BotModeService initialized - Current mode: {}", mode);
     }
     
@@ -61,6 +59,8 @@ public class BotModeService {
      */
     public void switchToLiveMode() {
         updateSetting(BotSettings.TRADING_MODE, TradingMode.LIVE.name().toLowerCase());
+        shioajiSettingsService.setSimulation(false);
+        shutdownBridge();
         log.warn("🔴 SWITCHED TO LIVE MODE - Real money at risk!");
     }
     
@@ -69,12 +69,22 @@ public class BotModeService {
      */
     public void switchToSimulationMode() {
         updateSetting(BotSettings.TRADING_MODE, TradingMode.SIMULATION.name().toLowerCase());
+        shioajiSettingsService.setSimulation(true);
+        shutdownBridge();
         log.info("🟢 Switched to simulation mode");
     }
     
     /**
-     * Get a setting value
+     * Shutdown the Python bridge to force config reload
      */
+    private void shutdownBridge() {
+        try {
+            restTemplate.postForObject("http://localhost:8888/shutdown", null, String.class);
+            log.info("🛑 Bridge shutdown requested for config reload");
+        } catch (Exception e) {
+            log.warn("Failed to shutdown bridge: {}", e.getMessage());
+        }
+    }
     public Optional<String> getSetting(String key) {
         return settingsRepo.findByKey(key).map(BotSettings::getValue);
     }
