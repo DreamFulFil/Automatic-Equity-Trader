@@ -563,8 +563,11 @@ def download_batch(request: DownloadBatchRequest):
         )
         
     except Exception as e:
+        # Return structured error payload with 200 to avoid causing callers to treat
+        # this as an infrastructure (HTTP) failure. Java side handles status
+        # field and will fallback appropriately.
         return JSONResponse(
-            status_code=500,
+            status_code=200,
             content={
                 "status": "error",
                 "symbol": request.symbol,
@@ -572,6 +575,62 @@ def download_batch(request: DownloadBatchRequest):
                 "data": []
             }
         )
+
+
+@app.get("/data/source-stats")
+def get_data_source_stats():
+    """
+    Get data source statistics for diagnostics.
+    
+    Returns which data sources (Shioaji, Yahoo, TWSE) supplied data for each symbol,
+    success/failure counts, and total records fetched from each source.
+    
+    This is useful for diagnosing data pipeline issues and understanding
+    which sources are actively providing data.
+    
+    Returns:
+        {
+            "status": "ok",
+            "timestamp": "2025-12-27T10:00:00",
+            "sources": {
+                "shioaji": {"success": 10, "failed": 2, "records": 500},
+                "yahoo": {"success": 8, "failed": 4, "records": 400},
+                "twse": {"success": 5, "failed": 7, "records": 250}
+            },
+            "last_fetch": {
+                "2330": {"primary_source": "shioaji", "breakdown": {...}, "total_count": 5, "timestamp": "..."},
+                ...
+            },
+            "total_fetches": 15,
+            "shioaji_connected": true,
+            "trading_mode": "stock"
+        }
+    """
+    from app.services.data_operations_service import get_source_stats
+    
+    stats = get_source_stats()
+    
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "sources": {
+            "shioaji": stats["shioaji"],
+            "yahoo": stats["yahoo"],
+            "twse": stats["twse"]
+        },
+        "last_fetch": stats["last_fetch"],
+        "total_fetches": stats["total_fetches"],
+        "shioaji_connected": shioaji.connected if shioaji else False,
+        "trading_mode": TRADING_MODE or "unknown"
+    }
+
+
+@app.post("/data/source-stats/reset")
+def reset_data_source_stats():
+    """Reset data source statistics counters"""
+    from app.services.data_operations_service import reset_source_stats
+    reset_source_stats()
+    return {"status": "ok", "message": "Source statistics reset", "timestamp": datetime.now().isoformat()}
 
 
 def _download_with_yfinance(symbol: str, start_str: str, end_str: str, orig_start: str, orig_end: str):

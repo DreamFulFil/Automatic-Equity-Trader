@@ -13,6 +13,40 @@ from typing import List, Dict, Optional
 import random
 import math
 import requests
+import threading
+
+# Global statistics for data source diagnostics
+_source_stats_lock = threading.Lock()
+_source_stats = {
+    "shioaji": {"success": 0, "failed": 0, "records": 0},
+    "yahoo": {"success": 0, "failed": 0, "records": 0},
+    "twse": {"success": 0, "failed": 0, "records": 0},
+    "last_fetch": {},  # symbol -> {source: str, count: int, timestamp: str}
+    "total_fetches": 0
+}
+
+def get_source_stats() -> dict:
+    """Get current data source statistics for diagnostics"""
+    with _source_stats_lock:
+        return {
+            "shioaji": dict(_source_stats["shioaji"]),
+            "yahoo": dict(_source_stats["yahoo"]),
+            "twse": dict(_source_stats["twse"]),
+            "last_fetch": dict(_source_stats["last_fetch"]),
+            "total_fetches": _source_stats["total_fetches"]
+        }
+
+def reset_source_stats():
+    """Reset data source statistics"""
+    global _source_stats
+    with _source_stats_lock:
+        _source_stats = {
+            "shioaji": {"success": 0, "failed": 0, "records": 0},
+            "yahoo": {"success": 0, "failed": 0, "records": 0},
+            "twse": {"success": 0, "failed": 0, "records": 0},
+            "last_fetch": {},
+            "total_fetches": 0
+        }
 
 
 class DataOperationsService:
@@ -141,39 +175,149 @@ class DataOperationsService:
                     "status": "success",
                     "symbol": "2330.TW",
                     "source": "merged",
+                    "source_breakdown": {"shioaji": 5, "yahoo": 0, "twse": 0},
                     "data": [...],  # List of OHLCV data points
                     "count": 100,
                     "start_date": "2025-01-01",
                     "end_date": "2025-12-21"
                 }
         """
+        global _source_stats
         from datetime import datetime
         import pandas as pd
         import yfinance as yf
         today = datetime.now()
         start = today - timedelta(days=days-1)
+        
         # Helper to normalize date to date only
         def norm_date(d):
             if isinstance(d, datetime):
                 return d.date()
             return d
-        # Fetch from all sources
-        twse = self._fetch_twse(stock_code, start, today)
-        shioaji = self._fetch_shioaji(stock_code, start, today)
-        yahoo = self._fetch_yahoo(stock_code, start, today)
-        # Merge by date, priority: TWSE > Shioaji > Yahoo
+        
+        # Track source breakdown for this fetch
+        source_breakdown = {"shioaji": 0, "yahoo": 0, "twse": 0}
+        primary_source = None
+        
+        # Fetch in preferred priority: Shioaji (main), Yahoo (fallback), TWSE (supplement)
+        print(f"📥 Fetching {days} days of data for {stock_code}...")
+        
+        try:
+            shioaji = self._fetch_shioaji(stock_code, start, today)
+            with _source_stats_lock:
+                if shioaji:
+                    _source_stats["shioaji"]["success"] += 1
+                    _source_stats["shioaji"]["records"] += len(shioaji)
+                else:
+                    _source_stats["shioaji"]["failed"] += 1
+        except Exception as e:
+            print(f"⚠️ Shioaji fetch failed for {stock_code}: {e}")
+            shioaji = []
+            with _source_stats_lock:
+                _source_stats["shioaji"]["failed"] += 1
+
+        try:
+            yahoo = self._fetch_yahoo(stock_code, start, today)
+            with _source_stats_lock:
+                if yahoo:
+                    _source_stats["yahoo"]["success"] += 1
+                    _source_stats["yahoo"]["records"] += len(yahoo)
+                else:
+                    _source_stats["yahoo"]["failed"] += 1
+        except Exception as e:
+            print(f"⚠️ Yahoo fetch failed for {stock_code}: {e}")
+            yahoo = []
+            with _source_stats_lock:
+                _source_stats["yahoo"]["failed"] += 1
+
+        try:
+            twse = self._fetch_twse(stock_code, start, today)
+            with _source_stats_lock:
+                if twse:
+                    _source_stats["twse"]["success"] += 1
+                    _source_stats["twse"]["records"] += len(twse)
+                else:
+                    _source_stats["twse"]["failed"] += 1
+        except Exception as e:
+            print(f"⚠️ TWSE fetch failed for {stock_code}: {e}")
+            twse = []
+            with _source_stats_lock:
+                _source_stats["twse"]["failed"] += 1
+
+        print(f"📡 Raw data counts for {stock_code}: shioaji={len(shioaji)}, yahoo={len(yahoo)}, twse={len(twse)}")
+
+        # Merge by date using preferred order: shioaji -> yahoo -> twse
+        # Track which source provided each date
         merged = {}
-        for src in (twse, shioaji, yahoo):
-            for bar in src:
-                d = norm_date(bar['date'])
-                if d not in merged:
-                    merged[d] = bar
+        date_sources = {}  # Track which source provided each date
+        
+        for bar in shioaji:
+            d = norm_date(bar['date'])
+            if d not in merged:
+                merged[d] = bar
+                date_sources[d] = "shioaji"
+                source_breakdown["shioaji"] += 1
+                
+        for bar in yahoo:
+            d = norm_date(bar['date'])
+            if d not in merged:
+                merged[d] = bar
+                date_sources[d] = "yahoo"
+                source_breakdown["yahoo"] += 1
+                
+        for bar in twse:
+            d = norm_date(bar['date'])
+            if d not in merged:
+                merged[d] = bar
+                date_sources[d] = "twse"
+                source_breakdown["twse"] += 1
+
+        # Determine primary source (which contributed most data)
+        if source_breakdown["shioaji"] > 0:
+            primary_source = "shioaji"
+        elif source_breakdown["yahoo"] > 0:
+            primary_source = "yahoo"
+        elif source_breakdown["twse"] > 0:
+            primary_source = "twse"
+        else:
+            primary_source = "none"
+            
+        # Log detailed breakdown
+        print(f"✅ Merged data for {stock_code}: {len(merged)} days total "
+              f"(shioaji={source_breakdown['shioaji']}, "
+              f"yahoo={source_breakdown['yahoo']}, "
+              f"twse={source_breakdown['twse']}) "
+              f"[primary: {primary_source}]")
+
+        # Update global stats
+        with _source_stats_lock:
+            _source_stats["total_fetches"] += 1
+            _source_stats["last_fetch"][stock_code] = {
+                "primary_source": primary_source,
+                "breakdown": source_breakdown,
+                "total_count": len(merged),
+                "timestamp": datetime.now().isoformat()
+            }
+
         # Format for endpoint
         data_points = []
         for d in sorted(merged.keys()):
             bar = merged[d]
+            # Convert date to datetime with time component for Java compatibility
+            date_val = bar["date"]
+            if hasattr(date_val, "isoformat"):
+                # If it's a date object, convert to datetime at market open (09:00:00)
+                if hasattr(date_val, "hour"):
+                    # Already a datetime
+                    timestamp_str = date_val.isoformat()
+                else:
+                    # Just a date, add time component
+                    timestamp_str = f"{date_val.isoformat()}T09:00:00"
+            else:
+                timestamp_str = f"{str(date_val)}T09:00:00"
+            
             data_points.append({
-                "timestamp": bar["date"].isoformat() if hasattr(bar["date"], "isoformat") else str(bar["date"]),
+                "timestamp": timestamp_str,
                 "open": bar["open"],
                 "high": bar["high"],
                 "low": bar["low"],
@@ -183,7 +327,8 @@ class DataOperationsService:
         return {
             "status": "success",
             "symbol": symbol or f"{stock_code}.TW",
-            "source": "merged",
+            "source": primary_source,
+            "source_breakdown": source_breakdown,
             "data": data_points,
             "count": len(data_points),
             "start_date": start_date,
@@ -229,13 +374,23 @@ class DataOperationsService:
         return ohlcv
 
     def _fetch_shioaji(self, stock_code: str, start, end) -> List[Dict]:
+        """Fetch historical data from Shioaji using the global wrapper instance"""
         try:
-            from app.services.shioaji_service import ShioajiWrapper
-            sjw = ShioajiWrapper(self.db_config)
-            bars = sjw.fetch_ohlcv(stock_code, (end - start).days + 1)
+            # Import the global shioaji wrapper from main.py (already connected)
+            from app.main import shioaji as global_shioaji
+            
+            if global_shioaji is None or not global_shioaji.connected:
+                print(f"⚠️ Shioaji not available for {stock_code} - skipping Shioaji source")
+                return []
+                
+            bars = global_shioaji.fetch_ohlcv(stock_code, (end - start).days + 1)
             # Filter to date range
             return [bar for bar in bars if start.date() <= bar['date'] <= end.date()]
-        except Exception:
+        except ImportError as e:
+            print(f"⚠️ Cannot import shioaji from main: {e}")
+            return []
+        except Exception as e:
+            print(f"⚠️ Shioaji fetch error for {stock_code}: {e}")
             return []
 
     def _fetch_yahoo(self, stock_code: str, start, end) -> List[Dict]:
