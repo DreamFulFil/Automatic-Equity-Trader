@@ -29,7 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class StrategyManager {
 
-    private final TradingProperties tradingProperties;
     private final ContractScalingService contractScalingService;
     private final StockSettingsService stockSettingsService;
     private final TradingStateService tradingStateService;
@@ -74,10 +73,8 @@ public class StrategyManager {
         
         log.info("🔥 Total Active Strategies: {}", activeStrategies.size());
         
-        // Set initial active strategy from properties if not set
-        if (tradingStateService.getActiveStrategyName() == null) {
-            tradingStateService.setActiveStrategyName(tradingProperties.getActiveStrategy());
-        }
+        // Active strategy is now managed by database (ActiveStrategyService)
+        log.info("📊 Active Strategy: {}", tradingStateService.getActiveStrategyName());
     }
     
     private void initializeShadowModeStocks() {

@@ -39,4 +39,14 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     Optional<Trade> findFirstBySymbolAndStatusOrderByTimestampDesc(String symbol, TradeStatus status);
 
     Optional<Trade> findFirstBySymbolAndModeAndStatusOrderByTimestampDesc(String symbol, TradingMode mode, TradeStatus status);
+    
+    /**
+     * Find trades by strategy name within a time period
+     */
+    List<Trade> findByStrategyNameAndTimestampBetween(String strategyName, LocalDateTime start, LocalDateTime end);
+    
+    /**
+     * Find trades by strategy name
+     */
+    List<Trade> findByStrategyNameOrderByTimestampDesc(String strategyName);
 }

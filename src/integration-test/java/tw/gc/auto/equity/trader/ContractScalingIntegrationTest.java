@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.services.TelegramService;
+import tw.gc.auto.equity.trader.services.TradingStateService;
 import tw.gc.auto.equity.trader.services.ContractScalingService;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,6 +20,7 @@ class ContractScalingIntegrationTest {
 
     @Mock private RestTemplate restTemplate;
     @Mock private TelegramService telegramService;
+    @Mock private TradingStateService tradingStateService;
     
     private ContractScalingService contractScalingService;
     private TradingProperties tradingProperties;
@@ -31,7 +33,7 @@ class ContractScalingIntegrationTest {
         tradingProperties.getBridge().setUrl("http://localhost:8888");
         
         contractScalingService = new ContractScalingService(
-            restTemplate, objectMapper, telegramService, tradingProperties
+            restTemplate, objectMapper, telegramService, tradingProperties, tradingStateService
         );
     }
 
@@ -77,8 +79,9 @@ class ContractScalingIntegrationTest {
         assertEquals(750000.0, contractScalingService.getLastEquity());
         assertEquals(200000.0, contractScalingService.getLast30DayProfit());
         
+        // Now only sends message when contracts change (from 1 to 3)
         verify(telegramService).sendMessage(argThat(message -> 
-            message.contains("Contract sizing updated: 3 contracts") &&
+            message.contains("Contract Scaling Changed: 1 → 3") &&
             message.contains("Equity: 750000 TWD") &&
             message.contains("30d profit: 200000 TWD")
         ));
@@ -181,9 +184,9 @@ class ContractScalingIntegrationTest {
         
         // Then: Should show contract change in message
         assertEquals(2, contractScalingService.getMaxContracts());
+        // Now shows "Contract Scaling Changed" instead of "Contract sizing updated"
         verify(telegramService).sendMessage(argThat(message -> 
-            message.contains("Contract sizing updated: 2 contracts") &&
-            message.contains("UP Changed from 1")
+            message.contains("Contract Scaling Changed: 1 → 2")
         ));
     }
 

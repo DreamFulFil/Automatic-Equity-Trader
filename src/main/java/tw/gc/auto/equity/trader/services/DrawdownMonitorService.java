@@ -25,7 +25,6 @@ public class DrawdownMonitorService {
     private final OrderExecutionService orderExecutionService;
     private final TradingStateService tradingStateService;
     private final PositionManager positionManager;
-    private final ActiveStockService activeStockService;
     
     /**
      * Maximum allowed drawdown percentage before triggering emergency switch
@@ -155,6 +154,6 @@ public class DrawdownMonitorService {
     }
     
     private String getActiveSymbol() {
-        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
+        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
     }
 }

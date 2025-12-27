@@ -89,7 +89,9 @@ class TradingEngineTest {
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
 
-        tradingStateService = new TradingStateService();
+        ActiveStrategyService mockActiveStrategyService = mock(ActiveStrategyService.class);
+        when(mockActiveStrategyService.getActiveStrategyName()).thenReturn("RSIStrategy");
+        tradingStateService = new TradingStateService(mockActiveStrategyService);
         positionManager = new PositionManager();
 
         tradingEngine = new TradingEngineService(

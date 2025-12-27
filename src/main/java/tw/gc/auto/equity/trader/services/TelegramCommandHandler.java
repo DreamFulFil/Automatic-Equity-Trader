@@ -33,7 +33,9 @@ public class TelegramCommandHandler {
     private final LlmService llmService;
     private final OrderExecutionService orderExecutionService;
     private final ApplicationContext applicationContext;
-    private final RiskSettingsService riskSettingsService; // Added for flattenPosition call if needed
+    private final RiskSettingsService riskSettingsService;
+    private final ActiveStrategyService activeStrategyService;
+    private final StrategyPerformanceService strategyPerformanceService;
 
     public void registerCommands(List<IStrategy> activeStrategies) {
         telegramService.registerCommandHandlers(
@@ -44,20 +46,22 @@ public class TelegramCommandHandler {
             v -> handleShutdownCommand()
         );
         
-        // Register dynamic strategy switching
+        // Register dynamic strategy switching (deprecated - use /set-main-strategy)
         telegramService.registerCustomCommand("/strategy", args -> {
             if (args == null || args.trim().isEmpty()) {
                 telegramService.sendMessage("Current Active Strategy: " + tradingStateService.getActiveStrategyName() + 
-                    "\nAvailable: " + activeStrategies.stream().map(IStrategy::getName).reduce((a,b) -> a + ", " + b).orElse("None"));
+                    "\nAvailable: " + activeStrategies.stream().map(IStrategy::getName).reduce((a,b) -> a + ", " + b).orElse("None") +
+                    "\n\n⚠️ Deprecated: Use /set-main-strategy instead");
             } else {
                 String newStrategy = args.trim();
-                // Verify it exists (fuzzy match)
+                // Verify it exists
                 boolean exists = activeStrategies.stream()
                     .anyMatch(s -> s.getName().equalsIgnoreCase(newStrategy));
                 
-                if (exists || "LegacyBridge".equalsIgnoreCase(newStrategy)) {
+                if (exists) {
                     tradingStateService.setActiveStrategyName(newStrategy);
-                    telegramService.sendMessage("✅ Active Strategy switched to: " + newStrategy);
+                    telegramService.sendMessage("✅ Active Strategy switched to: " + newStrategy +
+                        "\n\n⚠️ Deprecated: Use /set-main-strategy instead");
                     log.info("🔄 Strategy switched to {} via Telegram", newStrategy);
                 } else {
                     telegramService.sendMessage("❌ Strategy not found: " + newStrategy);
@@ -82,7 +86,8 @@ public class TelegramCommandHandler {
         // Register Agent commands
         telegramService.registerCustomCommand("/ask", args -> {
             if (args == null || args.trim().isEmpty()) {
-                telegramService.sendMessage("Usage: /ask <question>\nAsk the Tutor Bot about trading concepts.");
+                // No question provided - suggest best strategy
+                handleStrategyRecommendation();
             } else {
                 try {
                     String response = llmService.generateInsight("You are a trading tutor. Answer this: " + args);
@@ -97,6 +102,137 @@ public class TelegramCommandHandler {
             telegramService.sendMessage("📰 News Analysis:\nFetching latest market news... (Mock)");
             // Trigger async news fetch/analysis here
         });
+        
+        // Register /set-main-strategy command
+        telegramService.registerCustomCommand("/set-main-strategy", args -> {
+            handleSetMainStrategy(args, activeStrategies);
+        });
+    }
+    
+    /**
+     * Handle /set-main-strategy command
+     */
+    private void handleSetMainStrategy(String args, List<IStrategy> activeStrategies) {
+        if (args == null || args.trim().isEmpty()) {
+            // Show help message
+            StringBuilder help = new StringBuilder();
+            help.append("📊 SET MAIN STRATEGY\n");
+            help.append("━━━━━━━━━━━━━━━━\n");
+            help.append("Usage: /set-main-strategy <strategy-name>\n\n");
+            help.append("Available strategies:\n");
+            
+            for (IStrategy strategy : activeStrategies) {
+                help.append("• ").append(strategy.getName()).append("\n");
+            }
+            
+            help.append("\n📌 Current: ").append(tradingStateService.getActiveStrategyName());
+            help.append("\n\n💡 System will automatically load optimal parameters");
+            
+            telegramService.sendMessage(help.toString());
+            return;
+        }
+        
+        String strategyName = args.trim();
+        
+        // Validate strategy exists
+        boolean exists = activeStrategies.stream()
+            .anyMatch(s -> s.getName().equalsIgnoreCase(strategyName));
+        
+        if (!exists) {
+            telegramService.sendMessage("❌ Strategy not found: " + strategyName + 
+                "\n\nUse /set-main-strategy (without arguments) to see available strategies");
+            return;
+        }
+        
+        // Find the exact strategy name (case-corrected)
+        String exactName = activeStrategies.stream()
+            .filter(s -> s.getName().equalsIgnoreCase(strategyName))
+            .map(IStrategy::getName)
+            .findFirst()
+            .orElse(strategyName);
+        
+        try {
+            // Load optimal parameters from performance data
+            tw.gc.auto.equity.trader.entities.StrategyPerformance bestPerf = 
+                strategyPerformanceService.getBestPerformer(30); // Last 30 days
+            
+            java.util.Map<String, Object> parameters = new java.util.HashMap<>();
+            
+            // Switch strategy
+            activeStrategyService.switchStrategy(
+                exactName,
+                parameters,
+                "Manual switch via /set-main-strategy command",
+                false
+            );
+            
+            telegramService.sendMessage(String.format(
+                "✅ Main Strategy Updated\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Strategy: %s\n" +
+                "Parameters: Auto-loaded from performance history\n" +
+                "Source: Manual command",
+                exactName
+            ));
+            
+            log.info("🔄 Main strategy switched to {} via /set-main-strategy command", exactName);
+            
+        } catch (Exception e) {
+            log.error("Failed to switch strategy", e);
+            telegramService.sendMessage("❌ Failed to switch strategy: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle strategy recommendation when /ask is called without arguments
+     */
+    private void handleStrategyRecommendation() {
+        try {
+            // Get the best performing strategy based on recent performance
+            tw.gc.auto.equity.trader.entities.StrategyPerformance bestPerf = 
+                strategyPerformanceService.getBestPerformer(30); // Last 30 days
+            
+            if (bestPerf == null) {
+                telegramService.sendMessage(
+                    "📊 STRATEGY RECOMMENDATION\n" +
+                    "━━━━━━━━━━━━━━━━\n" +
+                    "No performance data available yet.\n" +
+                    "Run strategies in shadow mode to gather data.\n\n" +
+                    "💡 Tip: Use /ask <question> to ask about trading concepts"
+                );
+                return;
+            }
+            
+            String currentStrategy = tradingStateService.getActiveStrategyName();
+            boolean isAlreadyActive = currentStrategy.equals(bestPerf.getStrategyName());
+            
+            StringBuilder message = new StringBuilder();
+            message.append("📊 STRATEGY RECOMMENDATION\n");
+            message.append("━━━━━━━━━━━━━━━━\n");
+            message.append(String.format("🏆 Best Performer: %s\n", bestPerf.getStrategyName()));
+            message.append(String.format("📈 Sharpe Ratio: %.2f\n", bestPerf.getSharpeRatio() != null ? bestPerf.getSharpeRatio() : 0.0));
+            message.append(String.format("📉 Max Drawdown: %.2f%%\n", bestPerf.getMaxDrawdownPct() != null ? bestPerf.getMaxDrawdownPct() : 0.0));
+            message.append(String.format("💰 Total Return: %.2f%%\n", bestPerf.getTotalReturnPct() != null ? bestPerf.getTotalReturnPct() : 0.0));
+            message.append(String.format("🎯 Win Rate: %.2f%%\n", bestPerf.getWinRatePct() != null ? bestPerf.getWinRatePct() : 0.0));
+            message.append(String.format("📊 Trades: %d\n", bestPerf.getTotalTrades()));
+            message.append("\n");
+            
+            if (isAlreadyActive) {
+                message.append("✅ This strategy is already active!");
+            } else {
+                message.append(String.format("📌 Current: %s\n", currentStrategy));
+                message.append(String.format("💡 Recommendation: Switch to %s\n", bestPerf.getStrategyName()));
+                message.append(String.format("\nUse: /set-main-strategy %s", bestPerf.getStrategyName()));
+            }
+            
+            message.append("\n\n💡 Tip: Use /ask <question> to ask about trading concepts");
+            
+            telegramService.sendMessage(message.toString());
+            
+        } catch (Exception e) {
+            log.error("Failed to generate strategy recommendation", e);
+            telegramService.sendMessage("❌ Failed to generate recommendation: " + e.getMessage());
+        }
     }
 
     private void handleShutdownCommand() {
