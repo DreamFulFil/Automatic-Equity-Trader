@@ -39,6 +39,7 @@ jobs:
           POSTGRES_DB: lunchbot
           POSTGRES_USER: lunchbotuser
           POSTGRES_PASSWORD: testpassword123
+          POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
