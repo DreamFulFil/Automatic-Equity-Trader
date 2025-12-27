@@ -295,8 +295,6 @@ class DataOperationsService:
               f"(yahoo={source_breakdown['yahoo']}, "
               f"shioaji={source_breakdown['shioaji']}, "
               f"twse={source_breakdown['twse']}) "
-              f"yahoo={source_breakdown['yahoo']}, "
-              f"twse={source_breakdown['twse']}) "
               f"[primary: {primary_source}]")
 
         # Update global stats
