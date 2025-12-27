@@ -176,6 +176,12 @@ public class LlmInsight {
         CORRELATION_ANALYSIS,
         
         /** General market commentary */
-        MARKET_COMMENTARY
+        MARKET_COMMENTARY,
+        
+        /** AI-assisted signal generation */
+        SIGNAL_GENERATION,
+        
+        /** Startup market analysis */
+        MARKET_ANALYSIS
     }
 }
