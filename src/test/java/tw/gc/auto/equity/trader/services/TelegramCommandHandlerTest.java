@@ -57,7 +57,7 @@ class TelegramCommandHandlerTest {
         StockSettings stockSettings = StockSettings.builder().shares(100).shareIncrement(10).build();
         when(stockSettingsService.getSettings()).thenReturn(stockSettings);
         
-        RiskSettings riskSettings = RiskSettings.builder().dailyLossLimit(5000).weeklyLossLimit(15000).build();
+        RiskSettings riskSettings = RiskSettings.builder().dailyLossLimitTwd(5000).weeklyLossLimitTwd(15000).build();
         when(riskSettingsService.getSettings()).thenReturn(riskSettings);
         
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
