@@ -7,10 +7,12 @@ trading:
     start: "11:30"
     end: "13:00"
   
-  # Risk limits
+  # Risk limits - NO PROFIT CAPS, unlimited upside
   risk:
     max-position: 1
     daily-loss-limit: 4500
+    # NO daily-profit-cap - let winners run!
+    # NO monthly-profit-cap - unlimited upside!
   
   # Python bridge
   bridge:

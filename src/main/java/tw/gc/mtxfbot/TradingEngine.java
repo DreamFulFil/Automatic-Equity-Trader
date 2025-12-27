@@ -138,8 +138,19 @@ public class TradingEngine {
         double entry = entryPrice.get();
         double unrealizedPnL = (currentPrice - entry) * pos * 50; // MTXF tick value
         
-        if (Math.abs(unrealizedPnL) > 1000 || signal.path("exit_signal").asBoolean(false)) {
-            flattenPosition("Exit signal / Target hit");
+        // Exit only on: stop-loss OR explicit exit signal (trend reversal)
+        // NO PROFIT TARGETS - let winners run until reversal!
+        boolean stopLoss = unrealizedPnL < -500; // -10 points stop
+        boolean exitSignal = signal.path("exit_signal").asBoolean(false);
+        
+        if (stopLoss) {
+            log.warn("⛔ Stop-loss hit: {} TWD", unrealizedPnL);
+            flattenPosition("Stop-loss");
+        } else if (exitSignal) {
+            log.info("🔄 Exit signal (trend reversal): {} TWD", unrealizedPnL);
+            flattenPosition("Trend reversal");
+        } else if (unrealizedPnL > 0) {
+            log.debug("💰 Position running: +{} TWD (no cap, letting it run)", unrealizedPnL);
         }
     }
     
@@ -204,12 +215,24 @@ public class TradingEngine {
     }
     
     private void sendDailySummary() {
+        double pnl = dailyPnL.get();
+        String status = pnl > 0 ? "✅ Profitable" : "❌ Loss";
+        String comment = "";
+        
+        // Celebrate exceptional days
+        if (pnl > 3000) {
+            comment = "\n🚀 EXCEPTIONAL DAY! Let winners run!";
+        } else if (pnl > 2000) {
+            comment = "\n🔥 Great performance!";
+        } else if (pnl > 1000) {
+            comment = "\n💪 Solid day!";
+        }
+        
         telegramService.sendMessage(String.format(
                 "📊 DAILY SUMMARY\nFinal P&L: %.0f TWD\n" +
-                "Target: 1,000 TWD/day (30,000 TWD/month)\n" +
-                "Status: %s",
-                dailyPnL.get(),
-                dailyPnL.get() > 0 ? "✅ Profitable" : "❌ Loss"));
+                "Status: %s%s\n" +
+                "📈 NO PROFIT CAPS - Unlimited upside potential!",
+                pnl, status, comment));
     }
     
     @PreDestroy

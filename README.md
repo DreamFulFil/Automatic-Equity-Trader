@@ -93,16 +93,19 @@ Done! Bot will start at 11:30 and auto-flatten at 13:00.
 
 ---
 
-## 📊 Performance Target
+## 📊 Performance Target (NO CAPS!)
 
 | Metric | Target |
 |--------|--------|
 | Initial Capital | 100,000 TWD |
-| Monthly Profit | 30,000 TWD (30%) |
-| Daily Profit | 1,000 TWD |
+| Monthly Profit | 30,000+ TWD (30%+ baseline) |
+| **UPSIDE** | **🚀 UNLIMITED - No profit caps!** |
 | Max Drawdown | -10% (10,000 TWD) |
 | Win Rate | 60%+ |
 | Trades/Day | 2-3 |
+| Best Month Potential | 50,000-70,000+ TWD in trending markets |
+
+**Philosophy**: Cut losses fast (-500 TWD/trade), let winners run until trend reversal. NO daily or monthly profit caps!
 
 **Risk**: 1 MTXF contract, max -4,500 TWD/day hard limit.
 

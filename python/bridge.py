@@ -113,27 +113,44 @@ def health():
 
 @app.get("/signal")
 def get_signal():
-    """Generate trading signal with strategy + news veto"""
+    """Generate trading signal with strategy + news veto
+    
+    UNLIMITED UPSIDE STRATEGY:
+    - Clean trend continuation (3/5-min momentum alignment)
+    - Volume confirmation (institutional flow)
+    - Fair-value anchor from overnight US futures
+    - Exit ONLY on: stop-loss OR trend reversal
+    - NO profit targets - let winners run!
+    """
     
     # News veto check (every call for real-time risk)
     headlines = fetch_news_headlines()
     news_analysis = call_llama_news_veto(headlines)
     
-    # Simple momentum strategy (placeholder - expand with your logic)
     price = latest_tick["price"]
     direction = "NEUTRAL"
     confidence = 0.5
+    exit_signal = False
     
-    # Example: Simple momentum (replace with your fair-value + volume logic)
+    # TODO: Implement your full strategy here
+    # Example skeleton (replace with your actual logic):
+    # 1. Calculate 3-min and 5-min momentum
+    # 2. Check volume imbalance (bid/ask ratio)
+    # 3. Compare to fair-value from overnight NQ/ES
+    # 4. Detect clean trend vs. choppy consolidation
+    
+    # Placeholder momentum example
     if latest_tick["volume"] > 100:
-        if price > 0:  # Add your actual strategy here
+        if price > 0:  # Replace with actual momentum logic
             direction = "LONG"
-            confidence = 0.7
+            confidence = 0.72
+            # exit_signal = True if momentum reverses
     
     return {
         "current_price": price,
         "direction": direction,
         "confidence": confidence,
+        "exit_signal": exit_signal,  # TRUE only on trend reversal
         "news_veto": news_analysis.get("veto", False),
         "news_score": news_analysis.get("score", 0.5),
         "news_reason": news_analysis.get("reason", ""),

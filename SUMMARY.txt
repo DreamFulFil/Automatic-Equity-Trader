@@ -51,12 +51,18 @@
 ════════════════════════════════════════════════════════════════
 
 Capital:         100,000 TWD
-Monthly Target:   30,000 TWD (30% return)
-Daily Target:      1,000 TWD
+Monthly Baseline: 30,000 TWD (30% return)
+Monthly Upside:  UNLIMITED 🚀 (no caps!)
+Best Month:      50,000-70,000+ TWD possible
 Win Rate:            60%+
 Max Daily Loss:   -4,500 TWD (auto-stop)
 Trading Window:  11:30-13:00 Taipei time only
 Position Size:   1 MTXF contract max
+
+Exit Strategy:   NO profit targets - exit only on:
+                 1) Stop-loss (-500 TWD)
+                 2) Trend reversal (momentum flip)
+                 3) End of day (13:00)
 
 ════════════════════════════════════════════════════════════════
 🚀 QUICK START (5 MINUTES)
