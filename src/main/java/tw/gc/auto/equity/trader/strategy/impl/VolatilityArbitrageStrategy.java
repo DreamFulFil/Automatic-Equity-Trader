@@ -7,28 +7,28 @@ import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.StrategyType;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * VolatilityArbitrageStrategy
- * Type: Quantitative
+ * Type: Volatility Trading
  * 
  * Academic Foundation:
  * - Bakshi & Kapadia (2003) - 'Delta-Hedged Gains and Volatility'
  * 
  * Logic:
- * Trade realized vs implied volatility spread
- * 
- * Status: TEMPLATE - Requires full implementation with proper:
- * - State management (price history, indicators)
- * - Entry/exit logic
- * - Risk management
- * - Academic validation
+ * Trade realized vs implied volatility spread. Buy when realized < implied.
  */
 @Slf4j
 public class VolatilityArbitrageStrategy implements IStrategy {
     
-    // Parameters from academic research
     private final int realizedWindow;
     private final double spreadThreshold;
+    private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
+    private final Map<String, Deque<Double>> volHistory = new HashMap<>();
     
     public VolatilityArbitrageStrategy(int realizedWindow, double spreadThreshold) {
         this.realizedWindow = realizedWindow;
@@ -37,15 +37,71 @@ public class VolatilityArbitrageStrategy implements IStrategy {
 
     @Override
     public TradeSignal execute(Portfolio portfolio, MarketData data) {
-        // TODO: Implement VolatilityArbitrageStrategy logic based on academic research
-        // Reference: Bakshi & Kapadia (2003) - 'Delta-Hedged Gains and Volatility'
-        log.warn("{} not yet implemented - returning neutral", getName());
-        return TradeSignal.neutral("Strategy template - not implemented");
+        String symbol = data.getSymbol();
+        Deque<Double> prices = priceHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
+        Deque<Double> vols = volHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
+        
+        prices.addLast(data.getClose());
+        if (prices.size() > realizedWindow * 2) prices.removeFirst();
+        
+        if (prices.size() < realizedWindow) {
+            return TradeSignal.neutral("Warming up vol arb");
+        }
+        
+        Double[] priceArray = prices.toArray(new Double[0]);
+        
+        // Calculate realized volatility
+        double sumReturns = 0;
+        double sumSqReturns = 0;
+        for (int i = priceArray.length - realizedWindow; i < priceArray.length; i++) {
+            double ret = (priceArray[i] - priceArray[i-1]) / priceArray[i-1];
+            sumReturns += ret;
+            sumSqReturns += ret * ret;
+        }
+        double avgReturn = sumReturns / realizedWindow;
+        double variance = (sumSqReturns / realizedWindow) - (avgReturn * avgReturn);
+        double realizedVol = Math.sqrt(variance) * Math.sqrt(252);
+        
+        // Track volatility history for implied vol proxy
+        vols.addLast(realizedVol);
+        if (vols.size() > 30) vols.removeFirst();
+        
+        // Implied volatility proxy: historical average
+        double impliedVol = 0;
+        for (Double v : vols) impliedVol += v;
+        impliedVol /= vols.size();
+        
+        double volSpread = impliedVol - realizedVol;
+        
+        int position = portfolio.getPosition(symbol);
+        
+        // Realized < Implied (volatility premium): go long, expect vol expansion
+        if (volSpread > spreadThreshold && position <= 0) {
+            return TradeSignal.longSignal(0.70,
+                String.format("Vol arb long: realized=%.1f%%, implied=%.1f%%, spread=%.1f%%", 
+                    realizedVol * 100, impliedVol * 100, volSpread * 100));
+        }
+        
+        // Realized > Implied: exit long
+        if (position > 0 && volSpread < -spreadThreshold / 2) {
+            return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.70,
+                String.format("Vol spread collapsed: %.1f%%", volSpread * 100));
+        }
+        
+        // Short when realized >> implied (mean reversion expected)
+        if (volSpread < -spreadThreshold && position >= 0) {
+            return TradeSignal.shortSignal(0.65,
+                String.format("Vol arb short: realized=%.1f%% > implied=%.1f%%", 
+                    realizedVol * 100, impliedVol * 100));
+        }
+        
+        return TradeSignal.neutral(String.format("Vol spread: %.1f%%", volSpread * 100));
     }
 
     @Override
     public String getName() {
-        return "Volatility Arbitrage Strategy";
+        return String.format("Volatility Arbitrage (%dd, spread>%.1f%%)", 
+            realizedWindow, spreadThreshold * 100);
     }
 
     @Override
@@ -55,6 +111,7 @@ public class VolatilityArbitrageStrategy implements IStrategy {
 
     @Override
     public void reset() {
-        // TODO: Clear any internal state
+        priceHistory.clear();
+        volHistory.clear();
     }
 }
