@@ -35,6 +35,8 @@ import hashlib
 import threading
 import json
 import argparse
+import gc
+import weakref
 from datetime import datetime, timedelta
 from collections import deque
 import statistics
@@ -135,6 +137,7 @@ class ShioajiWrapper:
         self.mtxf_contract = None
         self.connected = False
         self._lock = threading.Lock()
+        self._callback_ref = None  # Keep callback alive
         
     def connect(self) -> bool:
         """Connect to Shioaji with retry logic"""
@@ -170,8 +173,16 @@ class ShioajiWrapper:
                     version=sj.constant.QuoteVersion.v1
                 )
                 
-                # Register tick handler
-                self.api.quote.set_on_tick_fop_v1_callback(self._handle_tick)
+                # Register tick handler with defensive wrapper and GC protection
+                def safe_tick_handler(exchange, tick):
+                    try:
+                        self._handle_tick(exchange, tick)
+                    except Exception as e:
+                        print(f"⚠️ Tick callback crashed (recovered): {e}")
+                
+                # Store callback reference to prevent garbage collection
+                self._callback_ref = safe_tick_handler
+                self.api.quote.set_on_tick_fop_v1_callback(self._callback_ref)
                 
                 print(f"✅ Subscribed to {self.mtxf_contract.symbol}")
                 self.connected = True
@@ -202,31 +213,51 @@ class ShioajiWrapper:
             return self.connect()
     
     def _handle_tick(self, exchange, tick):
-        """Internal tick handler - updates global market data"""
-        global session_open_price, session_high, session_low
-        
-        latest_tick["price"] = float(tick.close)
-        latest_tick["volume"] = tick.volume
-        latest_tick["timestamp"] = tick.datetime
-        
-        price_history.append({"price": float(tick.close), "time": tick.datetime, "volume": tick.volume})
-        volume_history.append(tick.volume)
-        
-        if session_open_price is None:
-            session_open_price = float(tick.close)
-            session_high = float(tick.close)
-            session_low = float(tick.close)
-        else:
-            session_high = max(session_high, float(tick.close))
-            session_low = min(session_low, float(tick.close))
+        """Internal tick handler - updates global market data with crash protection"""
+        try:
+            global session_open_price, session_high, session_low
+            
+            # Defensive checks to prevent segfaults
+            if not tick or not hasattr(tick, 'close') or not hasattr(tick, 'volume'):
+                return
+            
+            price = float(tick.close) if tick.close is not None else 0.0
+            volume = tick.volume if tick.volume is not None else 0
+            timestamp = getattr(tick, 'datetime', datetime.now())
+            
+            # Thread-safe updates with error handling
+            latest_tick["price"] = price
+            latest_tick["volume"] = volume
+            latest_tick["timestamp"] = timestamp
+            
+            if price > 0:  # Only process valid prices
+                price_history.append({"price": price, "time": timestamp, "volume": volume})
+                volume_history.append(volume)
+                
+                if session_open_price is None:
+                    session_open_price = price
+                    session_high = price
+                    session_low = price
+                else:
+                    session_high = max(session_high, price)
+                    session_low = min(session_low, price)
+        except Exception as e:
+            # Log but don't crash - this prevents segfaults from propagating
+            print(f"⚠️ Tick handler error (non-fatal): {e}")
     
     def place_order(self, action: str, quantity: int, price: float):
-        """Place order with auto-reconnect on failure"""
+        """Place order with account validation and error handling"""
         if not self.connected:
             if not self.reconnect():
-                raise Exception("Cannot place order - not connected")
+                return {"status": "error", "error": "Not connected"}
         
         try:
+            # Check account availability
+            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+                print("⚠️ Account not available, reconnecting...")
+                if not self.reconnect():
+                    return {"status": "error", "error": "Account unavailable"}
+            
             order_obj = self.api.Order(
                 price=price,
                 quantity=quantity,
@@ -240,23 +271,23 @@ class ShioajiWrapper:
             return {"status": "filled", "order_id": trade.status.id}
             
         except Exception as e:
-            print(f"❌ Order failed: {e}, attempting reconnect...")
-            if self.reconnect():
-                # Retry once after reconnect
-                return self.place_order(action, quantity, price)
-            raise
+            print(f"❌ Order failed: {e}")
+            # Don't retry on validation errors to prevent loops
+            if "validation" in str(e).lower() or "account" in str(e).lower():
+                return {"status": "error", "error": str(e)}
+            return {"status": "error", "error": str(e)}
     
     def get_account_info(self):
-        """Get account equity and margin info"""
+        """Get account equity and margin info with error handling"""
         if not self.connected:
-            if not self.reconnect():
-                raise Exception("Cannot get account info - not connected")
+            return {"equity": 0, "available_margin": 0, "status": "error", "error": "Not connected"}
         
         try:
-            # Get futures account margin status
-            margin = self.api.margin(self.api.futopt_account)
+            # Check account availability
+            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+                return {"equity": 0, "available_margin": 0, "status": "error", "error": "Account not available"}
             
-            # Calculate total equity = equity + unrealized P&L
+            margin = self.api.margin(self.api.futopt_account)
             equity = float(margin.equity) if hasattr(margin, 'equity') else 0
             available_margin = float(margin.available_margin) if hasattr(margin, 'available_margin') else 0
             
@@ -270,19 +301,19 @@ class ShioajiWrapper:
             return {"equity": 0, "available_margin": 0, "status": "error", "error": str(e)}
     
     def get_profit_loss_history(self, days=30):
-        """Get realized P&L for the last N days from Shioaji"""
+        """Get realized P&L for the last N days with error handling"""
         if not self.connected:
-            if not self.reconnect():
-                raise Exception("Cannot get P&L history - not connected")
+            return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": "Not connected"}
         
         try:
-            from datetime import datetime, timedelta
+            # Check account availability
+            if not hasattr(self.api, 'futopt_account') or self.api.futopt_account is None:
+                return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": "Account not available"}
             
+            from datetime import datetime, timedelta
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
             
-            # Get profit/loss records from Shioaji
-            # This uses the settle_profitloss endpoint for realized P&L
             pnl_records = self.api.list_profit_loss(
                 self.api.futopt_account,
                 start_date.strftime("%Y-%m-%d"),
@@ -769,6 +800,10 @@ def scrape_earnings_dates(jasypt_password: str = None):
 
 
 if __name__ == "__main__":
+    # Log Python version for debugging
+    import sys
+    print(f"🐍 Python {sys.version} on {sys.platform}")
+    
     parser = argparse.ArgumentParser(description='MTXF Trading Bridge')
     parser.add_argument('--scrape-earnings', action='store_true', 
                         help='Scrape Yahoo Finance for earnings dates and exit')

@@ -1,48 +1,28 @@
-# Scripts
+# Utility Scripts
 
-Utility scripts for the Automatic Equity Trader.
+Python setup and debugging scripts for the MTXF Lunch Bot.
 
-## Directory Structure
+## Scripts
 
-### [`automation/`](automation/) - Scheduled Tasks
-- `automation_watchdog.py` - System health monitoring
-- `ai_daily_insights.py` - AI-powered daily reports
-- `daily_performance_report.py` - Daily performance summary
-- `weekly_performance_report.py` - Weekly performance summary
-
-### [`setup/`](setup/) - Setup & Configuration
-- `install-python312.fish` - Install Python 3.12
-- `force-fix-python.fish` - Fix Python environment
-- `update_strategy_configs.py` - Update strategy configs
-
-### Version bump helper
-- The repository provides a helper script to perform safe version bumps: `./scripts/operational/bump-version.sh <commit-type>`.
-- The top-level wrapper `./scripts/bump-version.sh` has been removed; use `./scripts/operational/bump-version.sh <commit-type>` instead.
-- See `.github/prompts/commit.prompt.md` and `.github/prompts/release.prompt.md` for the manual/policy steps used when creating releases.
-
-## Deprecated Scripts (Removed in v2.4.0)
-
-The following Python scripts have been ported to Java and removed:
-- `backtest/download_taiwan_stock_history.py` → `HistoryDataService.java`
-- `backtest/run_backtest_all_stocks.py` → `BacktestService.java` + REST API
-- `backtest/run_backtest_now.py` → `BacktestService.java` + REST API
-- `backtest/read_insights.py` → Database queries via JPA
-
-**Use Java/REST equivalents:**
-- `/download-history <symbol> [years]` (Telegram)
-- `/backtest <symbol> <days>` (Telegram)
-- `GET /api/backtest/run` (REST API)
-- `POST /api/history/download` (REST API)
+| Script | Purpose |
+|--------|---------|
+| `install-python312.fish` | Install Python 3.12 via Homebrew and create venv |
+| `force-fix-python.fish` | Emergency fix for broken Python setup (pyenv method) |
+| `check-python-compat.fish` | Check Python version compatibility with Shioaji |
+| `test-python312.fish` | Test Python 3.12 setup and Shioaji import |
+| `fix-python-now.fish` | Quick fix script (alternative method) |
 
 ## Usage
 
 ```bash
-# Start watchdog
-nohup ./scripts/automation/automation_watchdog.py &
+# Install Python 3.12 (recommended)
+./scripts/install-python312.fish
 
-# Generate daily report
-./scripts/automation/daily_performance_report.py
+# Test setup
+./scripts/test-python312.fish
 
-# Generate weekly report
-./scripts/automation/weekly_performance_report.py
+# Emergency fix if needed
+./scripts/force-fix-python.fish
 ```
+
+All scripts are executable and can be run from the project root.
