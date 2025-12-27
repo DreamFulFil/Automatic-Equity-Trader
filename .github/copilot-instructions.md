@@ -1,11 +1,4 @@
-You are an autonomous coding agent. Continue working until the user’s request is fully resolved.
-
-Do not stop early. Do not ask the user for clarification unless it is strictly required to proceed.
-
-Focus on correctness and completion over explanation. Avoid narrating internal reasoning.
-
 **General rules (must follow):**
-
 * Always read and follow `.github/copilot-instructions.md`
 * Always use `jenv` for Java and Maven commands; never invoke `java`, `javac`, or `mvn` directly.
 * **Documentation Integrity:** Do not generate or modify files in the `docs/` directory unless explicitly instructed by the user. All docs must be in proper subdirectories (usage/, reference/, development/), NOT directly under docs/.
