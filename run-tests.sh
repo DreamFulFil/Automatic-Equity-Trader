@@ -219,7 +219,10 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}📝 Phase 1: Java Unit Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
+JAVA_UNIT_START=$(date +%s)
 JAVA_UNIT_OUTPUT=$($MVN_CMD test -DexcludedGroups=integration -Dspring.profiles.active=ci 2>&1) || true
+JAVA_UNIT_END=$(date +%s)
+JAVA_UNIT_DURATION=$((JAVA_UNIT_END - JAVA_UNIT_START))
 JAVA_UNIT_SUMMARY=$(echo "$JAVA_UNIT_OUTPUT" | grep -E "Tests run:" | tail -1)
 
 if echo "$JAVA_UNIT_OUTPUT" | grep -q "BUILD SUCCESS"; then
@@ -234,6 +237,7 @@ if [ "$JAVA_UNIT_RESULT" = "FAILED" ]; then
     echo "$JAVA_UNIT_OUTPUT"
 fi
 echo "   $JAVA_UNIT_SUMMARY"
+echo -e "${YELLOW}⏱️  Java unit tests took ${JAVA_UNIT_DURATION}s${NC}"
 echo ""
 
 ###############################################################################
@@ -258,13 +262,15 @@ if [ ! -f "python/venv/bin/pytest" ]; then
     python/venv/bin/pip install pytest
 fi
 
+PYTHON_UNIT_START=$(date +%s)
 PYTHON_UNIT_OUTPUT=$(JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/pytest \
     python/tests/test_bridge.py \
     python/tests/test_contract.py \
     python/tests/test_shioaji_simulation.py \
     python/tests/test_shioaji_api.py \
     -v 2>&1) || true
-
+PYTHON_UNIT_END=$(date +%s)
+PYTHON_UNIT_DURATION=$((PYTHON_UNIT_END - PYTHON_UNIT_START))
 PYTHON_UNIT_SUMMARY=$(echo "$PYTHON_UNIT_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
 
 if echo "$PYTHON_UNIT_OUTPUT" | grep -qE "passed"; then
@@ -279,6 +285,7 @@ if [ "$PYTHON_UNIT_RESULT" = "FAILED" ]; then
     echo "$PYTHON_UNIT_OUTPUT"
 fi
 echo "   $PYTHON_UNIT_SUMMARY"
+echo -e "${YELLOW}⏱️  Python unit tests took ${PYTHON_UNIT_DURATION}s${NC}"
 echo ""
 
 ###############################################################################

@@ -2,6 +2,7 @@ package tw.gc.mtxfbot;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,9 +33,13 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class ContractScalingService {
     
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final ObjectMapper objectMapper;
+    @NonNull
     private final TelegramService telegramService;
+    @NonNull
     private final TradingProperties tradingProperties;
     
     private final AtomicInteger maxContracts = new AtomicInteger(1);

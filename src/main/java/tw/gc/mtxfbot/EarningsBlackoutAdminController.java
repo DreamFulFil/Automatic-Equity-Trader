@@ -1,6 +1,7 @@
 package tw.gc.mtxfbot;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +23,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class EarningsBlackoutAdminController {
 
+    @NonNull
     private final EarningsBlackoutService earningsBlackoutService;
+    @NonNull
     private final RiskManagementService riskManagementService;
 
     @PostMapping("/seed")

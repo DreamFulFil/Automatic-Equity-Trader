@@ -2,6 +2,7 @@ package tw.gc.mtxfbot;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
@@ -51,15 +52,25 @@ public class TradingEngine {
     
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final ObjectMapper objectMapper;
+    @NonNull
     private final TelegramService telegramService;
+    @NonNull
     private final TradingProperties tradingProperties;
+    @NonNull
     private final ApplicationContext applicationContext;
+    @NonNull
     private final ContractScalingService contractScalingService;
+    @NonNull
     private final RiskManagementService riskManagementService;
+    @NonNull
     private final StockSettingsService stockSettingsService;
+    @NonNull
     private final RiskSettingsService riskSettingsService;
+    @NonNull
     private final DataLoggingService dataLoggingService;
     
     // Trading mode: "stock" or "futures"

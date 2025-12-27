@@ -1,5 +1,6 @@
 package tw.gc.mtxfbot;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,7 +19,9 @@ import java.util.concurrent.locks.ReentrantLock;
 @RequiredArgsConstructor
 public class ShioajiReconnectWrapper {
     
+    @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
     private final TelegramService telegramService;
     
     private final ReentrantLock reconnectLock = new ReentrantLock();
@@ -34,7 +37,6 @@ public class ShioajiReconnectWrapper {
      * @return API response
      * @throws Exception if all retry attempts fail
      */
-    @SuppressWarnings("null")
     public <T> T executeWithReconnect(String bridgeUrl, String endpoint, Object requestBody, Class<T> responseType) throws Exception {
         int maxRetries = 5;
         int attempt = 0;

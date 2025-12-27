@@ -19,7 +19,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@SuppressWarnings({"null", "rawtypes"})
+@SuppressWarnings("unchecked")
 class TelegramServiceTest {
 
     @Mock
@@ -55,7 +55,7 @@ class TelegramServiceTest {
 
         // Then
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<HttpEntity> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         
         verify(restTemplate).postForObject(urlCaptor.capture(), requestCaptor.capture(), eq(String.class));
         
@@ -63,8 +63,7 @@ class TelegramServiceTest {
         assertTrue(capturedUrl.contains("test-bot-token"));
         assertTrue(capturedUrl.contains("sendMessage"));
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) requestCaptor.getValue().getBody();
+        Map<String, Object> body = requestCaptor.getValue().getBody();
         assertEquals("123456789", body.get("chat_id"));
         assertEquals("Test message", body.get("text"));
     }
@@ -105,11 +104,10 @@ class TelegramServiceTest {
         telegramService.sendMessage("🚀 MTXF Bot started");
 
         // Then
-        ArgumentCaptor<HttpEntity> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) requestCaptor.getValue().getBody();
+        Map<String, Object> body = requestCaptor.getValue().getBody();
         assertEquals("🚀 MTXF Bot started", body.get("text"));
     }
 
@@ -126,11 +124,10 @@ class TelegramServiceTest {
         telegramService.sendMessage(multilineMessage);
 
         // Then
-        ArgumentCaptor<HttpEntity> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) requestCaptor.getValue().getBody();
+        Map<String, Object> body = requestCaptor.getValue().getBody();
         assertEquals(multilineMessage, body.get("text"));
     }
 

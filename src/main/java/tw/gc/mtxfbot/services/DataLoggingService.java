@@ -1,5 +1,6 @@
 package tw.gc.mtxfbot.services;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,8 +21,11 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class DataLoggingService {
 
+    @NonNull
     private final TradeRepository tradeRepository;
+    @NonNull
     private final SignalRepository signalRepository;
+    @NonNull
     private final EventRepository eventRepository;
 
     /**
