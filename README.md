@@ -1504,5 +1504,5 @@ Special thanks:
 
 ---
 
-*Last Updated: January 2025 (Production Version)*
-*Tested on: macOS Sonoma 14.x / Sequoia 15.x with Apple M3*
+*Last Updated: November 2025 (Production v1.0)*
+*Tested on: macOS Tahoe with Apple M1*
