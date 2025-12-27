@@ -1,4 +1,5 @@
 # MTXF Lunch-Break Trading Bot - Instructions
+Read this entire file (`copilot-instructions.md`) and acknowledge it before proceeding.
 
 ## Project Overview
 **Production Taiwan Mini-TXF (MTXF) day-trading bot** for 11:30-13:00 lunch session.
