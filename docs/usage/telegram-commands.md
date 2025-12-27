@@ -1,25 +1,69 @@
 # Telegram Bot Commands
 
-## Command Reference
+## Control Commands
 
-| Command | Parameters | Description | Category |
-|---------|------------|-------------|----------|
-| `/status` | None | Display current trading status, positions, P&L, and active strategy | Control |
-| `/pause` | None | Temporarily halt trading (positions remain open) | Control |
-| `/resume` | None | Resume trading after pause | Control |
-| `/close` | None | Close all open positions immediately | Control |
-| `/shutdown` | None | Gracefully shutdown the trading bot and all services | Control |
-| `/help` | None | Display list of available commands and their usage | Information |
-| `/agent` | None | Query the AI agent (Ollama Llama 3.1) about trading decisions or market conditions | Information |
-| `/talk` | `[message]` | Send a message to the AI agent for analysis or advice | Information |
-| `/insight` | None | Get AI-generated market insights and trading recommendations | Information |
-| `/golive` | None | Initiate transition from simulation to live trading (requires confirmation within 10 minutes) | Trading Mode |
-| `/confirm_live` | None | Confirm live trading activation (must follow `/golive` within 10-minute window) | Trading Mode |
-| `/backtosim` | None | Revert from live trading back to simulation mode | Trading Mode |
-| `/changeshare` | `[contracts]` | Change the number of contracts per trade (min: 1, max: margin limited). Example: `/changeshare 2` | Position Sizing |
-| `/changeincrement` | `[amount]` | Adjust position sizing increment for scaling strategies (amount in TWD). Example: `/changeincrement 5000` | Position Sizing |
-| `/select_strategy` | `[strategy_name]` | Manually select a specific trading strategy. Example: `/select_strategy AntiWhipsaw_v2` | Strategy |
-| `/list_strategies` | None | Display all available trading strategies with performance metrics | Strategy |
+### `/status`
+Display current trading status, positions, P&L, and active strategy.
+
+### `/pause`
+Temporarily halt trading (positions remain open).
+
+### `/resume`
+Resume trading after pause.
+
+### `/close`
+Close all open positions immediately.
+
+### `/shutdown`
+Gracefully shutdown the trading bot and all services.
+
+## Information Commands
+
+### `/help`
+Display list of available commands and their usage.
+
+### `/agent`
+Query the AI agent (Ollama Llama 3.1) about trading decisions or market conditions.
+
+### `/talk [message]`
+Send a message to the AI agent for analysis or advice.
+
+### `/insight`
+Get AI-generated market insights and trading recommendations.
+
+## Trading Mode Commands
+
+### `/golive`
+Initiate transition from simulation to live trading (requires confirmation within 10 minutes).
+
+### `/confirm_live`
+Confirm live trading activation (must follow `/golive` within 10-minute window).
+
+### `/backtosim`
+Revert from live trading back to simulation mode.
+
+## Position Sizing Commands
+
+### `/changeshare [contracts]`
+Change the number of contracts per trade.
+- Example: `/changeshare 2`
+- Minimum: 1 contract
+- Maximum: Limited by margin requirements
+
+### `/changeincrement [amount]`
+Adjust position sizing increment for scaling strategies.
+- Example: `/changeincrement 5000`
+- Amount in TWD
+
+## Strategy Selection Commands
+
+### `/select_strategy [strategy_name]`
+Manually select a specific trading strategy.
+- Example: `/select_strategy AntiWhipsaw_v2`
+- Use `/list_strategies` to see available options
+
+### `/list_strategies`
+Display all available trading strategies with performance metrics.
 
 ## Safety Features
 
