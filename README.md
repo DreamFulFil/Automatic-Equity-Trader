@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.5** - Backtest Architecture Refactoring
+**Version 2.0.6** - Clean Code Refactoring (Command Pattern)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -16,6 +16,44 @@ Designed for capital preservation with 80,000 TWD starting capital.
 **Production-ready** with 375 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.6 (2025-12-20)
+
+### 🏗️ Clean Code Refactoring: Command Pattern Implementation
+
+**TelegramService Architecture Enhancement**
+- ✅ **Command Pattern applied** to Telegram bot command handling
+  - Introduced `TelegramCommand` interface with 15 concrete command implementations
+  - Decoupled command execution from service logic (Open/Closed Principle)
+  - Commands are now testable in isolation and easy to extend
+- ✅ **State Management extracted** into `GoLiveStateManager`
+  - Thread-safe temporal state management for go-live confirmations
+  - 10-minute expiration window enforces deliberate user action
+  - Single Responsibility Principle adherence
+- ✅ **Command Registry** for centralized command management
+  - Fail-fast registration at construction time
+  - Supports both new Command Pattern and legacy custom commands
+  - No breaking changes to existing functionality
+
+**Code Quality Improvements**
+- ✅ **Comprehensive Javadoc** added with intent-based documentation
+  - Focus on "why" (business logic) rather than "what" (implementation)
+  - Architectural decisions and rationale documented
+  - Design patterns explained inline
+- ✅ **SOLID Principles** enforced throughout refactoring
+  - Single Responsibility: Each command class has one clear purpose
+  - Open/Closed: New commands can be added without modifying existing code
+  - Dependency Inversion: Commands depend on abstractions (context interface)
+- ✅ **Reduced complexity**: Eliminated large if-else chains with polymorphic dispatch
+- ✅ **Test coverage**: All 373 Java + 96 Python unit tests passing
+
+**Technical Details**
+- Created 4 new packages: `telegram.*`, `telegram.commands.*`
+- 15 command classes: Status, Pause, Resume, Close, Shutdown, Help, Agent, Talk, Insight, GoLive, ConfirmLive, BackToSim, ChangeShare, ChangeIncrement
+- Context object pattern eliminates parameter proliferation
+- Constructor injection preferred over field injection
 
 ---
 
