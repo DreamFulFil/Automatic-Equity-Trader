@@ -48,7 +48,7 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # Decode certificate to project root so Fish test finds it
+      # Decode cert to project root (Fish test loves it)
       - name: Decode Sinopac.pfx certificate (if secret exists)
         env:
           CACERT_BASE64: ${{ secrets.SINO_CACERT_BASE64 }}
@@ -56,9 +56,6 @@ jobs:
           if [ -n "$CACERT_BASE64" ]; then
             echo "$CACERT_BASE64" | base64 --decode > Sinopac.pfx
             chmod 600 Sinopac.pfx
-            echo "Sinopac.pfx decoded to project root"
-          else
-            echo "No SINO_CACERT_BASE64 secret – running in simulation/mock mode"
           fi
 
       - name: Set up Python 3.11
@@ -68,7 +65,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: python/requirements.txt
 
-      - name: Create venv and install Python dependencies
+      - name: Install Python deps + venv
         run: |
           python -m pip install --upgrade pip virtualenv
           python -m virtualenv python/venv
@@ -77,8 +74,7 @@ jobs:
           pip install -r python/requirements.txt
           pip install pytest
 
-      # Fixed: reliable import path
-      - name: Run Python unit tests
+      - name: Run Python unit tests (no import issues)
         run: |
           source python/venv/bin/activate
           cd $GITHUB_WORKSPACE
@@ -87,47 +83,41 @@ jobs:
       - name: Install Fish shell
         run: sudo apt-get update && sudo apt-get install -y fish
 
-      # Fish test now finds Sinopac.pfx in root
       - name: Validate Fish scripts
         run: |
           fish -n start-lunch-bot.fish
           fish tests/fish/test_start_script.fish
 
       # Start Ollama
-      - name: Start Ollama Docker with model
+      - name: Start Ollama
         run: |
           docker run --rm -d --name ollama -p 11434:11434 ollama/ollama:latest
           for i in {1..40}; do
-            if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then break; fi
+            curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
             sleep 1
           done
           curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "llama3.1:8b-instruct-q5_K_M"}'
 
-      # THE KEY: Run ALL Java tests (including integration) ONLY AFTER bridge is up
-      - name: Start Python bridge and run full test suite
+      # ONE AND ONLY TEST STEP — exactly like your Mac
+      - name: Start bridge and run EVERYTHING (zero skips)
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
           OLLAMA_HOST: "http://127.0.0.1:11434"
         run: |
           source python/venv/bin/activate
           python python/bridge.py > /tmp/bridge.log 2>&1 &
-          echo "Waiting for Python bridge to be healthy..."
+          echo "Waiting for bridge..."
           for i in {1..40}; do
-            if curl -s http://127.0.0.1:8888/health >/dev/null 2>&1; then
-              echo "Bridge is up and running!"
-              break
-            fi
+            curl -s http://127.0.0.1:8888/health >/dev/null 2>&1 && echo "Bridge ready!" && break
             sleep 1
           done
 
-          # This runs EXACTLY what you run locally → all 283 tests pass
+          # This is the ONLY Maven command that runs tests → exactly like local
           mvn -B verify
 
-          # Your existing end-to-end suite
           chmod +x run-tests.sh
           ./run-tests.sh "$JASYPT_PASSWORD"
 
-      # Always clean up
-      - name: Clean up Sinopac.pfx
+      - name: Clean up certificate
         if: always()
         run: rm -f Sinopac.pfx || true
