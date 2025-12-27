@@ -40,15 +40,17 @@ jobs:
           cache: 'pip'
           cache-dependency-path: python/requirements.txt
 
-      - name: Install Python dependencies
+      - name: Create venv and install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r python/requirements.txt
-          pip install pytest
+          python -m pip install --upgrade pip virtualenv
+          python -m virtualenv python/venv
+          python/venv/bin/python -m pip install --upgrade pip
+          python/venv/bin/python -m pip install -r python/requirements.txt
+          python/venv/bin/python -m pip install pytest
 
       - name: Run Python tests
         run: |
-          pytest python/tests/test_bridge.py python/tests/test_contract.py -v --ignore=python/tests/test_integration.py || true
+          python/venv/bin/python -m pytest python/tests/test_bridge.py python/tests/test_contract.py -v --ignore=python/tests/test_integration.py || true
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
 

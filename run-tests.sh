@@ -266,8 +266,12 @@ stop_ollama() {
 start_bridge() {
     echo -e "${YELLOW}🐍 Starting Python bridge...${NC}"
     cd "$SCRIPT_DIR/python"
-    source venv/bin/activate
-    JASYPT_PASSWORD="$JASYPT_PASSWORD" python3 bridge.py > /tmp/mtxf-bridge.log 2>&1 &
+    # Use venv python directly to avoid relying on shell activation
+    if [ -x "venv/bin/python" ]; then
+        JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > /tmp/mtxf-bridge.log 2>&1 &
+    else
+        JASYPT_PASSWORD="$JASYPT_PASSWORD" python3 bridge.py > /tmp/mtxf-bridge.log 2>&1 &
+    fi
     BRIDGE_PID=$!
     cd "$SCRIPT_DIR"
     
@@ -429,15 +433,20 @@ if check_bridge; then
     # Use the venv python to ensure dependencies are available
     JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/python python/bridge.py --scrape-earnings || echo "Warning: scrape-earnings failed"
     # If scraper produced no blackout dates, seed a safe placeholder to avoid E2E skips
+    # But do not overwrite production file unless TEST_MODE=1 or CI=true
     BLACKOUT_FILE="$SCRIPT_DIR/config/earnings-blackout-dates.json"
-    if [ -f "$BLACKOUT_FILE" ]; then
-        if [ $(jq 'length' "$BLACKOUT_FILE") -eq 0 ]; then
+    if [ "${TEST_MODE:-0}" = "1" ] || [ "${CI:-false}" = "true" ]; then
+        if [ -f "$BLACKOUT_FILE" ]; then
+            if [ $(jq 'length' "$BLACKOUT_FILE") -eq 0 ]; then
+                echo "[]" > "$BLACKOUT_FILE"
+                echo "[WARN] Seeded empty earnings blackout file to prevent E2E skips (TEST_MODE/CI)"
+            fi
+        else
             echo "[]" > "$BLACKOUT_FILE"
-            echo "[WARN] Seeded empty earnings blackout file to prevent E2E skips"
+            echo "[WARN] Created earnings blackout file to prevent E2E skips (TEST_MODE/CI)"
         fi
     else
-        echo "[]" > "$BLACKOUT_FILE"
-        echo "[WARN] Created earnings blackout file to prevent E2E skips"
+        echo "[INFO] Not seeding earnings blackout file in non-test mode"
     fi
 fi
 
