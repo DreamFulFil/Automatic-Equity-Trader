@@ -94,6 +94,7 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 | Database layer (SQLite + JPA) | Implemented |
 | Bot mode management (simulation/live) | Implemented |
 | Extended Telegram commands (/agent, /talk, /insight, /golive, /backtosim) | Implemented |
+| **Database-driven configuration (stock/risk settings)** | **Implemented** |
 | Comprehensive test suite (202 tests) | Implemented |
 
 ---
@@ -299,23 +300,61 @@ chmod +x start-lunch-bot.fish
 
 ## ⚙️ Configuration
 
+### Database-Driven Settings (December 2025)
+
+**Stock and risk settings are now stored in SQLite database for dynamic configuration without restarts.**
+
+#### Stock Settings (Database Table: `stock_settings`)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `initial_shares` | 70 | Base shares for stock mode (2330.TW) |
+| `share_increment` | 27 | Additional shares per 20k equity above base |
+
+#### Risk Settings (Database Table: `risk_settings`)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `max_position` | 1 | Maximum contracts/shares per position |
+| `daily_loss_limit` | 1500 | Daily loss limit in TWD (scaled by position size) |
+| `weekly_loss_limit` | 7000 | Weekly loss limit in TWD |
+| `max_hold_minutes` | 45 | Maximum position hold time before forced exit |
+
+#### Database Initialization
+
+After first startup, run the initialization script:
+
+```fish
+sqlite3 data/bot.db < scripts/init_settings.sql
+```
+
+This creates default settings that can be modified dynamically without application restarts.
+
 ### application.yml
 
 Location: `src/main/resources/application.yml`
+
+**Note:** Stock and risk settings have been moved to database. Only static configuration remains.
 
 ```yaml
 server:
   port: 8080
 
+# Stock/risk settings moved to database (see above)
+# trading:
+#   stock:
+#     initial-shares: 70
+#     share-increment: 27
+#   risk:
+#     max-position: 1
+#     daily-loss-limit: 4500
+#     weekly-loss-limit: 15000
+#     max-hold-minutes: 45
+
 trading:
   window:
     start: "11:30"
     end: "13:00"
-  risk:
-    max-position: 1
-    daily-loss-limit: 4500
-    weekly-loss-limit: 15000
-    max-hold-minutes: 45
   bridge:
     url: "http://localhost:8888"
     timeout-ms: 3000
@@ -336,6 +375,16 @@ shioaji:
 ollama:
   url: "http://localhost:11434"
   model: "llama3.1:8b-instruct-q5_K_M"
+
+spring:
+  datasource:
+    url: "jdbc:sqlite:data/bot.db"
+    driver-class-name: "org.sqlite.JDBC"
+  jpa:
+    hibernate:
+      ddl-auto: "update"
+    show-sql: false
+    database-platform: "org.hibernate.community.dialect.SQLiteDialect"
 ```
 
 ### Earnings Blackout JSON
