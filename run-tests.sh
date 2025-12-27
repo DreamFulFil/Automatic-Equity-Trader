@@ -110,9 +110,16 @@ start_ollama() {
 start_bridge() {
     echo -e "${YELLOW}🐍 Starting Python Bridge...${NC}"
     
+    # Kill any existing bridge on port 8888
+    if lsof -i :8888 -t >/dev/null 2>&1; then
+        echo "Killing existing process on port 8888..."
+        kill -9 $(lsof -i :8888 -t) 2>/dev/null || true
+        sleep 2
+    fi
+    
     cd "$SCRIPT_DIR/python"
-    mkdir -p ../logs
-    JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > ../logs/shiaoji.log 2>&1 &
+    mkdir -p ../logs/python
+    JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > ../logs/python/shioaji.log 2>&1 &
     BRIDGE_PID=$!
     cd "$SCRIPT_DIR"
     
@@ -122,7 +129,7 @@ start_bridge() {
     done
     
     echo -e "${RED}❌ Bridge failed to start${NC}"
-    tail -50 logs/shiaoji.log
+    tail -50 logs/python/shioaji.log
     return 1
 }
 

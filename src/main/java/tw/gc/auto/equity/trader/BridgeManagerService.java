@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 @Slf4j
-public class BridgeManager {
+public class BridgeManagerService {
 
     @Value("${bridge.python-executable:python3}")
     private String pythonExecutable;

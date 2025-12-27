@@ -458,7 +458,7 @@ public class TelegramService {
             }
 
             // Replace \n with <br> for HTML parse_mode
-            message = message.replace("\n", "<br>");
+            // message = message.replace("\n", "<br>");
 
             Map<String, Object> body = new HashMap<>();
             body.put("chat_id", telegramProperties.getChatId());

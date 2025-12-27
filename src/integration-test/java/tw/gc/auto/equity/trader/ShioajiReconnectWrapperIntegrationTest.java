@@ -16,12 +16,12 @@ class ShioajiReconnectWrapperIntegrationTest {
     @Mock private RestTemplate restTemplate;
     @Mock private TelegramService telegramService;
     
-    private ShioajiReconnectWrapper wrapper;
+    private ShioajiReconnectWrapperService wrapper;
     private final String bridgeUrl = "http://localhost:8888";
 
     @BeforeEach
     void setUp() {
-        wrapper = new ShioajiReconnectWrapper(restTemplate, telegramService);
+        wrapper = new ShioajiReconnectWrapperService(restTemplate, telegramService);
     }
 
     @Test

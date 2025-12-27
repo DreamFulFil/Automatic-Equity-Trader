@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class TradingEngine {
+public class TradingEngineService {
     
     private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     
