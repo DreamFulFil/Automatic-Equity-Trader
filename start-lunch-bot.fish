@@ -60,7 +60,18 @@ end
 
 # Step 4: Check Ollama
 echo "4️⃣ Checking Ollama..."
-if not command -v ollama > /dev/null
+
+# Try common Ollama paths (cron doesn't have full PATH)
+set OLLAMA_BIN ""
+if command -v ollama > /dev/null
+    set OLLAMA_BIN ollama
+else if test -x /usr/local/bin/ollama
+    set OLLAMA_BIN /usr/local/bin/ollama
+else if test -x /opt/homebrew/bin/ollama
+    set OLLAMA_BIN /opt/homebrew/bin/ollama
+end
+
+if test -z "$OLLAMA_BIN"
     echo -e "$RED❌ Ollama not found!$NC"
     echo "Install via: brew install ollama"
     exit 1
@@ -69,13 +80,13 @@ end
 # Check if Ollama service is running
 if not pgrep -x "ollama" > /dev/null
     echo "Starting Ollama service..."
-    ollama serve > /dev/null 2>&1 &
+    $OLLAMA_BIN serve > /dev/null 2>&1 &
     sleep 2
 end
 
 if not curl -s http://localhost:11434/api/tags | grep -q "llama3.1"
     echo "📥 Downloading Llama 3.1 8B (q5_K_M)..."
-    ollama pull llama3.1:8b-instruct-q5_K_M
+    $OLLAMA_BIN pull llama3.1:8b-instruct-q5_K_M
 end
 echo -e "$GREEN✅ Ollama + Llama 3.1 ready$NC"
 
