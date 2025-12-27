@@ -14,10 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
-import tw.gc.auto.equity.trader.repositories.BarRepository;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.services.BacktestService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
@@ -30,7 +29,7 @@ import tw.gc.auto.equity.trader.strategy.impl.*;
 public class BacktestController {
 
     private final BacktestService backtestService;
-    private final BarRepository barRepository;
+    private final MarketDataRepository marketDataRepository;
     private final StrategyStockMappingRepository mappingRepository;
 
     @GetMapping("/run")
@@ -43,24 +42,16 @@ public class BacktestController {
 
         log.info("Running backtest for {} from {} to {}", symbol, start, end);
 
-        // 1. Fetch Historical Data
-        List<Bar> bars = barRepository.findBySymbolAndTimeframeAndTimestampBetween(symbol, timeframe, start, end);
+        // 1. Fetch Historical Data from market_data table
+        MarketData.Timeframe tf = "1D".equals(timeframe) ? MarketData.Timeframe.DAY_1 : MarketData.Timeframe.MIN_1;
+        List<MarketData> history = marketDataRepository.findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+            symbol, tf, start, end);
         
-        if (bars.isEmpty()) {
-            throw new RuntimeException("No data found for " + symbol + " in range");
+        if (history.isEmpty()) {
+            throw new RuntimeException("No data found for " + symbol + " in range " + start + " to " + end);
         }
         
-        // Convert Bars to MarketData
-        List<MarketData> history = bars.stream().map(bar -> MarketData.builder()
-                .symbol(bar.getSymbol())
-                .timestamp(bar.getTimestamp())
-                .open(bar.getOpen())
-                .high(bar.getHigh())
-                .low(bar.getLow())
-                .close(bar.getClose())
-                .volume(bar.getVolume())
-                .build())
-                .collect(Collectors.toList());
+        log.info("Found {} data points for {}", history.size(), symbol);
 
         // 2. Initialize Strategies - ALL 50 strategies
         List<IStrategy> strategies = new ArrayList<>();
