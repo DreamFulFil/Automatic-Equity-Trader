@@ -2,11 +2,15 @@ package tw.gc.mtxfbot.agents;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tw.gc.mtxfbot.entities.BotSettings;
+import tw.gc.mtxfbot.entities.Trade;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.entities.Trade.TradeStatus;
+import tw.gc.mtxfbot.repositories.BotSettingsRepository;
 import tw.gc.mtxfbot.repositories.TradeRepository;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -18,11 +22,13 @@ class RiskManagerAgentTest {
     
     private RiskManagerAgent riskManager;
     private TradeRepository mockTradeRepo;
+    private BotSettingsRepository botSettingsRepository;
     
     @BeforeEach
     void setUp() {
         mockTradeRepo = mock(TradeRepository.class);
-        riskManager = new RiskManagerAgent(mockTradeRepo);
+        botSettingsRepository = mock(BotSettingsRepository.class);
+        riskManager = new RiskManagerAgent(mockTradeRepo, botSettingsRepository);
     }
     
     @Test
@@ -110,6 +116,35 @@ class RiskManagerAgentTest {
         Map<String, Object> result = riskManager.checkLimits(TradingMode.SIMULATION);
         
         assertFalse((boolean) result.get("daily_limit_hit"));
+    }
+
+    @Test
+    void testCheckTradeRisk_UsesBotSettingsOverrides() {
+        when(botSettingsRepository.findByKey(BotSettings.DAILY_LOSS_LIMIT))
+                .thenReturn(Optional.of(BotSettings.builder().key(BotSettings.DAILY_LOSS_LIMIT).value("1000").build()));
+        when(botSettingsRepository.findByKey(BotSettings.WEEKLY_LOSS_LIMIT))
+                .thenReturn(Optional.of(BotSettings.builder().key(BotSettings.WEEKLY_LOSS_LIMIT).value("2000").build()));
+        when(mockTradeRepo.sumPnLSince(any(), any())).thenReturn(-900.0, -1500.0); // daily then weekly
+
+        Trade trade = Trade.builder().mode(TradingMode.SIMULATION).realizedPnL(-200.0).build();
+
+        Map<String, Object> result = riskManager.checkTradeRisk(trade);
+
+        assertFalse((boolean) result.get("allowed"));
+        assertEquals("Daily loss limit", result.get("reason"));
+    }
+
+    @Test
+    void testStateTransitions() {
+        assertEquals(RiskManagerAgent.BotState.RUNNING, riskManager.getState());
+        riskManager.handlePause();
+        assertEquals(RiskManagerAgent.BotState.PAUSED, riskManager.getState());
+        riskManager.handleResume();
+        assertEquals(RiskManagerAgent.BotState.RUNNING, riskManager.getState());
+        riskManager.handleStop();
+        assertEquals(RiskManagerAgent.BotState.STOPPED, riskManager.getState());
+        riskManager.handleStart("SIMULATION");
+        assertEquals(RiskManagerAgent.BotState.RUNNING, riskManager.getState());
     }
     
     @Test

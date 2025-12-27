@@ -15,11 +15,13 @@ import tw.gc.mtxfbot.agents.RiskManagerAgent;
 import tw.gc.mtxfbot.agents.TutorBotAgent;
 import tw.gc.mtxfbot.config.TelegramProperties;
 import tw.gc.mtxfbot.entities.AgentInteraction.InteractionType;
+import tw.gc.mtxfbot.entities.Trade.TradingMode;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.annotation.PostConstruct;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -69,6 +71,9 @@ public class TelegramService {
     private AgentService agentService;
     @Nullable
     private BotModeService botModeService;
+
+    private boolean goLivePending = false;
+    private LocalDateTime goLiveConfirmationExpiresAt;
     
     // Track last processed update ID to avoid duplicate processing
     private long lastUpdateId = 0;
@@ -176,6 +181,8 @@ public class TelegramService {
             handleInsightCommand(chatId);
         } else if (lowerText.equals("/golive")) {
             handleGoLiveCommand(chatId);
+        } else if (lowerText.equals("/confirmlive")) {
+            handleConfirmLiveCommand(chatId);
         } else if (lowerText.equals("/backtosim")) {
             handleBackToSimCommand(chatId);
         } else if (lowerText.startsWith("/change-share ")) {
@@ -194,6 +201,7 @@ public class TelegramService {
                     "/talk <question> - Ask TutorBot\n" +
                     "/insight - Daily insight\n" +
                     "/golive - Check live eligibility\n" +
+                    "/confirmlive - Confirm live switch within 10m\n" +
                     "/backtosim - Switch to simulation\n" +
                     "/change-share <number> - Change base shares\n" +
                     "/change-increment <number> - Change share increment");
@@ -290,13 +298,41 @@ public class TelegramService {
         
         if (eligible) {
             sb.append("🟢 ELIGIBLE FOR LIVE TRADING!\n");
-            sb.append("⚠️ Type /confirmlive to switch (real money at risk!)");
+            sb.append("⚠️ Type /confirmlive within 10 minutes to switch (real money at risk!)");
+            goLivePending = true;
+            goLiveConfirmationExpiresAt = LocalDateTime.now().plusMinutes(10);
         } else {
             sb.append("🔴 NOT YET ELIGIBLE\n");
             sb.append("Keep trading in simulation to build your track record.");
+            goLivePending = false;
+            goLiveConfirmationExpiresAt = null;
         }
         
         sendMessage(sb.toString());
+    }
+
+    void handleConfirmLiveCommand(String chatId) {
+        if (botModeService == null) {
+            sendMessage("⚠️ Bot mode service not initialized");
+            return;
+        }
+
+        if (botModeService.isLiveMode()) {
+            sendMessage("ℹ️ Already in LIVE mode");
+            return;
+        }
+
+        if (!goLivePending || goLiveConfirmationExpiresAt == null || goLiveConfirmationExpiresAt.isBefore(LocalDateTime.now())) {
+            sendMessage("🔁 Go-live check expired. Run /golive again to verify eligibility.");
+            goLivePending = false;
+            goLiveConfirmationExpiresAt = null;
+            return;
+        }
+
+        botModeService.switchToLiveMode();
+        goLivePending = false;
+        goLiveConfirmationExpiresAt = null;
+        sendMessage("🟢 LIVE MODE ENABLED\nReal orders will be placed. Use /backtosim to return to simulation.");
     }
     
     private void handleBackToSimCommand(String chatId) {
@@ -346,6 +382,29 @@ public class TelegramService {
             log.error("Failed to update increment", e);
             sendMessage("❌ Failed to update increment");
         }
+    }
+
+    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = "Asia/Taipei")
+    public void sendDailySummaryDigest() {
+        if (agentService == null || botModeService == null) {
+            return;
+        }
+
+        RiskManagerAgent riskManager = agentService.getRiskManager();
+        TradingMode mode = botModeService.isLiveMode() ? TradingMode.LIVE : TradingMode.SIMULATION;
+        Map<String, Object> stats = riskManager.getTradeStats(mode);
+
+        if (!(boolean) stats.getOrDefault("success", false)) {
+            return;
+        }
+
+        sendMessage(String.format(
+                "📆 DAILY DIGEST (%s)\nTrades 30d: %s\nWin Rate: %s\nPnL 30d: %.0f",
+                mode.name(),
+                stats.getOrDefault("total_trades_30d", "0"),
+                stats.getOrDefault("win_rate", "N/A"),
+                stats.getOrDefault("total_pnl_30d", 0.0)
+        ));
     }
 
     public void sendMessage(String message) {

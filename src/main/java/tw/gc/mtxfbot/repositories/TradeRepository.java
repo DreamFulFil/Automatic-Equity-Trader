@@ -9,6 +9,7 @@ import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.entities.Trade.TradeStatus;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.List;
 
 @Repository
@@ -34,4 +35,8 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     
     /** Get the most recent open trade for closing */
     List<Trade> findByStatusOrderByTimestampDesc(TradeStatus status);
+
+    Optional<Trade> findFirstBySymbolAndStatusOrderByTimestampDesc(String symbol, TradeStatus status);
+
+    Optional<Trade> findFirstBySymbolAndModeAndStatusOrderByTimestampDesc(String symbol, TradingMode mode, TradeStatus status);
 }

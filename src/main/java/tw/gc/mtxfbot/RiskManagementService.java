@@ -17,6 +17,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -41,6 +43,9 @@ public class RiskManagementService {
     
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
     private final AtomicReference<Double> weeklyPnL = new AtomicReference<>(0.0);
+
+    private final Map<String, AtomicReference<Double>> dailyPnLBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, AtomicReference<Double>> weeklyPnLBySymbol = new ConcurrentHashMap<>();
     
     private String earningsBlackoutStock = null;
     
@@ -64,6 +69,14 @@ public class RiskManagementService {
     public boolean isWeeklyLimitHit() {
         return weeklyLimitHit;
     }
+
+    public double getDailyPnL(String symbol) {
+        return dailyPnLBySymbol.getOrDefault(symbol, new AtomicReference<>(0.0)).get();
+    }
+
+    public double getWeeklyPnL(String symbol) {
+        return weeklyPnLBySymbol.getOrDefault(symbol, new AtomicReference<>(0.0)).get();
+    }
     
     public boolean isEarningsBlackout() {
         refreshEarningsBlackoutState();
@@ -83,8 +96,18 @@ public class RiskManagementService {
      * Record a trade P&L and check limits
      */
     public void recordPnL(double pnl, int weeklyLossLimit) {
+        recordPnL("GLOBAL", pnl, weeklyLossLimit);
+    }
+
+    public void recordPnL(String symbol, double pnl, int weeklyLossLimit) {
         dailyPnL.updateAndGet(v -> v + pnl);
         weeklyPnL.updateAndGet(v -> v + pnl);
+
+        dailyPnLBySymbol.computeIfAbsent(symbol, k -> new AtomicReference<>(0.0))
+                .updateAndGet(v -> v + pnl);
+        weeklyPnLBySymbol.computeIfAbsent(symbol, k -> new AtomicReference<>(0.0))
+                .updateAndGet(v -> v + pnl);
+
         saveWeeklyPnL();
         checkWeeklyLossLimit(weeklyLossLimit);
     }

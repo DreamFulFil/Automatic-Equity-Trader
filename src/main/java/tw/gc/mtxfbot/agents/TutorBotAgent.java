@@ -9,7 +9,11 @@ import org.springframework.http.MediaType;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.entities.AgentInteraction;
 import tw.gc.mtxfbot.entities.AgentInteraction.InteractionType;
+import tw.gc.mtxfbot.entities.Trade;
+import tw.gc.mtxfbot.entities.Trade.TradeStatus;
+import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.repositories.AgentInteractionRepository;
+import tw.gc.mtxfbot.repositories.TradeRepository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,6 +21,7 @@ import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * TutorBot Agent
@@ -45,13 +50,19 @@ public class TutorBotAgent extends BaseAgent {
     private final String ollamaModel;
     @NonNull
     private final AgentInteractionRepository interactionRepo;
+    @NonNull
+    private final TradeRepository tradeRepository;
+    @NonNull
+    private final PromptFactory promptFactory;
     
     private static final int MAX_QUESTIONS_PER_DAY = 10;
     private static final int MAX_INSIGHTS_PER_DAY = 3;
     
     public TutorBotAgent(@NonNull RestTemplate restTemplate, @NonNull ObjectMapper objectMapper, 
                          @NonNull String ollamaUrl, @NonNull String ollamaModel,
-                         @NonNull AgentInteractionRepository interactionRepo) {
+                         @NonNull AgentInteractionRepository interactionRepo,
+                         @NonNull TradeRepository tradeRepository,
+                         @NonNull PromptFactory promptFactory) {
         super(
             "TutorBot",
             "Provides trading lessons, Q&A, and insights (10 questions/day, 3 insights/day)",
@@ -62,101 +73,34 @@ public class TutorBotAgent extends BaseAgent {
         this.ollamaUrl = ollamaUrl;
         this.ollamaModel = ollamaModel;
         this.interactionRepo = interactionRepo;
+        this.tradeRepository = tradeRepository;
+        this.promptFactory = promptFactory;
     }
     
     @Override
     public Map<String, Object> execute(Map<String, Object> input) {
         String question = (String) input.getOrDefault("question", "");
         String userId = (String) input.getOrDefault("userId", "default");
-        InteractionType type = (InteractionType) input.getOrDefault("type", InteractionType.QUESTION);
-        
-        Map<String, Object> result = new HashMap<>();
-        
-        // Check rate limits
-        LocalDateTime startOfDay = LocalDate.now().atTime(LocalTime.MIN);
-        int limit = type == InteractionType.QUESTION ? MAX_QUESTIONS_PER_DAY : MAX_INSIGHTS_PER_DAY;
-        
-        if (interactionRepo != null) {
-            long usedToday = interactionRepo.countInteractions(name, type, userId, startOfDay);
-            if (usedToday >= limit) {
-                result.put("success", false);
-                result.put("error", String.format("Daily limit reached (%d/%d %s)", 
-                        usedToday, limit, type.name().toLowerCase()));
-                result.put("remaining", 0);
-                return result;
-            }
-            result.put("remaining", limit - usedToday - 1);
+        if (input.containsKey("whatif")) {
+            return handleWhatIfCommand(Long.parseLong(userId), (String) input.get("whatif"));
         }
-        
-        try {
-            long startTime = System.currentTimeMillis();
-            String response = callOllama(question, type);
-            long responseTime = System.currentTimeMillis() - startTime;
-            
-            result.put("success", true);
-            result.put("response", response);
-            result.put("agent", name);
-            result.put("responseTimeMs", responseTime);
-            
-            // Log interaction
-            if (interactionRepo != null) {
-                AgentInteraction interaction = AgentInteraction.builder()
-                        .agentName(name)
-                        .timestamp(LocalDateTime.now())
-                        .type(type)
-                        .input(question)
-                        .output(response.length() > 1000 ? response.substring(0, 1000) : response)
-                        .userId(userId)
-                        .responseTimeMs(responseTime)
-                        .build();
-                interactionRepo.save(interaction);
-            }
-            
-            log.info("📚 TutorBot responded in {}ms", responseTime);
-            
-        } catch (Exception e) {
-            log.error("❌ TutorBot failed: {}", e.getMessage());
-            throw new RuntimeException("Tutor response failed", e);
-        }
-        
-        return result;
+        return handleTalkCommand(Long.parseLong(userId), question);
     }
     
-    private String callOllama(String question, InteractionType type) {
-        String systemPrompt;
-        if (type == InteractionType.INSIGHT) {
-            systemPrompt = """
-                You are a Taiwan stock market trading tutor. Generate a concise trading insight or lesson.
-                Focus on: momentum trading, risk management, or market psychology.
-                Keep response under 200 words. Use practical examples when possible.
-                """;
-        } else {
-            systemPrompt = """
-                You are a Taiwan stock market trading tutor helping a student learn day trading.
-                Answer concisely and practically. Focus on:
-                - MTXF futures and MediaTek (2454.TW)
-                - Momentum trading strategies
-                - Risk management
-                - Market psychology
-                Keep answers under 150 words unless more detail is requested.
-                """;
-        }
-        
-        String prompt = String.format("%s\n\nUser: %s", systemPrompt, question);
-        
+    private String callOllama(String prompt) {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", ollamaModel);
         requestBody.put("prompt", prompt);
         requestBody.put("stream", false);
         requestBody.put("options", Map.of("temperature", 0.7));
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
+
         try {
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
             String response = restTemplate.postForObject(ollamaUrl + "/api/generate", request, String.class);
-            
+
             if (response != null) {
                 var jsonNode = objectMapper.readTree(response);
                 return jsonNode.path("response").asText("I couldn't generate a response.");
@@ -164,7 +108,7 @@ public class TutorBotAgent extends BaseAgent {
         } catch (Exception e) {
             log.error("❌ Ollama call failed: {}", e.getMessage());
         }
-        
+
         return "I'm having trouble connecting to the AI service. Please try again later.";
     }
     
@@ -172,11 +116,111 @@ public class TutorBotAgent extends BaseAgent {
      * Get daily insight without user question
      */
     public Map<String, Object> generateDailyInsight(String userId) {
-        Map<String, Object> input = new HashMap<>();
-        input.put("question", "Generate today's trading insight for Taiwan markets");
-        input.put("userId", userId);
-        input.put("type", InteractionType.INSIGHT);
-        return safeExecute(input);
+        int remaining = checkAndDecrementRateLimit(Long.parseLong(userId), "insight");
+        String prompt = promptFactory.buildInsightPrompt();
+        String response = callOllama(prompt);
+        logInteraction(userId, prompt, response, InteractionType.INSIGHT, 0L);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("response", response);
+        result.put("remaining", remaining);
+        result.put("agent", name);
+        return result;
+    }
+
+    /** Main talk entry point for Telegram. */
+    public Map<String, Object> handleTalkCommand(long chatId, String message) {
+        int remaining = checkAndDecrementRateLimit(chatId, "talk");
+        String prompt = promptFactory.buildQuestionPrompt(message);
+        long start = System.currentTimeMillis();
+        String response = callOllama(prompt);
+        long elapsed = System.currentTimeMillis() - start;
+
+        logInteraction(String.valueOf(chatId), message, response, InteractionType.QUESTION, elapsed);
+
+        return Map.of(
+                "success", true,
+                "response", response,
+                "remaining", remaining,
+                "agent", name,
+                "responseTimeMs", elapsed
+        );
+    }
+
+    /** Rate limit helper: throws if exceeded and returns remaining count. */
+    public int checkAndDecrementRateLimit(long chatId, String commandType) {
+        InteractionType type = "insight".equalsIgnoreCase(commandType) ? InteractionType.INSIGHT : InteractionType.QUESTION;
+        LocalDateTime startOfDay = LocalDate.now().atTime(LocalTime.MIN);
+        int limit = type == InteractionType.QUESTION ? MAX_QUESTIONS_PER_DAY : MAX_INSIGHTS_PER_DAY;
+        long used = interactionRepo.countInteractions(name, type, String.valueOf(chatId), startOfDay);
+        if (used >= limit) {
+            throw new IllegalStateException(String.format("Daily limit reached (%d/%d %s)", used, limit, commandType));
+        }
+        return (int) (limit - used - 1);
+    }
+
+    /**
+     * /whatif temporary simulation using recent closed trades in SIMULATION mode.
+     */
+    public Map<String, Object> handleWhatIfCommand(long chatId, String hypothesis) {
+        int remaining = checkAndDecrementRateLimit(chatId, "insight");
+        var trades = tradeRepository.findByModeAndStatusOrderByTimestampDesc(TradingMode.SIMULATION, TradeStatus.CLOSED);
+        int limit = Math.min(20, trades.size());
+        double baseline = 0.0;
+        double simulated = 0.0;
+        for (int i = 0; i < limit; i++) {
+            Trade trade = trades.get(i);
+            double pnl = trade.getRealizedPnL() != null ? trade.getRealizedPnL() : 0.0;
+            baseline += pnl;
+            simulated += applyHypothesisAdjustment(pnl, hypothesis);
+        }
+        double delta = simulated - baseline;
+
+        Map<String, Object> simResult = new HashMap<>();
+        simResult.put("baselinePnl", baseline);
+        simResult.put("simulatedPnl", simulated);
+        simResult.put("delta", delta);
+        simResult.put("tradesAnalyzed", limit);
+        simResult.put("hypothesis", hypothesis);
+
+        String prompt = promptFactory.buildWhatIfPrompt(hypothesis, simResult);
+        String response = callOllama(prompt);
+        logInteraction(String.valueOf(chatId), hypothesis, response, InteractionType.INSIGHT, 0L);
+
+        simResult.put("analysis", response);
+        simResult.put("remaining", remaining);
+        simResult.put("success", true);
+        simResult.put("agent", name);
+        return simResult;
+    }
+
+    private double applyHypothesisAdjustment(double pnl, String hypothesis) {
+        String lower = Objects.toString(hypothesis, "").toLowerCase();
+        if (lower.contains("stop")) {
+            return pnl < 0 ? pnl * 0.85 : pnl; // tighter stop reduces losses
+        }
+        if (lower.contains("size") || lower.contains("position")) {
+            return pnl * 1.1; // larger size effect
+        }
+        if (lower.contains("take profit") || lower.contains("tp")) {
+            return pnl > 0 ? pnl * 0.95 : pnl; // earlier take-profit trims wins
+        }
+        return pnl * 1.05; // default modest improvement
+    }
+
+    private void logInteraction(String userId, String input, String output, InteractionType type, long responseTimeMs) {
+        if (interactionRepo == null) return;
+        AgentInteraction interaction = AgentInteraction.builder()
+                .agentName(name)
+                .timestamp(LocalDateTime.now())
+                .type(type)
+                .input(input)
+                .output(output.length() > 1000 ? output.substring(0, 1000) : output)
+                .userId(userId)
+                .responseTimeMs(responseTimeMs)
+                .build();
+        interactionRepo.save(interaction);
     }
     
     @Override

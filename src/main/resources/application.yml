@@ -53,8 +53,12 @@ telegram:
 
 # Shioaji credentials (encrypted with Jasypt)
 shioaji:
-  api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
-  secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
+  stock:
+    api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
+    secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
+  future:
+    api-key: "ENC(+jmihAk/Wa8e0EES6j05sPGjQ17usvEx0Qb+BI9cHfALLbhofOH5qFVrg+SVdUsnXkFab491S58=)"
+    secret-key: "ENC(RRZ8DTuV8oxlzoUhA1TC5V62JlHKkt42AMu23W+FJ04fl+5ZERHfDOgy+TeZzNEQQOThDseYALw=)"
   ca-path: "Sinopac.pfx"
   ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
   person-id: "ENC(fNJEeUmwdyu2PCWL6YfIwbpLYY3XKmmI)"

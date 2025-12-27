@@ -18,8 +18,6 @@ import tw.gc.mtxfbot.services.DataLoggingService;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -282,10 +280,9 @@ class TradingEngineTest {
     @Test
     void evaluateExit_whenStopLossHit_shouldFlattenPosition() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        AtomicReference<Double> entryPrice = getAtomicField(tradingEngine, "entryPrice");
-        currentPosition.set(1);
-        entryPrice.set(20100.0); // Entry price
+        String symbol = tradingEngine.getActiveSymbol();
+        tradingEngine.positionFor(symbol).set(1);
+        tradingEngine.entryPriceFor(symbol).set(20100.0); // Entry price
         
         // Current price 20000, position 1, loss = (20000-20100)*1*50 = -5000 TWD > -500 stop
         String signalJson = "{\"current_price\":20000,\"exit_signal\":false}";
@@ -303,10 +300,9 @@ class TradingEngineTest {
     @Test
     void evaluateExit_whenExitSignalTrue_shouldFlattenPosition() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        AtomicReference<Double> entryPrice = getAtomicField(tradingEngine, "entryPrice");
-        currentPosition.set(1);
-        entryPrice.set(20000.0);
+        String symbol = tradingEngine.getActiveSymbol();
+        tradingEngine.positionFor(symbol).set(1);
+        tradingEngine.entryPriceFor(symbol).set(20000.0);
         
         String signalJson = "{\"current_price\":20050,\"exit_signal\":true}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
@@ -323,10 +319,9 @@ class TradingEngineTest {
     @Test
     void evaluateExit_whenProfitRunning_shouldNotExit() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        AtomicReference<Double> entryPrice = getAtomicField(tradingEngine, "entryPrice");
-        currentPosition.set(1);
-        entryPrice.set(20000.0);
+        String symbol = tradingEngine.getActiveSymbol();
+        tradingEngine.positionFor(symbol).set(1);
+        tradingEngine.entryPriceFor(symbol).set(20000.0);
         
         // Profit but no exit signal - should let it run
         String signalJson = "{\"current_price\":20100,\"exit_signal\":false}";
@@ -349,11 +344,10 @@ class TradingEngineTest {
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "BUY", 1, 20000.0);
+        tradingEngine.executeOrderForTest("BUY", 1, 20000.0);
 
         // Then
-        AtomicInteger position = getAtomicIntField(tradingEngine, "currentPosition");
-        assertEquals(1, position.get());
+        assertEquals(1, tradingEngine.positionFor(tradingEngine.getActiveSymbol()).get());
         verify(telegramService).sendMessage(contains("ORDER FILLED"));
     }
 
@@ -364,11 +358,10 @@ class TradingEngineTest {
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "SELL", 1, 20000.0);
+        tradingEngine.executeOrderForTest("SELL", 1, 20000.0);
 
         // Then
-        AtomicInteger position = getAtomicIntField(tradingEngine, "currentPosition");
-        assertEquals(-1, position.get());
+        assertEquals(-1, tradingEngine.positionFor(tradingEngine.getActiveSymbol()).get());
     }
 
     @Test
@@ -378,7 +371,7 @@ class TradingEngineTest {
                 .thenThrow(new RuntimeException("Order rejected"));
 
         // When
-        invokePrivateMethod(tradingEngine, "executeOrderWithRetry", "BUY", 1, 20000.0);
+        tradingEngine.executeOrderForTest("BUY", 1, 20000.0);
 
         // Then
         verify(telegramService).sendMessage(contains("Order failed after 3 attempts"));
@@ -389,8 +382,7 @@ class TradingEngineTest {
     @Test
     void flattenPosition_whenNoPosition_shouldDoNothing() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        currentPosition.set(0);
+        tradingEngine.positionFor(tradingEngine.getActiveSymbol()).set(0);
 
         // When
         invokePrivateMethod(tradingEngine, "flattenPosition", "Test reason");
@@ -402,10 +394,9 @@ class TradingEngineTest {
     @Test
     void flattenPosition_whenLongPosition_shouldSell() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        AtomicReference<Double> entryPrice = getAtomicField(tradingEngine, "entryPrice");
-        currentPosition.set(1);
-        entryPrice.set(20000.0);
+        String symbol = tradingEngine.getActiveSymbol();
+        tradingEngine.positionFor(symbol).set(1);
+        tradingEngine.entryPriceFor(symbol).set(20000.0);
 
         String signalJson = "{\"current_price\":20050}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
@@ -422,10 +413,9 @@ class TradingEngineTest {
     @Test
     void flattenPosition_whenShortPosition_shouldBuy() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        AtomicReference<Double> entryPrice = getAtomicField(tradingEngine, "entryPrice");
-        currentPosition.set(-1);
-        entryPrice.set(20000.0);
+        String symbol = tradingEngine.getActiveSymbol();
+        tradingEngine.positionFor(symbol).set(-1);
+        tradingEngine.entryPriceFor(symbol).set(20000.0);
 
         String signalJson = "{\"current_price\":19950}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
@@ -437,6 +427,29 @@ class TradingEngineTest {
 
         // Then
         verify(restTemplate).postForObject(contains("/order"), any(java.util.Map.class), eq(String.class));
+    }
+
+    @Test
+    void flattenPosition_onlyClosesActiveSymbolPosition() throws Exception {
+        // Given
+        setFieldValue(tradingEngine, "tradingMode", "stock");
+        tradingEngine.positionFor("2454.TW").set(1);
+        tradingEngine.entryPriceFor("2454.TW").set(20000.0);
+
+        tradingEngine.positionFor("MTXF").set(-1); // futures position should remain untouched
+        tradingEngine.entryPriceFor("MTXF").set(21000.0);
+
+        String signalJson = "{\"current_price\":20100}";
+        when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
+        when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+
+        // When
+        invokePrivateMethod(tradingEngine, "flattenPosition", "Test reason");
+
+        // Then
+        assertEquals(0, tradingEngine.positionFor("2454.TW").get());
+        assertEquals(-1, tradingEngine.positionFor("MTXF").get());
     }
 
     // ==================== updateNewsVetoCache() tests ====================
@@ -512,41 +525,12 @@ class TradingEngineTest {
         verify(telegramService).sendMessage(contains("EXCEPTIONAL DAY"));
     }
 
-    // ==================== shutdownPythonBridge() tests ====================
-
-    // OBSOLETE TEST - shutdownPythonBridge method no longer exists
-    /*
-    @Test
-    void shutdownPythonBridge_shouldCallShutdownEndpoint() throws Exception {
-        // Given
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class)))
-                .thenReturn("{\"status\":\"shutting_down\"}");
-
-        // When
-        invokePrivateMethod(tradingEngine, "shutdownPythonBridge");
-
-        // Then
-        verify(restTemplate).postForObject(contains("/shutdown"), eq(""), eq(String.class));
-    }
-
-    @Test
-    void shutdownPythonBridge_whenFails_shouldNotThrow() throws Exception {
-        // Given
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class)))
-                .thenThrow(new RuntimeException("Connection refused"));
-
-        // When & Then - should not throw
-        assertDoesNotThrow(() -> invokePrivateMethod(tradingEngine, "shutdownPythonBridge"));
-    }
-    */
-
     // ==================== autoFlatten() tests ====================
 
     @Test
     void autoFlatten_shouldFlattenAndSendSummary() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        currentPosition.set(0); // No position to flatten
+        tradingEngine.positionFor(tradingEngine.getActiveSymbol()).set(0); // No position to flatten
 
         // When
         // Note: We can't fully test autoFlatten because it calls System.exit()
@@ -562,8 +546,7 @@ class TradingEngineTest {
     @Test
     void shutdown_shouldFlattenAndNotifyBridge() throws Exception {
         // Given
-        AtomicInteger currentPosition = getAtomicIntField(tradingEngine, "currentPosition");
-        currentPosition.set(0);
+        tradingEngine.positionFor(tradingEngine.getActiveSymbol()).set(0);
 
         // When
         tradingEngine.shutdown();
@@ -586,22 +569,10 @@ class TradingEngineTest {
         field.set(obj, value);
     }
 
-    private AtomicReference<Double> getAtomicField(Object obj, String fieldName) throws Exception {
-        Field field = obj.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return (AtomicReference<Double>) field.get(obj);
-    }
-
     private AtomicBoolean getAtomicBooleanField(Object obj, String fieldName) throws Exception {
         Field field = obj.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         return (AtomicBoolean) field.get(obj);
-    }
-
-    private AtomicInteger getAtomicIntField(Object obj, String fieldName) throws Exception {
-        Field field = obj.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return (AtomicInteger) field.get(obj);
     }
 
     private void invokePrivateMethod(Object obj, String methodName, Object... args) throws Exception {

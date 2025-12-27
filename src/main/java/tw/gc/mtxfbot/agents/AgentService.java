@@ -15,7 +15,9 @@ import tw.gc.mtxfbot.entities.Agent;
 import tw.gc.mtxfbot.entities.Agent.AgentStatus;
 import tw.gc.mtxfbot.repositories.AgentInteractionRepository;
 import tw.gc.mtxfbot.repositories.AgentRepository;
+import tw.gc.mtxfbot.repositories.BotSettingsRepository;
 import tw.gc.mtxfbot.repositories.TradeRepository;
+import tw.gc.mtxfbot.agents.PromptFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -48,6 +50,7 @@ public class AgentService {
     private final OllamaProperties ollamaProperties;
     private final TelegramService telegramService;
     private final BotModeService botModeService;
+    private final BotSettingsRepository botSettingsRepository;
     
     private final Map<String, BaseAgent> agents = new ConcurrentHashMap<>();
     
@@ -62,12 +65,13 @@ public class AgentService {
         String bridgeUrl = tradingProperties.getBridge().getUrl();
         String ollamaUrl = ollamaProperties.getUrl();
         String ollamaModel = ollamaProperties.getModel();
+        PromptFactory promptFactory = new PromptFactory();
         
         // Create and register all agents
         registerAgent(new NewsAnalyzerAgent(restTemplate, objectMapper, bridgeUrl));
-        registerAgent(new TutorBotAgent(restTemplate, objectMapper, ollamaUrl, ollamaModel, interactionRepo));
+        registerAgent(new TutorBotAgent(restTemplate, objectMapper, ollamaUrl, ollamaModel, interactionRepo, tradeRepo, promptFactory));
         registerAgent(new SignalGeneratorAgent(restTemplate, objectMapper, bridgeUrl));
-        registerAgent(new RiskManagerAgent(tradeRepo));
+        registerAgent(new RiskManagerAgent(tradeRepo, botSettingsRepository));
         
         // Persist agents to database
         saveAgentsToDatabase();

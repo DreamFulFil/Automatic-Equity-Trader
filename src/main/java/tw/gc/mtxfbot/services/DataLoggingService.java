@@ -11,6 +11,7 @@ import tw.gc.mtxfbot.repositories.SignalRepository;
 import tw.gc.mtxfbot.repositories.TradeRepository;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * DataLoggingService - Centralized service for logging all bot activities.
@@ -35,6 +36,36 @@ public class DataLoggingService {
     public Trade logTrade(Trade trade) {
         log.info("📊 Logging trade: {} {} {} @ {}", trade.getAction(), trade.getQuantity(),
                 trade.getSymbol(), trade.getEntryPrice());
+        return tradeRepository.save(trade);
+    }
+
+    /**
+     * Close the latest open trade for a symbol and mode, updating exit details.
+     */
+    @Transactional
+    public Trade closeLatestTrade(String symbol, Trade.TradingMode mode, double exitPrice, double realizedPnL, int holdDurationMinutes) {
+        Optional<Trade> latestOpen = tradeRepository
+                .findFirstBySymbolAndModeAndStatusOrderByTimestampDesc(symbol, mode, Trade.TradeStatus.OPEN);
+
+        if (latestOpen.isEmpty()) {
+            latestOpen = tradeRepository.findFirstBySymbolAndStatusOrderByTimestampDesc(symbol, Trade.TradeStatus.OPEN);
+        }
+
+        if (latestOpen.isEmpty()) {
+            log.warn("⚠️ No open trade found to close for symbol={} mode={}", symbol, mode);
+            return null;
+        }
+
+        Trade trade = latestOpen.get();
+        trade.setExitPrice(exitPrice);
+        trade.setRealizedPnL(realizedPnL);
+        trade.setHoldDurationMinutes(holdDurationMinutes);
+        trade.setStatus(Trade.TradeStatus.CLOSED);
+
+        if (trade.getMode() == null) {
+            trade.setMode(mode);
+        }
+
         return tradeRepository.save(trade);
     }
 

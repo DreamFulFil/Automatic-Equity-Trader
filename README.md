@@ -883,6 +883,11 @@ BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,Sy
 BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest tests/e2e/ -v
 ```
 
+E2E prerequisites:
+- Java trading engine running on `JAVA_URL` (default `http://localhost:16350`)
+- Python bridge running on `BRIDGE_URL` (default `http://localhost:8888`)
+- Ollama running on `http://localhost:11434` for news veto checks (optional; tests skip if unavailable)
+
 ### Test Documentation
 
 See `docs/TESTING.md` for complete testing documentation including:

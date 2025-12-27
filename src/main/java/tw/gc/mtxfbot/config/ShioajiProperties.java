@@ -8,10 +8,16 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "shioaji")
 public class ShioajiProperties {
-    private String apiKey;
-    private String secretKey;
+    private Account stock;
+    private Account future;
     private String caPath;
     private String caPassword;
     private String personId;
     private boolean simulation = false;
+
+    @Data
+    public static class Account {
+        private String apiKey;
+        private String secretKey;
+    }
 }
