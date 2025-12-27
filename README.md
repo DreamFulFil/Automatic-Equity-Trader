@@ -21,12 +21,12 @@ Transform 100,000 TWD into 30,000+ TWD monthly profit using AI-powered lunch-bre
 
 ```
 ┌─────────────────┐      REST API       ┌──────────────────┐
-│  Java Trading   │◄────────────────────►│  Python Bridge   │
+│  Java Trading   │◄───────────────────►│  Python Bridge   │
 │     Engine      │   (port 8080/8888)  │   (FastAPI)      │
-│  Spring Boot    │                      │                  │
-│  + Risk Mgmt    │                      │  + Shioaji API   │
-│  + Telegram     │                      │  + Ollama Client │
-└─────────────────┘                      └──────────────────┘
+│  Spring Boot    │                     │                  │
+│  + Risk Mgmt    │                     │  + Shioaji API   │
+│  + Telegram     │                     │  + Ollama Client │
+└─────────────────┘                     └──────────────────┘
          │                                        │
          │                                        ▼
          │                               ┌────────────────┐
