@@ -105,11 +105,11 @@ end
 set -x PATH $JAVA_HOME/bin $PATH
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║     🤖 Automatic Equity Trader - Taiwan Stock Trading System    ║"
+echo "║     🤖 Automatic Equity Trader - Taiwan Stock Trading System       ║"
 echo "╠════════════════════════════════════════════════════════════════╣"
-echo "║  Directory: $BOT_DIR                                           ║"
-echo "║  Mode:      $TRADING_MODE                                      ║"
-echo "║  Started:   "(date '+%Y-%m-%d %H:%M:%S')"                      ║"
+echo "║  Directory: $BOT_DIR"
+echo "║  Mode:      $TRADING_MODE"
+echo "║  Started:   "(date '+%Y-%m-%d %H:%M:%S')
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -197,11 +197,11 @@ if not pgrep -x "ollama" > /dev/null
     sleep 2
 end
 
-if not curl -s http://localhost:11434/api/tags | grep -q "mistral:7b-instruct-v0.2-q5_K_M"
-    echo "📥 Downloading mistral:7b-instruct-v0.2-q5_K_M..."
-    $OLLAMA_BIN pull mistral:7b-instruct-v0.2-q5_K_M
+if not curl -s http://localhost:11434/api/tags | grep -q "llama3.1"
+    echo "📥 Downloading Llama 3.1 8B (q5_K_M)..."
+    $OLLAMA_BIN pull llama3.1:8b-instruct-q5_K_M
 end
-echo -e "$GREEN✅ Ollama + mistral:7b-instruct-v0.2-q5_K_M ready$NC"
+echo -e "$GREEN✅ Ollama + Llama 3.1 ready$NC"
 
 # Step 4.5: Check PostgreSQL (only for local runs, not CI)
 if not set -q CI
@@ -223,9 +223,7 @@ if command -v jenv > /dev/null
     set MVN_CMD "jenv exec mvn"
 end
 
-set JAR_FILE "target/auto-equity-trader.jar"
-
-if not test -f "$JAR_FILE"
+if not test -f "target/auto-equity-trader-1.0.0.jar"
     echo "Building JAR file (using: $MVN_CMD)..."
     eval $MVN_CMD clean package -DskipTests
     if test $status -ne 0
@@ -233,8 +231,7 @@ if not test -f "$JAR_FILE"
         exit 1
     end
 end
-
-echo "✅ Using JAR file (JVM mode)"
+echo "✅ Java app built"
 
 # Step 5.5: Create logs directory BEFORE any logging happens
 set BOT_DIR_ABS (pwd)
@@ -264,8 +261,6 @@ function supervise_python_bridge
         echo "🔄 [Supervisor] Starting Python bridge (attempt "(math $restart_count + 1)")..." >> $BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD $JASYPT_SECRET
-        set -x POSTGRES_PASSWORD "WSYS1r0PE0Ig0iuNX2aNi5k7"
-        set -x TRADING_MODE $TRADING_MODE
         # Use venv Python explicitly
         $BOT_DIR/python/venv/bin/python bridge.py >> $BOT_DIR/logs/python-bridge.log 2>&1
         set -l exit_code $status
@@ -305,7 +300,6 @@ nohup fish -c "
         echo '🔄 [Supervisor] Starting Python bridge (attempt '(math \$restart_count + 1)')...' >> \$BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD \$JASYPT_SECRET
-        set -x POSTGRES_PASSWORD 'WSYS1r0PE0Ig0iuNX2aNi5k7'
         set -x TRADING_MODE \$TRADING_MODE
         # Use venv Python explicitly
         \$BOT_DIR/python/venv/bin/python bridge.py >> \$BOT_DIR/logs/python-bridge.log 2>&1
@@ -355,9 +349,9 @@ echo ""
 
 # Use jenv exec for cron reliability, fallback to java otherwise
 if command -v jenv > /dev/null
-    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 else
-    java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 end
 set JAVA_EXIT_CODE $status
 

@@ -9,22 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * MarketData Entity - OHLCV candlestick data for backtesting and technical analysis.
+ * MarketData entity for storing OHLCV (Open, High, Low, Close, Volume) candlestick data.
+ * Essential for backtesting, technical analysis, and chart generation.
  * 
- * <h3>Trading Lifecycle Role:</h3>
- * <ul>
- *   <li><b>Backtesting</b>: Historical data source for strategy simulation</li>
- *   <li><b>Technical Analysis</b>: Pre-calculated indicators (SMA, EMA, RSI, MACD, Bollinger)</li>
- *   <li><b>Chart Generation</b>: OHLCV data for visualization</li>
- *   <li><b>Real-time Feed</b>: Stores tick-level to daily aggregations</li>
- * </ul>
- * 
- * <h3>Asset Type:</h3>
- * The {@code assetType} column defaults to {@code STOCK}. Supports both Taiwan stocks (TSE)
- * and Taiwan futures (TAIFEX) when futures trading is enabled.
- * 
- * @see BacktestService for historical simulation
- * @see HistoryDataService for data retrieval
+ * Data is aggregated at various timeframes (1min, 5min, 15min, 1h, 1d).
  */
 @Entity
 @Table(name = "market_data", indexes = {
@@ -46,9 +34,6 @@ public class MarketData {
 
     @Column(length = 20, nullable = false)
     private String symbol; // e.g., "2454.TW", "AUTO_EQUITY_TRADER"
-
-    @Column(length = 200)
-    private String name; // e.g., "MediaTek", "Taiwan Semiconductor Manufacturing"
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -118,11 +103,6 @@ public class MarketData {
     @Column(name = "momentum_pct")
     private Double momentumPct; // Price momentum percentage
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "asset_type")
-    @Builder.Default
-    private AssetType assetType = AssetType.STOCK;
-
     public enum Timeframe {
         TICK,       // Raw tick data (aggregated per second)
         MIN_1,      // 1-minute candles
@@ -131,10 +111,5 @@ public class MarketData {
         MIN_30,     // 30-minute candles
         HOUR_1,     // 1-hour candles
         DAY_1       // Daily candles
-    }
-    
-    public enum AssetType {
-        STOCK,
-        FUTURE
     }
 }

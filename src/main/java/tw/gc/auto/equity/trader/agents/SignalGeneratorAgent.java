@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.entities.Signal;
+import tw.gc.auto.equity.trader.AppConstants;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,7 +34,7 @@ import java.util.Map;
 @Slf4j
 public class SignalGeneratorAgent extends BaseAgent {
     
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     private static final double MOMENTUM_THRESHOLD = 0.003; // 0.3% change needed for momentum alignment
     private static final double VOLUME_RATIO_THRESHOLD = 1.1; // 10% higher than average volume
     private static final int RSI_PERIOD = 14;

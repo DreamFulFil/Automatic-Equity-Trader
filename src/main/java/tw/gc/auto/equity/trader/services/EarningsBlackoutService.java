@@ -9,11 +9,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.services.TelegramService;
+import tw.gc.auto.equity.trader.TelegramService;
 import tw.gc.auto.equity.trader.config.EarningsProperties;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutDate;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutMeta;
 import tw.gc.auto.equity.trader.repositories.EarningsBlackoutMetaRepository;
+import tw.gc.auto.equity.trader.AppConstants;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EarningsBlackoutService {
 
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     private static final int DEFAULT_TTL_DAYS = 7;
     private static final String LEGACY_JSON_PATH = "config/earnings-blackout-dates.json";
     private static final Duration[] BACKOFFS = new Duration[]{
@@ -86,31 +87,12 @@ public class EarningsBlackoutService {
     private final AtomicBoolean refreshFailureAlertSent = new AtomicBoolean(false);
     private final ReentrantLock refreshLock = new ReentrantLock();
 
-    /**
-     * DISABLED: Scheduled refresh removed.
-     * Earnings blackout dates are now refreshed ONLY on application startup via @PostConstruct.
-     * This ensures blackout data is current without scheduled background tasks.
-     */
-    // @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 0 9 * * *", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void scheduledRefresh() {
         if (!earningsProperties.getRefresh().isEnabled()) {
             return;
         }
         refreshAndPersist("scheduled-cron");
-    }
-    
-    /**
-     * Refresh earnings on application startup.
-     * JUSTIFICATION: Ensures earnings blackout dates are loaded before trading begins.
-     */
-    @jakarta.annotation.PostConstruct
-    public void refreshOnStartup() {
-        if (!earningsProperties.getRefresh().isEnabled()) {
-            log.info("📅 Earnings refresh disabled in configuration");
-            return;
-        }
-        log.info("📅 Refreshing earnings blackout dates on startup...");
-        refreshAndPersist("startup");
     }
 
     public Optional<EarningsBlackoutMeta> manualRefresh() {

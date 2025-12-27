@@ -78,21 +78,11 @@ public class Portfolio {
         return positions != null ? positions.getOrDefault(symbol, 0) : 0;
     }
     
-    public void setPosition(String symbol, int quantity) {
-        if (positions == null) positions = new java.util.HashMap<>();
-        positions.put(symbol, quantity);
-    }
-    
     /**
      * Get entry price for a specific symbol
      */
     public Double getEntryPrice(String symbol) {
-        return entryPrices != null ? entryPrices.getOrDefault(symbol, 0.0) : 0.0;
-    }
-    
-    public void setEntryPrice(String symbol, double price) {
-        if (entryPrices == null) entryPrices = new java.util.HashMap<>();
-        entryPrices.put(symbol, price);
+        return entryPrices != null ? entryPrices.get(symbol) : null;
     }
     
     /**

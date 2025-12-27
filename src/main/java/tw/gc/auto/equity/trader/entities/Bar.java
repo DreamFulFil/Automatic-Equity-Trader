@@ -43,12 +43,6 @@ public class Bar {
     private String symbol;
     
     /**
-     * Stock name (e.g., "MediaTek", "Taiwan Semiconductor Manufacturing")
-     */
-    @Column(name = "name", length = 200)
-    private String name;
-    
-    /**
      * Market identifier (e.g., "TSE", "TAIFEX")
      */
     @Column(name = "market", length = 20)

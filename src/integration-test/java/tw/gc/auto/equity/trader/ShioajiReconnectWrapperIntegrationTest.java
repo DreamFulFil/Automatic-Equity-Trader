@@ -6,8 +6,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.services.TelegramService;
-import tw.gc.auto.equity.trader.services.ShioajiReconnectWrapperService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -18,12 +16,12 @@ class ShioajiReconnectWrapperIntegrationTest {
     @Mock private RestTemplate restTemplate;
     @Mock private TelegramService telegramService;
     
-    private ShioajiReconnectWrapperService wrapper;
+    private ShioajiReconnectWrapper wrapper;
     private final String bridgeUrl = "http://localhost:8888";
 
     @BeforeEach
     void setUp() {
-        wrapper = new ShioajiReconnectWrapperService(restTemplate, telegramService);
+        wrapper = new ShioajiReconnectWrapper(restTemplate, telegramService);
     }
 
     @Test

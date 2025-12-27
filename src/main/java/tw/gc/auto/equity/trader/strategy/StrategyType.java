@@ -14,17 +14,5 @@ public enum StrategyType {
      * Short-term strategies (MA crossover, Bollinger bands, momentum, arbitrage, etc.)
      * Typically hold positions for minutes/hours/days
      */
-    SHORT_TERM,
-
-    /**
-     * Intraday strategies (day trading)
-     * Positions closed same day
-     */
-    INTRADAY,
-
-    /**
-     * Swing trading strategies
-     * Positions held for days to weeks
-     */
-    SWING
+    SHORT_TERM
 }

@@ -39,7 +39,6 @@ public class BotSettings {
     
     // Common setting keys as constants
     public static final String TRADING_MODE = "trading_mode"; // "simulation" or "live"
-    public static final String MARKET_MODE = "market_mode"; // TradingModeEnum: "stock", "futures", "stock_and_futures"
     public static final String OLLAMA_MODEL = "ollama_model";
     public static final String DAILY_LOSS_LIMIT = "daily_loss_limit";
     public static final String WEEKLY_LOSS_LIMIT = "weekly_loss_limit";

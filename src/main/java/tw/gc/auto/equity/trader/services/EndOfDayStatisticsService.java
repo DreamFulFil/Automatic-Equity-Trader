@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.entities.*;
 import tw.gc.auto.equity.trader.repositories.*;
+import tw.gc.auto.equity.trader.AppConstants;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,7 +21,7 @@ import java.util.stream.Collectors;
 
 /**
  * EndOfDayStatisticsService - Calculates and stores daily trading statistics.
- * Runs automatically at 13:35 Taiwan time (after trading window closes).
+ * Runs automatically at 13:05 Taiwan time (after trading window closes).
  * Generates AI insights from collected data via Ollama/Llama.
  */
 @Service
@@ -28,7 +29,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EndOfDayStatisticsService {
 
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
 
     @NonNull
     private final TradeRepository tradeRepository;
@@ -42,25 +43,18 @@ public class EndOfDayStatisticsService {
     private final MarketDataRepository marketDataRepository;
     @NonNull
     private final RestTemplate restTemplate;
-    @NonNull
-    private final TelegramService telegramService;
-    @NonNull
-    private final ActiveStockService activeStockService;
 
     /**
      * Calculate and store end-of-day statistics.
-     * Triggered at 13:35 Taiwan time (5 minutes after market close).
-     * JUSTIFICATION: Calculates and persists daily statistics (OHLCV, trades, P&L) for historical analysis.
-     * Runs after market close (13:30) to ensure all data is captured.
+     * Triggered at 13:05 Taiwan time (5 minutes after market close).
      */
-    @Scheduled(cron = "0 35 13 * * MON-FRI", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     @Transactional
     public void calculateEndOfDayStatistics() {
         log.info("📊 Calculating end-of-day statistics...");
 
         LocalDate today = LocalDate.now(TAIPEI_ZONE);
-        String tradingMode = System.getProperty("trading.mode", "stock");
-        String symbol = activeStockService.getActiveSymbol(tradingMode);
+        String symbol = System.getProperty("trading.mode", "stock").equals("stock") ? "2454.TW" : "AUTO_EQUITY_TRADER";
 
         try {
             DailyStatistics stats = calculateStatisticsForDay(today, symbol);
@@ -90,7 +84,7 @@ public class EndOfDayStatisticsService {
 
     DailyStatistics calculateStatisticsForDay(LocalDate date, String symbol) {
         LocalDateTime dayStart = date.atTime(LocalTime.of(11, 30));
-        LocalDateTime dayEnd = date.atTime(LocalTime.of(13, 30));
+        LocalDateTime dayEnd = date.atTime(LocalTime.of(13, 0));
 
         // Get trades for the day
         List<Trade> trades = tradeRepository.findByTimestampBetween(dayStart, dayEnd)
@@ -290,7 +284,7 @@ public class EndOfDayStatisticsService {
             String prompt = buildInsightPrompt(stats);
 
             Map<String, Object> request = Map.of(
-                    "model", "mistral:7b-instruct-v0.2-q5_K_M",
+                    "model", "llama3.1:8b-instruct-q5_K_M",
                     "prompt", prompt,
                     "stream", false,
                     "options", Map.of("temperature", 0.5)
@@ -309,44 +303,11 @@ public class EndOfDayStatisticsService {
                 stats.setInsightGeneratedAt(LocalDateTime.now(TAIPEI_ZONE));
                 dailyStatisticsRepository.save(stats);
                 log.info("✨ AI insight generated for {}", stats.getTradeDate());
-                
-                // Send summary via Telegram
-                sendTelegramSummary(stats);
             }
 
         } catch (Exception e) {
             log.warn("⚠️ Failed to generate AI insight: {}", e.getMessage());
         }
-    }
-
-    private void sendTelegramSummary(DailyStatistics stats) {
-        String message = String.format(
-            "📊 <b>Daily Trading Summary</b>\n" +
-            "📅 %s (%s)\n\n" +
-            "<b>Performance:</b>\n" +
-            "• P&L: %.0f TWD\n" +
-            "• Trades: %d (W:%d L:%d)\n" +
-            "• Win Rate: %.1f%%\n" +
-            "• Profit Factor: %.2f\n" +
-            "• Max Drawdown: %.0f\n\n" +
-            "<b>Activity:</b>\n" +
-            "• Signals: %d (L:%d S:%d)\n" +
-            "• News Vetos: %d\n" +
-            "• Avg Hold: %.1f min\n\n" +
-            "<b>🤖 AI Insight:</b>\n%s",
-            stats.getTradeDate(), stats.getSymbol(),
-            stats.getRealizedPnL(),
-            stats.getTotalTrades(), stats.getWinningTrades(), stats.getLosingTrades(),
-            stats.getWinRate(),
-            stats.getProfitFactor(),
-            stats.getMaxDrawdown(),
-            stats.getSignalsGenerated(), stats.getSignalsLong(), stats.getSignalsShort(),
-            stats.getNewsVetoCount(),
-            stats.getAvgHoldMinutes(),
-            stats.getLlamaInsight()
-        );
-        
-        telegramService.sendMessage(message);
     }
 
     private String buildInsightPrompt(DailyStatistics stats) {

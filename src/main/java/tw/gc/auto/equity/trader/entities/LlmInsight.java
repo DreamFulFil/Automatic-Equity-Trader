@@ -99,7 +99,7 @@ public class LlmInsight {
      */
     @Column(name = "model_name", length = 100)
     @Builder.Default
-    private String modelName = "mistral:7b-instruct-v0.2-q5_K_M";
+    private String modelName = "llama3.1:8b-instruct-q5_K_M";
     
     /**
      * Processing time in milliseconds
@@ -176,12 +176,6 @@ public class LlmInsight {
         CORRELATION_ANALYSIS,
         
         /** General market commentary */
-        MARKET_COMMENTARY,
-        
-        /** AI-assisted signal generation */
-        SIGNAL_GENERATION,
-        
-        /** Startup market analysis */
-        MARKET_ANALYSIS
+        MARKET_COMMENTARY
     }
 }
