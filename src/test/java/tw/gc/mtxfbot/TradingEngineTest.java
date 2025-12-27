@@ -82,7 +82,7 @@ class TradingEngineTest {
 
         // Mock stock settings
         StockSettings stockSettings = StockSettings.builder()
-                .initialShares(55)
+                .shares(55)
                 .shareIncrement(27)
                 .build();
         when(stockSettingsService.getSettings()).thenReturn(stockSettings);

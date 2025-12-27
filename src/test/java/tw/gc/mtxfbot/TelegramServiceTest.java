@@ -28,6 +28,9 @@ class TelegramServiceTest {
     @Mock
     private TelegramProperties telegramProperties;
 
+    @Mock
+    private StockSettingsService stockSettingsService;
+
     private ObjectMapper objectMapper;
 
     private TelegramService telegramService;
@@ -35,7 +38,7 @@ class TelegramServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        telegramService = new TelegramService(restTemplate, telegramProperties, objectMapper);
+        telegramService = new TelegramService(restTemplate, telegramProperties, objectMapper, stockSettingsService);
     }
 
     // ==================== sendMessage() tests ====================

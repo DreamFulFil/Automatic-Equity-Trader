@@ -25,9 +25,9 @@ public class StockSettings {
     private Long id;
 
     /** Base shares for stock mode (70 shares ≈77k TWD at NT$1,100/share MediaTek) */
-    @Column(name = "initial_shares", nullable = false)
+    @Column(name = "shares", nullable = false)
     @Builder.Default
-    private int initialShares = 70;
+    private int shares = 70;
 
     /** Additional shares per 20k equity above 80k base */
     @Column(name = "share_increment", nullable = false)

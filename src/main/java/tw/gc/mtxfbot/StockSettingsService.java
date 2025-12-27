@@ -34,7 +34,7 @@ public class StockSettingsService {
     public void ensureDefaultSettings() {
         if (stockSettingsRepo.findFirst() == null) {
             StockSettings defaultSettings = StockSettings.builder()
-                    .initialShares(70)
+                    .shares(70)
                     .shareIncrement(27)
                     .updatedAt(LocalDateTime.now())
                     .build();
@@ -58,9 +58,9 @@ public class StockSettingsService {
      * Update stock settings
      */
     @Transactional
-    public StockSettings updateSettings(int initialShares, int shareIncrement) {
+    public StockSettings updateSettings(int shares, int shareIncrement) {
         StockSettings settings = getSettings();
-        settings.setInitialShares(initialShares);
+        settings.setShares(shares);
         settings.setShareIncrement(shareIncrement);
         settings.setUpdatedAt(LocalDateTime.now());
         return stockSettingsRepo.save(settings);
@@ -71,7 +71,7 @@ public class StockSettingsService {
      */
     public int getBaseStockQuantity(double equity) {
         StockSettings settings = getSettings();
-        int baseShares = settings.getInitialShares();
+        int baseShares = settings.getShares();
         int increment = settings.getShareIncrement();
 
         // Default base capital for 70 shares at ~1100/share MediaTek

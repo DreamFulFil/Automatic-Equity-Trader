@@ -14,6 +14,7 @@ import tw.gc.mtxfbot.agents.TutorBotAgent;
 import tw.gc.mtxfbot.config.TelegramProperties;
 import tw.gc.mtxfbot.entities.AgentInteraction.InteractionType;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
+import tw.gc.mtxfbot.StockSettingsService;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,8 @@ import java.util.function.Consumer;
  * - /insight → get daily trading insight
  * - /golive → check eligibility to switch to live mode
  * - /backtosim → switch back to simulation mode
+ * - /change-share <number> → change base shares for stock trading
+ * - /change-increment <number> → change share increment per 20k equity
  */
 @Service
 @Slf4j
@@ -45,6 +48,7 @@ public class TelegramService {
     private final RestTemplate restTemplate;
     private final TelegramProperties telegramProperties;
     private final ObjectMapper objectMapper;
+    private final StockSettingsService stockSettingsService;
 
     // Command handlers - will be set by TradingEngine
     private Consumer<Void> statusHandler;
@@ -164,6 +168,12 @@ public class TelegramService {
             handleGoLiveCommand(chatId);
         } else if (lowerText.equals("/backtosim")) {
             handleBackToSimCommand(chatId);
+        } else if (lowerText.startsWith("/change-share ")) {
+            String arg = text.substring(14).trim();
+            handleChangeShareCommand(arg);
+        } else if (lowerText.startsWith("/change-increment ")) {
+            String arg = text.substring(18).trim();
+            handleChangeIncrementCommand(arg);
         } else {
             sendMessage("❓ Unknown command: " + text + "\n\nAvailable:\n" +
                     "/status - Bot status\n" +
@@ -174,7 +184,9 @@ public class TelegramService {
                     "/talk <question> - Ask TutorBot\n" +
                     "/insight - Daily insight\n" +
                     "/golive - Check live eligibility\n" +
-                    "/backtosim - Switch to simulation");
+                    "/backtosim - Switch to simulation\n" +
+                    "/change-share <number> - Change base shares\n" +
+                    "/change-increment <number> - Change share increment");
         }
     }
     
@@ -290,6 +302,40 @@ public class TelegramService {
         
         botModeService.switchToSimulationMode();
         sendMessage("✅ Switched back to SIMULATION mode\nNo real money at risk.");
+    }
+    
+    private void handleChangeShareCommand(String arg) {
+        try {
+            int shares = Integer.parseInt(arg);
+            if (shares <= 0) {
+                sendMessage("❌ Shares must be positive");
+                return;
+            }
+            stockSettingsService.updateSettings(shares, stockSettingsService.getSettings().getShareIncrement());
+            sendMessage("✅ Base shares updated to: " + shares);
+        } catch (NumberFormatException e) {
+            sendMessage("❌ Invalid number: " + arg);
+        } catch (Exception e) {
+            log.error("Failed to update shares", e);
+            sendMessage("❌ Failed to update shares");
+        }
+    }
+    
+    private void handleChangeIncrementCommand(String arg) {
+        try {
+            int increment = Integer.parseInt(arg);
+            if (increment <= 0) {
+                sendMessage("❌ Increment must be positive");
+                return;
+            }
+            stockSettingsService.updateSettings(stockSettingsService.getSettings().getShares(), increment);
+            sendMessage("✅ Share increment updated to: " + increment);
+        } catch (NumberFormatException e) {
+            sendMessage("❌ Invalid number: " + arg);
+        } catch (Exception e) {
+            log.error("Failed to update increment", e);
+            sendMessage("❌ Failed to update increment");
+        }
     }
 
     public void sendMessage(String message) {
