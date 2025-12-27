@@ -99,7 +99,7 @@ public class LlmInsight {
      */
     @Column(name = "model_name", length = 100)
     @Builder.Default
-    private String modelName = "phi3:3.8b";
+    private String modelName = "mistral:7b-instruct-v0.2-q5_K_M";
     
     /**
      * Processing time in milliseconds

@@ -111,7 +111,7 @@ jobs:
             sleep 2
           done
           # Pull the model (required for news veto tests)
-          curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "phi3:3.8b"}' &
+          curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "mistral:7b-instruct-v0.2-q5_K_M"}' &
           echo "Model pull started in background"
 
       # Wait for Ollama model to be ready
@@ -119,8 +119,8 @@ jobs:
         run: |
           echo "Waiting for Ollama model to be downloaded..."
           for i in {1..120}; do
-            if curl -s http://127.0.0.1:11434/api/tags | jq -e '.models[] | select(.name == "phi3:3.8b")' >/dev/null 2>&1; then
-              echo "Model phi3:3.8b is ready!"
+            if curl -s http://127.0.0.1:11434/api/tags | jq -e '.models[] | select(.name == "mistral:7b-instruct-v0.2-q5_K_M")' >/dev/null 2>&1; then
+              echo "Model mistral:7b-instruct-v0.2-q5_K_M is ready!"
               break
             fi
             echo "Waiting... ($i/120)"
