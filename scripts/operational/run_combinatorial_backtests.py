@@ -164,14 +164,14 @@ def main():
     
     # Check if Java application is running
     try:
-        response = requests.get(f"{base_url}/api/backtest/strategies", timeout=5)
+        response = requests.get(f"{base_url}/actuator/health", timeout=5)
         if response.status_code == 200:
             print("✅ Java application is running\n")
         else:
-            print("⚠️  Java application responded but endpoint may not be ready")
-            print(f"    Status: {response.status_code}\n")
-    except Exception as e:
-        print(f"❌ Java application is not running: {e}")
+            print("⚠️  Java application health check failed")
+            sys.exit(1)
+    except Exception:
+        print("❌ Java application is not running!")
         print("   Please start it with: ./start-auto-trader.fish <jasypt-password>")
         sys.exit(1)
     

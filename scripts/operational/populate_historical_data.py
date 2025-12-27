@@ -18,9 +18,8 @@ import time
 import psycopg2
 from psycopg2.extras import execute_batch
 
-# Add python directory to path
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(project_root, 'python'))
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.core.config import load_config_with_decryption
 
@@ -100,14 +99,14 @@ def store_to_postgres(stock_code: str, kbars: List, db_config):
         
         # Batch insert with ON CONFLICT DO UPDATE
         insert_query = """
-            INSERT INTO market_data (symbol, timestamp, open_price, high_price, low_price, close_price, volume, timeframe)
+            INSERT INTO market_data (symbol, timestamp, open, high, low, close, volume, timeframe)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (symbol, timestamp, timeframe) 
             DO UPDATE SET
-                open_price = EXCLUDED.open_price,
-                high_price = EXCLUDED.high_price,
-                low_price = EXCLUDED.low_price,
-                close_price = EXCLUDED.close_price,
+                open = EXCLUDED.open,
+                high = EXCLUDED.high,
+                low = EXCLUDED.low,
+                close = EXCLUDED.close,
                 volume = EXCLUDED.volume
         """
         
