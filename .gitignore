@@ -96,3 +96,8 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+
+# Shioaji library logs (should be in logs/ only)
+python/shioaji.log
+scripts/shioaji.log
+shioaji.log

@@ -23,8 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import bridge module components
-import app.main as bridge
-from app.services.shioaji_service import ShioajiWrapper
+import bridge
 
 
 class TestStreamingQuotes:
@@ -248,13 +247,13 @@ class TestShioajiWrapperStreaming:
     
     def test_subscribe_bidask_method_exists(self):
         """Test that subscribe_bidask method exists on ShioajiWrapper"""
-        wrapper = ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
+        wrapper = bridge.ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
         assert hasattr(wrapper, 'subscribe_bidask')
     
-    @patch('app.services.shioaji_service.sj')
+    @patch('bridge.sj')
     def test_handle_bidask_updates_order_book(self, mock_sj):
         """Test that _handle_bidask correctly updates global order book"""
-        wrapper = ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
+        wrapper = bridge.ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
         
         # Mock contract
         mock_contract = Mock()
@@ -288,10 +287,10 @@ class TestShioajiWrapperStreaming:
             assert len(bridge.order_book["asks"]) == 2
             assert bridge.order_book["bids"][0]["price"] == 1050.0
     
-    @patch('app.services.shioaji_service.sj')
+    @patch('bridge.sj')
     def test_handle_tick_updates_streaming_buffer(self, mock_sj):
         """Test that _handle_tick populates streaming_quotes buffer"""
-        wrapper = ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
+        wrapper = bridge.ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
         
         # Mock contract
         mock_contract = Mock()
@@ -326,7 +325,7 @@ class TestStreamingSubscription:
             result = bridge.subscribe_streaming()
             assert result.status_code == 503
     
-    @patch('app.main.shioaji')
+    @patch('bridge.shioaji')
     def test_subscribe_endpoint_calls_subscribe_bidask(self, mock_shioaji):
         """Test that /stream/subscribe calls wrapper's subscribe_bidask method"""
         mock_shioaji.connected = True
@@ -342,7 +341,7 @@ class TestStreamingSubscription:
             assert result["subscribed"] is True
             mock_shioaji.subscribe_bidask.assert_called_once()
     
-    @patch('app.main.shioaji')
+    @patch('bridge.shioaji')
     def test_subscribe_endpoint_handles_failure(self, mock_shioaji):
         """Test that /stream/subscribe handles subscription failures"""
         mock_shioaji.connected = True
@@ -363,7 +362,7 @@ class TestStreamingEdgeCases:
     
     def test_streaming_quotes_with_invalid_data(self):
         """Test that invalid tick data doesn't crash streaming buffer"""
-        wrapper = ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
+        wrapper = bridge.ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
         wrapper.contract = Mock(symbol="2454")
         
         # Test with None tick
@@ -378,7 +377,7 @@ class TestStreamingEdgeCases:
     
     def test_order_book_with_invalid_bidask(self):
         """Test that invalid bidask data doesn't crash order book"""
-        wrapper = ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
+        wrapper = bridge.ShioajiWrapper(config={"shioaji": {}}, trading_mode="stock")
         wrapper.contract = Mock(symbol="2454")
         
         # Clear order book

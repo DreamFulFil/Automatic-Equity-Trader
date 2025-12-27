@@ -334,6 +334,80 @@ class ShioajiWrapper:
         
         print(f"✅ Subscribed to {self.contract.symbol} (FUTURES mode)")
     
+    def subscribe_bidask(self):
+        """Subscribe to Level 2 order book (bid/ask depth) for current contract"""
+        try:
+            # Subscribe to bidask quote type for order book data
+            self.api.quote.subscribe(
+                self.contract,
+                quote_type=sj.constant.QuoteType.BidAsk,
+                version=sj.constant.QuoteVersion.v1
+            )
+            
+            # Register bidask handler based on mode
+            if self.trading_mode == "stock":
+                def safe_bidask_handler(exchange, bidask):
+                    try:
+                        self._handle_bidask(exchange, bidask)
+                    except Exception as e:
+                        print(f"⚠️ BidAsk callback crashed (recovered): {e}")
+                
+                self._bidask_callback_ref = safe_bidask_handler
+                self.api.quote.set_on_bidask_stk_v1_callback(self._bidask_callback_ref)
+            else:
+                def safe_bidask_handler(exchange, bidask):
+                    try:
+                        self._handle_bidask(exchange, bidask)
+                    except Exception as e:
+                        print(f"⚠️ BidAsk callback crashed (recovered): {e}")
+                
+                self._bidask_callback_ref = safe_bidask_handler
+                self.api.quote.set_on_bidask_fop_v1_callback(self._bidask_callback_ref)
+            
+            print(f"✅ Subscribed to Level 2 order book for {self.contract.symbol}")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to subscribe to order book: {e}")
+            return False
+    
+    def _handle_bidask(self, exchange, bidask):
+        """Handle Level 2 order book data updates"""
+        global order_book, order_book_lock
+        
+        try:
+            # Extract bid/ask prices and volumes
+            bids = []
+            asks = []
+            
+            # Shioaji returns bid/ask as lists of prices and volumes
+            if hasattr(bidask, 'bid_price') and hasattr(bidask, 'bid_volume'):
+                bid_prices = bidask.bid_price if isinstance(bidask.bid_price, list) else [bidask.bid_price]
+                bid_volumes = bidask.bid_volume if isinstance(bidask.bid_volume, list) else [bidask.bid_volume]
+                
+                for price, vol in zip(bid_prices, bid_volumes):
+                    if price and vol:
+                        bids.append({"price": float(price), "volume": int(vol)})
+            
+            if hasattr(bidask, 'ask_price') and hasattr(bidask, 'ask_volume'):
+                ask_prices = bidask.ask_price if isinstance(bidask.ask_price, list) else [bidask.ask_price]
+                ask_volumes = bidask.ask_volume if isinstance(bidask.ask_volume, list) else [bidask.ask_volume]
+                
+                for price, vol in zip(ask_prices, ask_volumes):
+                    if price and vol:
+                        asks.append({"price": float(price), "volume": int(vol)})
+            
+            timestamp = getattr(bidask, 'datetime', datetime.now())
+            
+            # Thread-safe update of order book
+            with order_book_lock:
+                order_book["bids"] = sorted(bids, key=lambda x: x["price"], reverse=True)[:5]
+                order_book["asks"] = sorted(asks, key=lambda x: x["price"])[:5]
+                order_book["timestamp"] = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
+                order_book["symbol"] = self.contract.symbol
+                
+        except Exception as e:
+            print(f"⚠️ Order book handler error (non-fatal): {e}")
+    
     def reconnect(self) -> bool:
         """Force reconnect (called when connection is lost)"""
         with self._lock:
@@ -349,7 +423,7 @@ class ShioajiWrapper:
     def _handle_tick(self, exchange, tick):
         """Internal tick handler - updates global market data with crash protection"""
         try:
-            global session_open_price, session_high, session_low
+            global session_open_price, session_high, session_low, streaming_quotes, streaming_quotes_lock
             
             # Defensive checks to prevent segfaults
             if not tick or not hasattr(tick, 'close') or not hasattr(tick, 'volume'):
@@ -367,6 +441,16 @@ class ShioajiWrapper:
             if price > 0:  # Only process valid prices
                 price_history.append({"price": price, "time": timestamp, "volume": volume})
                 volume_history.append(volume)
+                
+                # Add to streaming quotes buffer
+                with streaming_quotes_lock:
+                    streaming_quotes.append({
+                        "symbol": self.contract.symbol if self.contract else "UNKNOWN",
+                        "price": price,
+                        "volume": volume,
+                        "timestamp": timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                        "exchange": str(exchange) if exchange else "UNKNOWN"
+                    })
                 
                 if session_open_price is None:
                     session_open_price = price
@@ -632,6 +716,22 @@ consecutive_signal_count = 0
 last_signal_direction = "NEUTRAL"
 last_trade_time = None  # Cooldown tracking
 signal_confirmation_history = deque(maxlen=6)  # Last 6 signals (3 minutes at 30s intervals)
+
+# ============================================================================
+# STREAMING & LEVEL 2 DATA STATE
+# ============================================================================
+# Real-time streaming quote buffer (last 100 ticks)
+streaming_quotes = deque(maxlen=100)
+streaming_quotes_lock = threading.Lock()
+
+# Level 2 order book data (bid/ask depth)
+order_book = {
+    "bids": [],  # [(price, volume), ...]
+    "asks": [],  # [(price, volume), ...]
+    "timestamp": None,
+    "symbol": None
+}
+order_book_lock = threading.Lock()
 
 
 def init_trading_mode():
@@ -1129,6 +1229,144 @@ def place_order_dry_run(order: OrderRequest):
         "message": "Order would be accepted (dry-run mode)",
         "timestamp": datetime.now().isoformat()
     }
+
+# ============================================================================
+# STREAMING & LEVEL 2 DATA ENDPOINTS
+# ============================================================================
+
+@app.get("/stream/quotes")
+def get_streaming_quotes(limit: int = 50):
+    """
+    Get recent streaming quote ticks
+    
+    Returns the last N ticks from the real-time streaming buffer.
+    Useful for high-frequency analysis and tick-level data.
+    
+    Args:
+        limit: Number of recent ticks to return (default 50, max 100)
+    
+    Returns:
+        List of tick data with price, volume, timestamp
+    """
+    try:
+        limit = min(limit, 100)  # Cap at buffer size
+        
+        with streaming_quotes_lock:
+            # Get last N quotes
+            quotes_list = list(streaming_quotes)[-limit:]
+        
+        return {
+            "status": "ok",
+            "symbol": shioaji.contract.symbol if shioaji and shioaji.contract else "UNKNOWN",
+            "trading_mode": TRADING_MODE or "unknown",
+            "count": len(quotes_list),
+            "quotes": quotes_list,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+@app.get("/orderbook/{symbol}")
+def get_order_book(symbol: str):
+    """
+    Get Level 2 order book data (bid/ask depth)
+    
+    Returns the current order book with up to 5 levels of bids and asks.
+    Provides market depth insight for informed trading decisions.
+    
+    Args:
+        symbol: Stock/futures symbol (e.g., "2454" for MediaTek)
+    
+    Returns:
+        Order book with bids, asks, and metadata
+    """
+    try:
+        # Subscribe to bidask if not already subscribed
+        if shioaji and not hasattr(shioaji, '_bidask_subscribed'):
+            shioaji.subscribe_bidask()
+            shioaji._bidask_subscribed = True
+        
+        with order_book_lock:
+            current_book = dict(order_book)
+        
+        # Validate symbol matches
+        if current_book.get("symbol") != symbol and current_book.get("symbol") is not None:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "error": f"Symbol mismatch: requested {symbol}, subscribed to {current_book.get('symbol')}",
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        return {
+            "status": "ok",
+            "symbol": symbol,
+            "bids": current_book.get("bids", []),
+            "asks": current_book.get("asks", []),
+            "last_update": current_book.get("timestamp"),
+            "trading_mode": TRADING_MODE or "unknown",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+@app.post("/stream/subscribe")
+def subscribe_streaming():
+    """
+    Enable Level 2 order book streaming
+    
+    Activates bidask subscription for the current trading contract.
+    Must be called once before accessing /orderbook endpoint.
+    
+    Returns:
+        Subscription status
+    """
+    try:
+        if not shioaji or not shioaji.connected:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "error",
+                    "error": "Shioaji not connected",
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        success = shioaji.subscribe_bidask()
+        
+        return {
+            "status": "ok" if success else "error",
+            "subscribed": success,
+            "symbol": shioaji.contract.symbol if shioaji.contract else "UNKNOWN",
+            "trading_mode": TRADING_MODE or "unknown",
+            "message": "Level 2 order book streaming enabled" if success else "Subscription failed",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
 
 # ============================================================================
 # EARNINGS BLACKOUT SCRAPER
