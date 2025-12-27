@@ -45,7 +45,7 @@ public class EarningsBlackoutAdminController {
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", meta.isPresent() ? "refreshed" : "failed");
-        response.put("lastUpdated", meta.map(EarningsBlackoutMeta::getLatestUpdated).orElse(null));
+        response.put("lastUpdated", meta.map(EarningsBlackoutMeta::getLastUpdated).orElse(null));
         response.put("datesCount", meta.map(m -> m.getDates().size()).orElse(0));
         response.put("stale", meta.map(earningsBlackoutService::isDataStale).orElse(true));
         return response;
