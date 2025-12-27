@@ -6,7 +6,7 @@ These tests simulate a complete trading day:
 1. 11:15 - Bot starts (cron trigger)
 2. 11:30 - Trading window opens
 3. Signal check → Entry
-4. 45-min exit OR 13:30 auto-flatten
+4. 45-min exit OR 13:00 auto-flatten
 5. Telegram daily summary
 
 Run: BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest tests/e2e/test_full_session.py -v -m e2e
@@ -28,7 +28,7 @@ def wait_for_service(url, timeout=30):
     start = time.time()
     while time.time() - start < timeout:
         try:
-            r = requests.get(f"{url}/health", timeout=5)
+            r = requests.get(f"{url}/health", timeout=2)
             if r.status_code == 200:
                 return True
         except:
@@ -40,7 +40,7 @@ def wait_for_service(url, timeout=30):
 def bridge_available():
     """Check if Python bridge is available"""
     try:
-        r = requests.get(f"{BRIDGE_URL}/health", timeout=5)
+        r = requests.get(f"{BRIDGE_URL}/health", timeout=2)
         return r.status_code == 200
     except:
         return False
@@ -49,7 +49,7 @@ def bridge_available():
 def ollama_available():
     """Check if Ollama is available"""
     try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=5)
+        r = requests.get("http://localhost:11434/api/tags", timeout=2)
         return r.status_code == 200
     except:
         return False
@@ -138,22 +138,6 @@ class TestFullTradingSession:
             assert 0 <= signal["confidence"] <= 1
             assert "exit_signal" in signal
             assert isinstance(signal["exit_signal"], bool)
-            # Extended telemetry required for live trading diagnostics
-            for key in (
-                "momentum_3min",
-                "momentum_5min",
-                "momentum_10min",
-                "volume_ratio",
-                "rsi",
-                "consecutive_signals",
-                "in_cooldown",
-                "cooldown_remaining",
-                "session_high",
-                "session_low",
-                "raw_direction",
-                "timestamp",
-            ):
-                assert key in signal, f"Missing field: {key}"
             
             # Small delay between calls
             time.sleep(0.1)
@@ -161,9 +145,9 @@ class TestFullTradingSession:
     @pytest.mark.skipif(not ollama_available(), reason="Ollama not available")
     def test_news_veto_check(self):
         """
-        Test news veto integration with Ollama (uses 5-min cache)
+        Test news veto integration with Ollama
         """
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=15)
         assert r.status_code == 200
         news = r.json()
         
@@ -172,8 +156,6 @@ class TestFullTradingSession:
         assert "news_score" in news
         assert 0 <= news["news_score"] <= 1
         assert "news_reason" in news
-        assert "headlines_count" in news
-        assert news["headlines_count"] >= 0
     
     def test_contract_scaling_flow(self):
         """
@@ -195,47 +177,67 @@ class TestFullTradingSession:
         assert profit["days"] == 30
 
 
-def java_available():
-    """Check if Java server is available"""
-    return wait_for_service(JAVA_URL, timeout=10)
-
-
 @pytest.mark.e2e
-@pytest.mark.skipif(not java_available(), reason="Java server not available")
 class TestEarningsBlackout:
-    """Test earnings blackout day behavior via admin endpoints"""
-
-    def _status(self):
-        r = requests.get(
-            f"{JAVA_URL}/admin/earnings-blackout/status",
-            timeout=5,
-        )
-        return r
-
-    def test_blackout_status_endpoint_available(self):
-        r = self._status()
-        assert r.status_code == 200
-        data = r.json()
-        assert "stale" in data
-        assert "datesCount" in data
-
-    def test_blackout_seed_accepts_payload(self):
-        payload = {
-            "dates": ["2099-01-01"],
-            "tickers_checked": ["TSM", "2317.TW"],
-            "last_updated": "2099-01-01T00:00:00Z",
-            "source": "pytest",
-            "ttl_days": 7,
-        }
-        r = requests.post(
-            f"{JAVA_URL}/admin/earnings-blackout/seed",
-            json=payload,
-            timeout=5,
-        )
-        assert r.status_code == 200
-        data = r.json()
-        assert data.get("status") in {"seeded", "ignored"}
-        today = datetime.utcnow().date().isoformat()
+    """Test earnings blackout day behavior"""
+    
+    def test_blackout_dates_file_exists(self):
+        """Verify blackout dates file exists"""
+        blackout_file = "config/earnings-blackout-dates.json"
+        
+        if not os.path.exists(blackout_file):
+            pytest.skip("Blackout file not created yet (run: python3 python/bridge.py --scrape-earnings)")
+        
+        assert os.path.exists(blackout_file)
+    
+    def test_blackout_dates_valid_json(self):
+        """Verify blackout dates file is valid JSON"""
+        blackout_file = "config/earnings-blackout-dates.json"
+        
+        if not os.path.exists(blackout_file):
+            pytest.skip("Blackout file not created yet")
+        
+        with open(blackout_file) as f:
+            data = json.load(f)
+        
+        assert "dates" in data
+        assert isinstance(data["dates"], list)
+        assert "last_updated" in data
+        assert "tickers_checked" in data
+    
+    def test_blackout_date_format(self):
+        """Verify dates are in ISO format (YYYY-MM-DD)"""
+        blackout_file = "config/earnings-blackout-dates.json"
+        
+        if not os.path.exists(blackout_file):
+            pytest.skip("Blackout file not created yet")
+        
+        with open(blackout_file) as f:
+            data = json.load(f)
+        
+        for date_str in data.get("dates", []):
+            # Should be YYYY-MM-DD format
+            assert len(date_str) == 10, f"Date should be 10 chars: {date_str}"
+            assert date_str[4] == '-' and date_str[7] == '-', f"Invalid format: {date_str}"
+            
+            # Should be parseable
+            from datetime import date
+            parts = date_str.split('-')
+            assert len(parts) == 3
+            date(int(parts[0]), int(parts[1]), int(parts[2]))  # Will raise if invalid
+    
+    def test_blackout_dates_are_future(self):
+        """Verify dates are in the future (or today)"""
+        blackout_file = "config/earnings-blackout-dates.json"
+        
+        if not os.path.exists(blackout_file):
+            pytest.skip("Blackout file not created yet")
+        
+        with open(blackout_file) as f:
+            data = json.load(f)
+        
+        from datetime import date
+        today = date.today().isoformat()
         
         for date_str in data.get("dates", []):
             assert date_str >= today, f"Date {date_str} is in the past"

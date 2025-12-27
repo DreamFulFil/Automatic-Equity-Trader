@@ -50,7 +50,7 @@ Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 | Pre-market health check (order dry-run) | Implemented | Yes |
 | Clean JSON earnings file (no manual YAML) | Implemented | Yes |
 | Two separate crontabs (09:00 scraper + 11:15 bot) | Implemented | Yes |
-| Comprehensive test suite (109+ tests) | Implemented | Yes |
+| Comprehensive test suite (283 tests) | Implemented | Yes |
 
 ---
 
@@ -472,43 +472,63 @@ grep "P&L" logs/mtxf-bot.log
 
 ## 🧪 Testing
 
-### Test Suite Overview
+### Comprehensive Test Suite
 
-| Test Suite | Tests | Description |
-|------------|-------|-------------|
-| TradingEngineTest | 39 | Core trading logic, contract scaling |
-| TelegramServiceTest | 17 | Command handling, message sending |
-| OrderEndpointIntegrationTest | 9 | Java-Python order flow |
-| SystemIntegrationTest | 21 | Full system integration |
-| test_bridge.py | 21 | Python unit tests |
-| test_integration.py | 45 | Python integration tests |
-| **Total** | **~150** | |
+The project includes a complete testing suite with **283 tests** covering all components.
 
-### Running Tests
+| Category | Tests | Description |
+|----------|-------|-------------|
+| **Java Unit Tests** | 138 | TradingEngine, RiskManagement, ContractScaling, Telegram |
+| **Java Integration Tests** | 30 | Java-Python bridge communication, order flow |
+| **Python Unit Tests** | 58 | Bridge logic, contract validation, config decryption |
+| **Python Integration Tests** | 24 | Real bridge endpoints, Ollama integration |
+| **E2E Tests** | 18 | Full trading session simulation |
+| **Fish Shell Tests** | 15 | Startup script, environment validation |
+| **Total** | **283** | |
+
+### Running All Tests
+
+Use the provided test runner script (requires Jasypt password):
 
 ```bash
-# Java unit tests only
-mvn test
-
-# Java integration tests (requires Python bridge)
-BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
-
-# Python unit tests
-python/venv/bin/pytest python/tests/test_bridge.py -v
-
-# Python integration tests (requires bridge)
-BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/test_integration.py -v
-
-# All tests
-mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v
+./run-tests.sh <jasypt-password>
 ```
 
-### Pre-Commit Checklist
+This script:
+1. Runs Java unit tests
+2. Runs Python unit tests
+3. Runs Fish shell tests
+4. Starts Ollama (if not running)
+5. Starts Python bridge (if not running)
+6. Runs Java integration tests
+7. Runs Python integration tests
+8. Runs E2E tests
+9. Displays comprehensive summary
 
-1. ✅ All Java unit tests pass: `mvn test`
-2. ✅ All Java integration tests pass (with bridge running)
-3. ✅ All Python tests pass
-4. ✅ Code compiles: `mvn compile`
+### Quick Test Commands
+
+```bash
+# Java unit tests only (fast, no services needed)
+mvn test -DexcludedGroups=integration
+
+# Python unit tests only
+python/venv/bin/pytest python/tests/test_bridge.py python/tests/test_contract.py -v
+
+# Integration tests (requires bridge + Ollama)
+BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
+
+# E2E tests
+BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest tests/e2e/ -v
+```
+
+### Test Documentation
+
+See `docs/TESTING.md` for complete testing documentation including:
+- Contract tests (API boundaries)
+- Defensive coding requirements
+- Test data fixtures
+- CI/CD gate requirements
+- Test failure response protocol
 
 ---
 
@@ -605,5 +625,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: November 2025 (v1.1 - Contract Scaling)*
+*Last Updated: November 2025 (v1.2 - Comprehensive Test Suite)*
 *Owner: DreamFulFil | Status: 100/100 Complete*

@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
 ###############################################################################
-# Fish Shell Tests for Automatic Equity Trader
+# Fish Shell Tests for MTXF Lunch Bot
 # 
-# Tests for start-auto-trader.fish script and environment setup.
+# Tests for start-lunch-bot.fish script and environment setup.
 #
 # Run: fish tests/fish/test_start_script.fish
 ###############################################################################
@@ -51,18 +51,18 @@ end
 
 # Test 1: Start script exists
 function test_start_script_exists
-    if test -f "$PROJECT_ROOT/start-auto-trader.fish"
+    if test -f "$PROJECT_ROOT/start-lunch-bot.fish"
         report_test "Start script exists" pass
         return 0
     else
-        report_test "Start script exists" fail "File not found: start-auto-trader.fish"
+        report_test "Start script exists" fail "File not found: start-lunch-bot.fish"
         return 1
     end
 end
 
 # Test 2: Script requires secret argument
 function test_requires_secret_argument
-    set -l result (fish $PROJECT_ROOT/start-auto-trader.fish 2>&1)
+    set -l result (fish $PROJECT_ROOT/start-lunch-bot.fish 2>&1)
     if string match -q "*Usage*" $result; or string match -q "*secret*" $result
         report_test "Script requires secret argument" pass
         return 0
@@ -153,10 +153,15 @@ function test_application_yml_exists
     end
 end
 
-# Test 10: Earnings blackout data managed in DB
+# Test 10: Earnings blackout file exists or can be created
 function test_earnings_blackout_exists
-    report_test "Earnings blackout managed by DB" pass "Use /admin/earnings-blackout endpoints to seed/refresh"
-    return 0
+    if test -f "$PROJECT_ROOT/config/earnings-blackout-dates.json"
+        report_test "Earnings blackout dates exists" pass
+        return 0
+    else
+        report_test "Earnings blackout dates exists" skip "Run: python3 python/bridge.py --scrape-earnings"
+        return 0
+    end
 end
 
 # Test 11: Logs directory exists or can be created
