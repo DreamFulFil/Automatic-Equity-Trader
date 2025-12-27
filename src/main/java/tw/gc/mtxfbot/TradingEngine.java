@@ -13,20 +13,35 @@ import tw.gc.mtxfbot.config.TradingProperties;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * MTXF Lunch-Break Trading Engine (2025 Optimal Timing)
+ * MTXF Lunch-Break Trading Engine (2025 Bulletproof Edition)
  * 
  * Timing Strategy:
  * - Signal calculation (price/momentum/volume/confidence) → every 30 seconds
  * - News veto (Llama 3.1 8B via Python bridge) → every 10 minutes only
  * - Trading window: 11:30 - 13:00 Taipei time
  * - Auto-flatten and shutdown at 13:00
+ * 
+ * Safety Features:
+ * - 45-minute hard exit for any position
+ * - Weekly loss limit (-15,000 TWD) with auto-pause until Monday
+ * - Earnings blackout dates
+ * - Telegram command interface (/status, /pause, /resume, /close)
  */
 @Service
 @Slf4j
@@ -35,6 +50,7 @@ public class TradingEngine {
     
     // Explicit timezone for Taiwan futures trading
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -45,11 +61,18 @@ public class TradingEngine {
     // Position and P&L tracking
     private final AtomicInteger currentPosition = new AtomicInteger(0);
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
+    private final AtomicReference<Double> weeklyPnL = new AtomicReference<>(0.0);
     private final AtomicReference<Double> entryPrice = new AtomicReference<>(0.0);
+    
+    // Position entry time for 45-minute hard exit
+    private final AtomicReference<LocalDateTime> positionEntryTime = new AtomicReference<>(null);
     
     // State flags
     private volatile boolean emergencyShutdown = false;
     private volatile boolean marketDataConnected = false;
+    private volatile boolean tradingPaused = false;  // For /pause command
+    private volatile boolean weeklyLimitHit = false; // Weekly loss limit triggered
+    private volatile boolean earningsBlackout = false; // Earnings blackout day
     
     // News veto cache - updated every 10 minutes, used by all signal checks
     private final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
@@ -58,11 +81,39 @@ public class TradingEngine {
     @PostConstruct
     public void initialize() {
         log.info("🚀 MTXF Lunch Bot initializing...");
-        telegramService.sendMessage("🚀 MTXF Lunch Bot started\n" +
-                "Trading window: " + tradingProperties.getWindow().getStart() + " - " + tradingProperties.getWindow().getEnd() + "\n" +
-                "Max position: " + tradingProperties.getRisk().getMaxPosition() + " contract\n" +
-                "Daily loss limit: " + tradingProperties.getRisk().getDailyLossLimit() + " TWD\n" +
-                "Signal interval: 30s | News check: 10min");
+        
+        // Load weekly P&L from file (persists across restarts)
+        loadWeeklyPnL();
+        
+        // Check if today is earnings blackout day
+        checkEarningsBlackout();
+        
+        // Check weekly loss limit
+        checkWeeklyLossLimit();
+        
+        // Register Telegram command handlers
+        registerTelegramCommands();
+        
+        String startupMessage = String.format(
+            "🚀 MTXF Lunch Bot started\n" +
+            "Trading window: %s - %s\n" +
+            "Max position: %d contract\n" +
+            "Daily loss limit: %d TWD\n" +
+            "Weekly loss limit: %d TWD\n" +
+            "Max hold time: %d min\n" +
+            "Signal: 30s | News: 10min\n" +
+            "Weekly P&L: %.0f TWD%s%s",
+            tradingProperties.getWindow().getStart(),
+            tradingProperties.getWindow().getEnd(),
+            tradingProperties.getRisk().getMaxPosition(),
+            tradingProperties.getRisk().getDailyLossLimit(),
+            tradingProperties.getRisk().getWeeklyLossLimit(),
+            tradingProperties.getRisk().getMaxHoldMinutes(),
+            weeklyPnL.get(),
+            weeklyLimitHit ? "\n⚠️ WEEKLY LIMIT HIT - Paused until Monday" : "",
+            earningsBlackout ? "\n📅 EARNINGS BLACKOUT - No trading today" : ""
+        );
+        telegramService.sendMessage(startupMessage);
         
         try {
             String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
@@ -71,6 +122,161 @@ public class TradingEngine {
         } catch (Exception e) {
             log.error("❌ Failed to connect to Python bridge", e);
             telegramService.sendMessage("⚠️ Python bridge connection failed!");
+        }
+    }
+    
+    /**
+     * Register Telegram command handlers
+     */
+    private void registerTelegramCommands() {
+        telegramService.registerCommandHandlers(
+            v -> handleStatusCommand(),
+            v -> handlePauseCommand(),
+            v -> handleResumeCommand(),
+            v -> handleCloseCommand()
+        );
+    }
+    
+    /**
+     * /status - Show current position, P&L, and bot state
+     */
+    private void handleStatusCommand() {
+        String state = "🟢 ACTIVE";
+        if (emergencyShutdown) state = "🔴 EMERGENCY SHUTDOWN";
+        else if (weeklyLimitHit) state = "🟡 WEEKLY LIMIT PAUSED";
+        else if (earningsBlackout) state = "📅 EARNINGS BLACKOUT";
+        else if (tradingPaused) state = "⏸️ PAUSED BY USER";
+        
+        String positionInfo = currentPosition.get() == 0 ? "No position" :
+            String.format("%d @ %.0f (held %d min)",
+                currentPosition.get(),
+                entryPrice.get(),
+                positionEntryTime.get() != null ?
+                    java.time.Duration.between(positionEntryTime.get(), LocalDateTime.now(TAIPEI_ZONE)).toMinutes() : 0
+            );
+        
+        String message = String.format(
+            "📊 BOT STATUS\n" +
+            "━━━━━━━━━━━━━━━━\n" +
+            "State: %s\n" +
+            "Position: %s\n" +
+            "Today P&L: %.0f TWD\n" +
+            "Week P&L: %.0f TWD\n" +
+            "News Veto: %s\n" +
+            "━━━━━━━━━━━━━━━━\n" +
+            "Commands: /pause /resume /close",
+            state, positionInfo, dailyPnL.get(), weeklyPnL.get(),
+            cachedNewsVeto.get() ? "🚫 ACTIVE" : "✅ Clear"
+        );
+        telegramService.sendMessage(message);
+    }
+    
+    /**
+     * /pause - Pause new entries (still flattens at 13:00)
+     */
+    private void handlePauseCommand() {
+        tradingPaused = true;
+        log.info("⏸️ Trading paused by user command");
+        telegramService.sendMessage("⏸️ Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:00");
+    }
+    
+    /**
+     * /resume - Resume trading
+     */
+    private void handleResumeCommand() {
+        if (weeklyLimitHit) {
+            telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\nWait until next Monday");
+            return;
+        }
+        if (earningsBlackout) {
+            telegramService.sendMessage("❌ Cannot resume - Earnings blackout day\nNo trading today");
+            return;
+        }
+        tradingPaused = false;
+        log.info("▶️ Trading resumed by user command");
+        telegramService.sendMessage("▶️ Trading RESUMED\nBot is active");
+    }
+    
+    /**
+     * /close - Immediately flatten all positions
+     */
+    private void handleCloseCommand() {
+        if (currentPosition.get() == 0) {
+            telegramService.sendMessage("ℹ️ No position to close");
+            return;
+        }
+        log.info("🔴 Close command received from user");
+        flattenPosition("Closed by user");
+        telegramService.sendMessage("✅ Position closed by user command");
+    }
+    
+    /**
+     * Check if today is an earnings blackout day
+     */
+    private void checkEarningsBlackout() {
+        String today = LocalDate.now(TAIPEI_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        if (tradingProperties.getEarningsBlackoutDates().contains(today)) {
+            earningsBlackout = true;
+            log.warn("📅 EARNINGS BLACKOUT DAY: {}", today);
+        }
+    }
+    
+    /**
+     * Load weekly P&L from file (persists across restarts)
+     */
+    private void loadWeeklyPnL() {
+        try {
+            Path path = Paths.get(WEEKLY_PNL_FILE);
+            if (Files.exists(path)) {
+                String content = Files.readString(path).trim();
+                String[] parts = content.split(",");
+                if (parts.length >= 2) {
+                    LocalDate savedDate = LocalDate.parse(parts[0]);
+                    double savedPnL = Double.parseDouble(parts[1]);
+                    
+                    // Check if we're still in the same week (Mon-Fri)
+                    LocalDate today = LocalDate.now(TAIPEI_ZONE);
+                    LocalDate startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    
+                    if (!savedDate.isBefore(startOfWeek)) {
+                        weeklyPnL.set(savedPnL);
+                        log.info("📂 Loaded weekly P&L: {} TWD (from {})", savedPnL, savedDate);
+                    } else {
+                        // New week, reset P&L
+                        weeklyPnL.set(0.0);
+                        saveWeeklyPnL();
+                        log.info("🔄 New week started - Weekly P&L reset to 0");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not load weekly P&L: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Save weekly P&L to file
+     */
+    private void saveWeeklyPnL() {
+        try {
+            Path path = Paths.get(WEEKLY_PNL_FILE);
+            Files.createDirectories(path.getParent());
+            String content = LocalDate.now(TAIPEI_ZONE) + "," + weeklyPnL.get();
+            Files.writeString(path, content);
+        } catch (IOException e) {
+            log.warn("Could not save weekly P&L: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Check if weekly loss limit is hit
+     */
+    private void checkWeeklyLossLimit() {
+        double weekly = weeklyPnL.get();
+        int limit = tradingProperties.getRisk().getWeeklyLossLimit();
+        if (weekly <= -limit) {
+            weeklyLimitHit = true;
+            log.error("🛑 WEEKLY LOSS LIMIT HIT: {} TWD (limit: -{})", weekly, limit);
         }
     }
     
@@ -86,6 +292,18 @@ public class TradingEngine {
     public void tradingLoop() {
         if (emergencyShutdown || !marketDataConnected) return;
         
+        // Block all trading on earnings blackout days
+        if (earningsBlackout) {
+            log.debug("📅 Earnings blackout day - no trading");
+            return;
+        }
+        
+        // Block all new entries if weekly limit hit (but allow exits/flattens)
+        if (weeklyLimitHit && currentPosition.get() == 0) {
+            log.debug("⚠️ Weekly limit hit - waiting until next Monday");
+            return;
+        }
+        
         // Use explicit Taipei timezone for all time checks
         LocalTime now = LocalTime.now(TAIPEI_ZONE);
         LocalTime start = LocalTime.parse(tradingProperties.getWindow().getStart());
@@ -100,6 +318,9 @@ public class TradingEngine {
             // Check risk limits every cycle
             checkRiskLimits();
             
+            // Check 45-minute hard exit for open positions
+            check45MinuteHardExit();
+            
             // Update news veto cache every 10 minutes (when minute % 10 == 0 and second < 30)
             // This ensures it runs once per 10-minute window, not twice
             if (now.getMinute() % 10 == 0 && now.getSecond() < 30) {
@@ -108,7 +329,10 @@ public class TradingEngine {
             
             // Signal check and trade execution every 30 seconds
             if (currentPosition.get() == 0) {
-                evaluateEntry();
+                // Don't enter new positions if paused or weekly limit hit
+                if (!tradingPaused && !weeklyLimitHit) {
+                    evaluateEntry();
+                }
             } else {
                 evaluateExit();
             }
@@ -116,6 +340,28 @@ public class TradingEngine {
         } catch (Exception e) {
             log.error("❌ Trading loop error", e);
             telegramService.sendMessage("⚠️ Trading loop error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Check and enforce 45-minute hard exit
+     */
+    private void check45MinuteHardExit() {
+        if (currentPosition.get() == 0) return;
+        
+        LocalDateTime entryTime = positionEntryTime.get();
+        if (entryTime == null) return;
+        
+        long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
+        int maxHold = tradingProperties.getRisk().getMaxHoldMinutes();
+        
+        if (minutesHeld >= maxHold) {
+            log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
+            telegramService.sendMessage(String.format(
+                "⏰ 45-MIN HARD EXIT\nPosition held %d minutes\nForce-flattening now!",
+                minutesHeld
+            ));
+            flattenPosition("45-minute time limit");
         }
     }
     
@@ -238,6 +484,7 @@ public class TradingEngine {
                 currentPosition.addAndGet(-quantity);
             }
             entryPrice.set(price);
+            positionEntryTime.set(LocalDateTime.now(TAIPEI_ZONE)); // Track entry time for 45-min exit
             
             telegramService.sendMessage(String.format(
                     "✅ ORDER FILLED\n%s %d MTXF @ %.0f\nPosition: %d", 
@@ -263,12 +510,25 @@ public class TradingEngine {
             
             double pnl = (currentPrice - entryPrice.get()) * pos * 50;
             dailyPnL.updateAndGet(v -> v + pnl);
+            weeklyPnL.updateAndGet(v -> v + pnl);
+            saveWeeklyPnL(); // Persist weekly P&L
+            
             currentPosition.set(0);
+            positionEntryTime.set(null); // Clear entry time
             
             log.info("💰 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
             telegramService.sendMessage(String.format(
-                    "💰 POSITION CLOSED\nReason: %s\nP&L: %.0f TWD\nDaily P&L: %.0f TWD", 
-                    reason, pnl, dailyPnL.get()));
+                    "💰 POSITION CLOSED\nReason: %s\nP&L: %.0f TWD\nDaily P&L: %.0f TWD\nWeekly P&L: %.0f TWD", 
+                    reason, pnl, dailyPnL.get(), weeklyPnL.get()));
+            
+            // Check if weekly limit now hit
+            checkWeeklyLossLimit();
+            if (weeklyLimitHit) {
+                telegramService.sendMessage(String.format(
+                    "🛑 WEEKLY LOSS LIMIT HIT\nWeekly P&L: %.0f TWD\nTrading paused until next Monday!",
+                    weeklyPnL.get()
+                ));
+            }
             
         } catch (Exception e) {
             log.error("❌ Flatten failed", e);
@@ -279,7 +539,7 @@ public class TradingEngine {
      * Auto-flatten at 13:00 - end of trading window
      * Flattens positions, sends summary, shuts down all services
      */
-    @Scheduled(cron = "0 0 13 * * MON-FRI")
+    @Scheduled(cron = "0 0 13 * * MON-FRI", zone = "Asia/Taipei")
     public void autoFlatten() {
         log.info("⏰ 13:00 Auto-flatten triggered");
         flattenPosition("End of trading window");
@@ -329,10 +589,14 @@ public class TradingEngine {
         }
         
         telegramService.sendMessage(String.format(
-                "📊 DAILY SUMMARY\nFinal P&L: %.0f TWD\n" +
+                "📊 DAILY SUMMARY\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Today P&L: %.0f TWD\n" +
+                "Week P&L: %.0f TWD\n" +
                 "Status: %s%s\n" +
-                "📈 NO PROFIT CAPS - Unlimited upside potential!",
-                pnl, status, comment));
+                "━━━━━━━━━━━━━━━━\n" +
+                "📈 NO PROFIT CAPS - Unlimited upside!",
+                pnl, weeklyPnL.get(), status, comment));
     }
     
     @PreDestroy

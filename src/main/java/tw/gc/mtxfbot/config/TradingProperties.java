@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Component
 @ConfigurationProperties(prefix = "trading")
@@ -12,6 +15,9 @@ public class TradingProperties {
     private Window window = new Window();
     private Risk risk = new Risk();
     private Bridge bridge = new Bridge();
+    
+    /** Earnings blackout dates - bot stays flat on these days */
+    private List<String> earningsBlackoutDates = new ArrayList<>();
     
     @Data
     public static class Window {
@@ -23,6 +29,10 @@ public class TradingProperties {
     public static class Risk {
         private int maxPosition = 1;
         private int dailyLossLimit = 4500;
+        /** Weekly loss limit in TWD - triggers pause until next Monday */
+        private int weeklyLossLimit = 15000;
+        /** Max minutes to hold a position before forced exit */
+        private int maxHoldMinutes = 45;
     }
     
     @Data

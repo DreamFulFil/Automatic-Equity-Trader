@@ -1,5 +1,6 @@
 package tw.gc.mtxfbot;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,11 +26,14 @@ class TelegramServiceTest {
     @Mock
     private TelegramProperties telegramProperties;
 
+    @Mock
+    private ObjectMapper objectMapper;
+
     private TelegramService telegramService;
 
     @BeforeEach
     void setUp() {
-        telegramService = new TelegramService(restTemplate, telegramProperties);
+        telegramService = new TelegramService(restTemplate, telegramProperties, objectMapper);
     }
 
     @Test
