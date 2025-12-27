@@ -93,6 +93,7 @@ mkdir -p logs
 echo "6️⃣ Starting Python bridge..."
 cd python
 source venv/bin/activate.fish  # Fish activation
+set -x JASYPT_PASSWORD $JASYPT_SECRET
 nohup python3 bridge.py > ../logs/python-bridge.log 2>&1 &
 set PYTHON_PID $last_pid
 echo -e "$GREEN✅ Python bridge started (PID: $PYTHON_PID)$NC"
