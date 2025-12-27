@@ -60,3 +60,32 @@ __pycache__/
 
 # Auto-generated files — never commit
 config/earnings-blackout-dates.json
+
+# Python virtual environment
+python/venv/
+
+# Python caches
+.python-version
+.pytest_cache/
+*.pyc
+*.pyo
+__pycache__/
+
+# C extensions / compiled artifacts
+*.so
+*.dylib
+
+# Maven / Java build
+target/
+
+# IDE / editor
+.idea/
+.vscode/
+
+# Temporary and swap
+*.swp
+*.swo
+*.tmp
+
+# OS files
+.DS_Store
