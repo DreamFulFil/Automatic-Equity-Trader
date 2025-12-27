@@ -55,4 +55,5 @@ logs/
 *.temp
 *.swp
 *.swo
-*~
+*~*.pyc
+__pycache__/

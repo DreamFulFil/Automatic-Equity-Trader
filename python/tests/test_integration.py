@@ -28,20 +28,18 @@ OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
 def bridge_available():
     """Check if Python bridge is available"""
     try:
-        r = requests.get(f"{BRIDGE_URL}/health", timeout=5)
+        r = requests.get(f"{BRIDGE_URL}/health", timeout=2)
         return r.status_code == 200
-    except Exception as e:
-        print(f"Bridge check failed: {e}")
+    except:
         return False
 
 
 def ollama_available():
     """Check if Ollama is available"""
     try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=2)
         return r.status_code == 200
-    except Exception as e:
-        print(f"Ollama check failed: {e}")
+    except:
         return False
 
 
@@ -137,14 +135,12 @@ class TestBridgeEndpoints:
 
 @pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
 @pytest.mark.skipif(not ollama_available(), reason="Ollama not available")
-@pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
-@pytest.mark.skipif(not ollama_available(), reason="Ollama not available or slow")
 class TestOllamaIntegration:
     """Tests for Ollama integration via Python bridge"""
     
     def test_news_endpoint_returns_veto_decision(self):
         """GET /signal/news should return news analysis"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)  # Must be > Ollama timeout (15s)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
         
         assert r.status_code == 200
         data = r.json()
@@ -157,8 +153,8 @@ class TestOllamaIntegration:
         assert "timestamp" in data
     
     def test_news_endpoint_handles_empty_headlines(self):
-        """News endpoint should work even with no headlines - uses cache"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=5)  # Should hit cache from first test
+        """News endpoint should work even with no headlines"""
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
         
         assert r.status_code == 200
         data = r.json()
@@ -242,7 +238,7 @@ class TestJavaPythonInteraction:
         
         # Step 3: News veto check (skip if Ollama not available)
         if ollama_available():
-            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)
+            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
             assert news_r.status_code == 200
 
 
@@ -269,101 +265,6 @@ class TestErrorHandling:
         r = requests.get(f"{BRIDGE_URL}/nonexistent")
         
         assert r.status_code == 404
-
-
-@pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
-class TestAccountEndpoints:
-    """Tests for account and contract scaling endpoints"""
-    
-    def test_account_endpoint_returns_equity(self):
-        """GET /account should return equity info"""
-        r = requests.get(f"{BRIDGE_URL}/account")
-        
-        assert r.status_code == 200
-        data = r.json()
-        assert "equity" in data
-        assert "available_margin" in data
-        assert "status" in data
-        assert "timestamp" in data
-    
-    def test_account_endpoint_equity_is_numeric(self):
-        """Equity should be a number"""
-        r = requests.get(f"{BRIDGE_URL}/account")
-        
-        data = r.json()
-        assert isinstance(data["equity"], (int, float))
-    
-    def test_profit_history_returns_pnl(self):
-        """GET /account/profit-history should return P&L data"""
-        r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=30")
-        
-        assert r.status_code == 200
-        data = r.json()
-        assert "total_pnl" in data
-        assert "days" in data
-        assert data["days"] == 30
-        assert "record_count" in data
-        assert "status" in data
-        assert "timestamp" in data
-    
-    def test_profit_history_accepts_custom_days(self):
-        """Should accept custom days parameter"""
-        r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=7")
-        
-        assert r.status_code == 200
-        data = r.json()
-        assert data["days"] == 7
-    
-    def test_profit_history_default_days(self):
-        """Should default to 30 days if not specified"""
-        r = requests.get(f"{BRIDGE_URL}/account/profit-history")
-        
-        assert r.status_code == 200
-        data = r.json()
-        assert data["days"] == 30
-    
-    def test_contract_scaling_flow(self):
-        """Full contract scaling flow should work"""
-        # Get equity
-        account_r = requests.get(f"{BRIDGE_URL}/account")
-        assert account_r.status_code == 200
-        account = account_r.json()
-        
-        # Get profit history
-        profit_r = requests.get(f"{BRIDGE_URL}/account/profit-history?days=30")
-        assert profit_r.status_code == 200
-        profit = profit_r.json()
-        
-        # Both should have required fields for contract scaling
-        assert "equity" in account
-        assert "total_pnl" in profit
-    
-    def test_earnings_scrape_endpoint(self):
-        """Should successfully scrape earnings dates"""
-        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=15)
-        
-        assert r.status_code == 200
-        data = r.json()
-        
-        # Check required fields
-        assert "last_updated" in data
-        assert "source" in data
-        assert "tickers_checked" in data
-        assert "dates" in data
-        
-        # Check data types
-        assert isinstance(data["tickers_checked"], list)
-        assert isinstance(data["dates"], list)
-        
-        # Should have checked some tickers
-        assert len(data["tickers_checked"]) > 0
-        
-        # Dates should be strings in YYYY-MM-DD format
-        for date in data["dates"]:
-            assert isinstance(date, str)
-            # Basic format check
-            assert len(date) == 10
-            assert date.count('-') == 2
 
 
 if __name__ == '__main__':

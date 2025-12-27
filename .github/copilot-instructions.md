@@ -33,6 +33,36 @@ Java (Spring Boot :16350) ◄──REST──► Python (FastAPI :8888) ──�
 
 ---
 
+## 🧪 TESTING REQUIREMENTS
+
+### ⚠️ CRITICAL: Always check all unit and integration tests pass before you commit
+
+### Running Tests
+```bash
+# Java unit tests
+mvn test
+
+# Java integration tests (requires Python bridge running)
+BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
+
+# Python unit tests
+cd python && ../python/venv/bin/pytest tests/test_bridge.py -v
+
+# Python integration tests (requires bridge running)
+BRIDGE_URL=http://localhost:8888 ../python/venv/bin/pytest tests/test_integration.py -v
+
+# All tests
+mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v
+```
+
+### Test Coverage Requirements
+- All Java files with non-getter/setter methods must have unit tests
+- All Python functions must have unit tests
+- All Java-Python interactions must have integration tests
+- All Ollama interactions must have integration tests
+
+---
+
 ## Coding Guidelines
 
 ### TradingEngine.java
@@ -89,13 +119,37 @@ mvn clean package -DskipTests
 # Test endpoints
 curl http://localhost:8888/health
 curl http://localhost:8888/signal
+curl -X POST http://localhost:8888/order/dry-run \
+  -H "Content-Type: application/json" \
+  -d '{"action":"BUY","quantity":1,"price":20000}'
 ```
 
 ## Crontab
 ```
+# Scrape earnings blackout dates daily at 09:00 (Mon-Fri)
+0 9 * * 1-5 cd /path/to/mtxf-bot && python/venv/bin/python3 python/bridge.py --scrape-earnings >> /tmp/earnings-scrape.log 2>&1
+
+# MTXF Lunch Bot - Runs weekdays at 11:15 AM
 15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /path/to/mtxf-bot && ./start-lunch-bot.fish <secret>' >> /tmp/mtxf-bot-cron.log 2>&1
 ```
 
 ---
 
-**Last Audit:** 2025-11-26 | **Score:** 100/100
+## Known Issues & Lessons Learned
+
+### 2025-11-27: Order endpoint 422 error
+**Issue:** Java RestTemplate sending JSON string instead of Map caused Python Pydantic to fail parsing.
+**Fix:** Changed Java to send `Map<String, Object>` instead of JSON string. Added Pydantic `OrderRequest` model.
+**Prevention:** 
+- Added `/order/dry-run` endpoint for pre-market testing
+- Added `OrderEndpointIntegrationTest` to catch serialization issues
+- Added pre-market health check in `TradingEngine.initialize()`
+
+### 2025-11-27: Yahoo Finance 401 errors
+**Issue:** Direct Yahoo Finance API calls started returning 401 "Invalid Crumb" errors.
+**Fix:** Switched to `yfinance` library which handles authentication automatically.
+**Prevention:** Use well-maintained libraries instead of raw API calls when possible.
+
+---
+
+**Last Audit:** 2025-11-27 | **Score:** 100/100
