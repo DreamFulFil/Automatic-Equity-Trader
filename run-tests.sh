@@ -153,10 +153,14 @@ start_bot() {
 
 shutdown_gracefully() {
     echo ""
-    echo -e "${YELLOW}🛑 Graceful Shutdown (Telegram messages e,f,g)${NC}"
+    if [ "$CI" = "true" ]; then
+        echo -e "${YELLOW}🛑 Graceful Shutdown (CI mode - no Telegram messages)${NC}"
+    else
+        echo -e "${YELLOW}🛑 Graceful Shutdown (Telegram messages e,f,g)${NC}"
+    fi
     
-    # Trigger daily summary and shutdown via REST API
-    if pgrep -f "java.*mtxf-bot.*jar" >/dev/null 2>&1; then
+    # Trigger daily summary and shutdown via REST API (SKIP IN CI)
+    if [ "$CI" != "true" ] && pgrep -f "java.*mtxf-bot.*jar" >/dev/null 2>&1; then
         echo "Triggering autoFlatten via REST API..."
         curl -s -X POST http://localhost:16350/api/shutdown >/dev/null 2>&1 || true
         sleep 25  # Wait for autoFlatten to complete and app to exit gracefully
@@ -255,7 +259,7 @@ echo "   $PYTHON_UNIT_SUMMARY"
 echo ""
 
 ###############################################################################
-# Phase 3: Start Full System (with scraper - Telegram messages a-b)
+# Phase 3: Start Full System (with scraper - Telegram messages a-b, skipped in CI)
 ###############################################################################
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -265,15 +269,21 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 # Ensure earnings blackout file exists
 mkdir -p "$SCRIPT_DIR/config"
 
-# Run earnings scraper (Telegram messages a-b)
-echo "Running earnings scraper (Telegram messages a-b)..."
-cd "$SCRIPT_DIR/python"
-if [ -x "venv/bin/python3" ]; then
-    venv/bin/python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
+# Run earnings scraper (Telegram messages a-b) - SKIP IN CI
+if [ "$CI" = "true" ]; then
+    echo "Skipping earnings scraper in CI (would send Telegram messages a-b)"
+    # Create empty file to prevent errors
+    echo "{}" > "$SCRIPT_DIR/config/earnings-blackout-dates.json"
 else
-    python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
+    echo "Running earnings scraper (Telegram messages a-b)..."
+    cd "$SCRIPT_DIR/python"
+    if [ -x "venv/bin/python3" ]; then
+        venv/bin/python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
+    else
+        python3 bridge.py --scrape-earnings --jasypt-password "$JASYPT_PASSWORD"
+    fi
+    cd "$SCRIPT_DIR"
 fi
-cd "$SCRIPT_DIR"
 sleep 3
 
 start_ollama || exit 1
@@ -352,7 +362,7 @@ echo "   $E2E_SUMMARY"
 echo ""
 
 ###############################################################################
-# Phase 7: Graceful Shutdown (triggered by trap)
+# Phase 7: Graceful Shutdown (triggered by trap, Telegram messages e,f,g skipped in CI)
 ###############################################################################
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
