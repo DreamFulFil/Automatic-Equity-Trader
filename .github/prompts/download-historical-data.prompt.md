@@ -27,13 +27,16 @@ lsof -i :8888
 **Start Java Application:**
 ```bash
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader
-nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > /tmp/java-bot.log 2>&1 &
+mkdir -p logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > "logs/java-${LOG_TS}.log" 2>&1 &
 ```
 
 **Start Python Bridge:**
 ```bash
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader/python
-JASYPT_PASSWORD=<JASYPT_PASSWORD> TRADING_MODE=stock ../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > /tmp/bridge.log 2>&1 &
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+JASYPT_PASSWORD=<JASYPT_PASSWORD> TRADING_MODE=stock ../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > "logs/bridge-${LOG_TS}.log" 2>&1 &
 ```
 
 ### 3. Wait for Services to be Healthy
@@ -60,7 +63,8 @@ curl -s http://localhost:8888/health | jq '.'
 Replace `<YEARS>` with desired number of years (e.g., 10):
 
 ```bash
-curl -s -X POST "http://localhost:16350/api/history/download?years=<YEARS>" &
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+curl -s -X POST "http://localhost:16350/api/history/download?years=<YEARS>" -o "logs/history-download-${LOG_TS}.json" &
 ```
 
 ### 5. Monitor Download Progress
@@ -79,13 +83,13 @@ docker exec psql psql -U dreamer -d auto_equity_trader -c "SELECT symbol, COUNT(
 
 ```bash
 # Check for errors or rate limiting
-tail -100 /tmp/bridge.log | rg -i "(error|fail|429|rate)"
+tail -100 logs/bridge-*.log | rg -i "(error|fail|429|rate)"
 
 # Check date ranges being fetched
-tail -100 /tmp/bridge.log | rg "📅"
+tail -100 logs/bridge-*.log | rg "📅"
 
 # Check data sources
-tail -100 /tmp/bridge.log | rg "✅ Merged"
+tail -100 logs/bridge-*.log | rg "✅ Merged"
 ```
 
 ## Expected Results
@@ -117,7 +121,7 @@ This priority ensures:
 
 **Solutions**:
 1. Check Python bridge is running: `lsof -i :8888`
-2. Check Python logs: `tail -f /tmp/bridge.log`
+2. Check Python logs: `tail -f logs/bridge-*.log`
 3. Verify Shioaji connection: `curl http://localhost:8888/health | jq '.shioaji_connected'`
 4. Restart Python bridge if disconnected
 
@@ -125,7 +129,7 @@ This priority ensures:
 **Symptoms**: All records show same 1-year date range
 
 **Solutions**:
-1. Check if date ranges are properly passed: `tail /tmp/bridge.log | rg "📅"`
+1. Check if date ranges are properly passed: `tail logs/bridge-*.log | rg "📅"`
 2. Verify code uses explicit start_date/end_date (not just days from today)
 3. Ensure `fetch_historical_data` receives start_date/end_date parameters from Java
 
@@ -134,7 +138,7 @@ This priority ensures:
 
 **Solutions**:
 1. Database tables should be truncated at start of download
-2. Check Java logs for batch download details: `tail /tmp/java-bot.log`
+2. Check Java logs for batch download details: `tail logs/java-*.log`
 3. Verify no concurrent downloads running
 
 ## Notes

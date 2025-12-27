@@ -19,7 +19,7 @@ Before running auto-selection:
 ## Step 1: Verify Backtest Results Available
 
 ```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
+docker exec -i psql psql -U postgres -d auto_equity_trader -c \ I
   "SELECT COUNT(*) as total_results, 
           COUNT(DISTINCT symbol) as unique_stocks,
           COUNT(DISTINCT strategy_name) as unique_strategies
@@ -70,7 +70,7 @@ curl -X POST http://localhost:16350/api/auto-selection/run-now | jq '.'
 ## Step 4: Monitor Execution
 
 ```bash
-tail -100 /tmp/java-bot.log | rg -i "(auto.?selection|strategy.?selector)" | tail -20
+tail -100 logs/java-*.log | rg -i "(auto.?selection|strategy.?selector)" | tail -20
 ```
 
 **Expected Log Patterns:**
@@ -167,7 +167,7 @@ docker exec -i psql psql -U postgres -d auto_equity_trader -c \
 Check that the system starts using the newly selected strategy:
 
 ```bash
-tail -50 /tmp/java-bot.log | rg -i "(strategy.*signal|trade)" | tail -10
+tail -50 logs/java-*.log | rg -i "(strategy.*signal|trade)" | tail -10
 ```
 
 **Expected Pattern:**
@@ -225,7 +225,7 @@ INFO  t.g.a.e.t.services.StrategyManager - 👻 Shadow Trade [Bollinger Band]: B
    - Minimum total trades (typically 10)
 2. Review logs for selection criteria:
    ```bash
-   tail -200 /tmp/java-bot.log | rg -i "(selection|threshold|criteria)"
+   tail -200 logs/java-*.log | rg -i "(selection|threshold|criteria)"
    ```
 3. Lower thresholds in configuration if backtest results are poor across the board
 
@@ -236,7 +236,7 @@ INFO  t.g.a.e.t.services.StrategyManager - 👻 Shadow Trade [Bollinger Band]: B
 **Solution:**
 1. Check for errors in logs:
    ```bash
-   tail -200 /tmp/java-bot.log | rg -i "(shadow|error|exception)"
+   tail -200 logs/java-*.log | rg -i "(shadow|error|exception)"
    ```
 2. Verify database connection: `curl http://localhost:16350/actuator/health`
 3. Check `strategy_stock_mapping` table structure:

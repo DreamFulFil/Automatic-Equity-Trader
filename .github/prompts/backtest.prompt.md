@@ -39,7 +39,9 @@ If not running, start the Java application:
 
 ```bash
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader
-nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > /tmp/java-bot.log 2>&1 &
+mkdir -p logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > "logs/java-${LOG_TS}.log" 2>&1 &
 ```
 
 Wait for health check to pass:
@@ -60,7 +62,8 @@ end
 Run backtesting against all historical data:
 
 ```bash
-curl -s -X POST "http://localhost:16350/api/backtest/run" > /tmp/backtest-result.json &
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+curl -s -X POST "http://localhost:16350/api/backtest/run" -o "logs/backtest-result-${LOG_TS}.json" &
 ```
 
 This endpoint will:
@@ -74,7 +77,7 @@ This endpoint will:
 Monitor Java logs for progress:
 
 ```bash
-tail -f /tmp/java-bot.log | rg -i "(backtest|strategy|stock)"
+tail -f logs/java-*.log | rg -i "(backtest|strategy|stock)"
 ```
 
 Key log patterns to watch for:
@@ -92,7 +95,7 @@ Once backtest completes, check the results:
 sleep 60
 
 # Check result file
-cat /tmp/backtest-result.json | jq '{stocksTested, strategiesTested, totalResults, duration: .completionTime}'
+ls -1 logs/backtest-result-*.json | tail -n1 | xargs -I {} sh -c 'cat "{}" | jq "{stocksTested, strategiesTested, totalResults, duration: .completionTime}"' 
 
 # Verify results in database
 docker exec psql psql -U dreamer -d auto_equity_trader -c "SELECT COUNT(*) as total_results, COUNT(DISTINCT stock_code) as stocks_tested, COUNT(DISTINCT strategy_name) as strategies_tested FROM backtest_result;"
@@ -175,14 +178,14 @@ LIMIT 10;
 
 **Solutions**:
 1. Check if database has excessive records: `SELECT COUNT(*) FROM bar;`
-2. Monitor Java logs for stuck threads: `tail -f /tmp/java-bot.log`
+2. Monitor Java logs for stuck threads: `tail -f logs/java-*.log`
 3. Restart Java application if frozen
 
 ### Issue: Partial results (less than expected)
 **Symptoms**: Only some stocks/strategies tested
 
 **Solutions**:
-1. Check Java logs for errors: `tail -100 /tmp/java-bot.log | rg -i error`
+1. Check Java logs for errors: `tail -100 logs/java-*.log | rg -i error`
 2. Verify all stocks have data: `SELECT symbol, COUNT(*) FROM bar GROUP BY symbol;`
 3. Re-run backtest if incomplete
 

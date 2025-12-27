@@ -15,6 +15,11 @@ Utility scripts for the Automatic Equity Trader.
 - `force-fix-python.fish` - Fix Python environment
 - `update_strategy_configs.py` - Update strategy configs
 
+### Version bump helper
+- The repository provides a helper script to perform safe version bumps: `./scripts/operational/bump-version.sh <commit-type>`.
+- The top-level wrapper `./scripts/bump-version.sh` has been removed; use `./scripts/operational/bump-version.sh <commit-type>` instead.
+- See `.github/prompts/commit.prompt.md` and `.github/prompts/release.prompt.md` for the manual/policy steps used when creating releases.
+
 ## Deprecated Scripts (Removed in v2.4.0)
 
 The following Python scripts have been ported to Java and removed:
