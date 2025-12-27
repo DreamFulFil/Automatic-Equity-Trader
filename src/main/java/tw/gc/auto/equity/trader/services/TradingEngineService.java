@@ -166,6 +166,11 @@ public class TradingEngineService {
      */
     @Scheduled(fixedRate = 30000)
     public void tradingLoop() {
+        if (!tradingStateService.isActivePolling()) {
+            log.debug("Passive mode: Signal polling disabled");
+            return;
+        }
+        
         // Try to reconnect to bridge if not connected
         if (!tradingStateService.isMarketDataConnected()) {
             try {

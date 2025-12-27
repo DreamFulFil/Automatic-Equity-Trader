@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.4.0** - Multi-Asset Support & Enhanced Configuration
+**Version 2.5.0** - Passive Observer Mode & Enhanced Telegram Commands
 
 [![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
 
@@ -14,6 +14,31 @@
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
 
 Advanced trading platform supporting Taiwan stocks/futures with indefinite lifecycle, comprehensive data persistence, structured LLM intelligence, and extensible multi-market/multi-strategy architecture.
+
+---
+
+## ✨ What's New in v2.5.0
+
+**🔭 PASSIVE OBSERVER MODE**
+- **Active Polling Control**: New `/observer [on|off]` command to stop/start signal polling
+- **Idle Mode**: System runs indefinitely without executing trades when passive
+- **Flexible Operation**: Disable trading during specific hours while keeping app alive
+- **State Tracking**: `TradingStateService.isActivePolling()` guards signal execution
+
+**💬 ENHANCED TELEGRAM INTERFACE**
+- **Help Command**: `/help` lists all 30+ available bot commands with categories
+- **Unknown Command Handler**: Friendly error message suggests `/help` instead of silence
+- **Command Categories**: Trading Control, Strategy, Analysis, AI Agents, Config, Live Mode, Observer Mode
+
+**🏷️ STRATEGY NAME VALIDATION**
+- **Null Strategy Prevention**: All trades now require valid strategy name or fallback to `Strategy_STOCK_{timestamp}`
+- **Asset Type Defaults**: All entities default to `AssetType.STOCK` when not specified
+- **Trade Logging**: Improved strategy tracking in `Trade` entity with mandatory naming
+
+**🧹 CODE REFINEMENTS**
+- **TradingEngineService**: Added active polling check before signal processing
+- **OrderExecutionService**: Eliminated "Unknown" strategy logging with validated fallback
+- **TelegramService**: Comprehensive command help system with structured output
 
 ---
 

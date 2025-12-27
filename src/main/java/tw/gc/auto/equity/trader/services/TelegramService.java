@@ -209,6 +209,8 @@ public class TelegramService {
         } else if (lowerText.startsWith("/change-increment ")) {
             String arg = text.substring(18).trim();
             handleChangeIncrementCommand(arg);
+        } else if (lowerText.equals("/help")) {
+            handleHelpCommand();
         } else {
             // Check custom commands
             String commandKey = lowerText.split(" ")[0];
@@ -218,24 +220,56 @@ public class TelegramService {
                 return;
             }
             
-            sendMessage("❓ Unknown command: " + text + "\n\nAvailable:\n" +
-                    "/status - Bot status\n" +
-                    "/pause - Pause trading\n" +
-                    "/resume - Resume trading\n" +
-                    "/close - Close position\n" +
-                    "/shutdown - Stop application\n" +
-                    "/agent - List agents\n" +
-                    "/talk <question> - Ask TutorBot\n" +
-                    "/insight - Daily insight\n" +
-                    "/golive - Check live eligibility\n" +
-                    "/confirmlive - Confirm live switch within 10m\n" +
-                    "/backtosim - Switch to simulation\n" +
-                    "/change-share <number> - Change base shares\n" +
-                    "/change-increment <number> - Change share increment\n" +
-                    "/auto-strategy-select - Run auto selection\n" +
-                    "/config <key> <value> - Set config\n" +
-                    "/show-configs - Show all configs");
+            // Unknown command - suggest help
+            sendMessage("❓ Unknown command: " + text + "\n\nUse /help to see all available commands");
         }
+    }
+    
+    private void handleHelpCommand() {
+        StringBuilder help = new StringBuilder();
+        help.append("📖 AVAILABLE COMMANDS\n");
+        help.append("━━━━━━━━━━━━━━━━━━━━\n\n");
+        
+        help.append("📊 TRADING CONTROL:\n");
+        help.append("/status - Bot status & position\n");
+        help.append("/pause - Pause trading\n");
+        help.append("/resume - Resume trading\n");
+        help.append("/close - Close position\n");
+        help.append("/shutdown - Stop application\n\n");
+        
+        help.append("⚙️ STRATEGY MANAGEMENT:\n");
+        help.append("/set-main-strategy <name> - Switch strategy\n");
+        help.append("/strategy - Legacy strategy switch\n");
+        help.append("/mode <live|sim> - Switch mode\n");
+        help.append("/auto-strategy-select - Run auto selection\n\n");
+        
+        help.append("📈 ANALYSIS:\n");
+        help.append("/backtest <symbol> <days> - Run backtest\n");
+        help.append("/download-history <symbol> [years] - Download data\n\n");
+        
+        help.append("🤖 AI AGENTS:\n");
+        help.append("/agent - List agents\n");
+        help.append("/talk <question> - Ask TutorBot\n");
+        help.append("/ask [question] - Get strategy recommendation\n");
+        help.append("/insight - Daily insight\n");
+        help.append("/news - News analysis\n\n");
+        
+        help.append("🔧 CONFIGURATION:\n");
+        help.append("/config <key> <value> - Set config\n");
+        help.append("/show-configs - Show all configs\n");
+        help.append("/change-stock <symbol> - Change active stock\n");
+        help.append("/change-share <number> - Change base shares\n");
+        help.append("/change-increment <number> - Change share increment\n\n");
+        
+        help.append("🟢 LIVE MODE:\n");
+        help.append("/golive - Check live eligibility\n");
+        help.append("/confirmlive - Confirm live switch\n");
+        help.append("/backtosim - Switch to simulation\n\n");
+        
+        help.append("🔭 PASSIVE MODE:\n");
+        help.append("/observer [on|off] - Control signal polling\n");
+        
+        sendMessage(help.toString());
     }
     
     private void handleAgentCommand(String chatId) {

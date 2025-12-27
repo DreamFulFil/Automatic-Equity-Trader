@@ -107,15 +107,19 @@ public class OrderExecutionService {
             try {
                 attempt++;
                 
+                String effectiveStrategyName = (strategyName != null && !strategyName.trim().isEmpty()) 
+                    ? strategyName 
+                    : "Strategy_STOCK_" + System.currentTimeMillis();
+                
                 Map<String, Object> orderMap = new HashMap<>();
                 orderMap.put("action", action);
                 orderMap.put("quantity", String.valueOf(quantity));
                 orderMap.put("price", price);
                 orderMap.put("is_exit", isExit);
-                orderMap.put("strategy", strategyName != null ? strategyName : "Unknown");
+                orderMap.put("strategy", effectiveStrategyName);
                 
                 log.info("📤 [Strategy: {}] Sending {} order (attempt {}, exit={}): {}", 
-                    strategyName != null ? strategyName : "Unknown", instrument, attempt, isExit, orderMap);
+                    effectiveStrategyName, instrument, attempt, isExit, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
                 log.debug("📥 Order response: {}", result);
@@ -130,10 +134,10 @@ public class OrderExecutionService {
                 if (!isExit) {
                     positionManager.updateEntry(instrument, price, LocalDateTime.now(ZoneId.of("Asia/Taipei")));
                 }
-                
+                    
                 telegramService.sendMessage(String.format(
                         "✅ ORDER FILLED [%s]\n%s %d %s @ %.0f\nPosition: %d", 
-                        strategyName != null ? strategyName : "Unknown", action, quantity, instrument, price, positionManager.getPosition(instrument)));
+                        effectiveStrategyName, action, quantity, instrument, price, positionManager.getPosition(instrument)));
                 
                 if (!isExit) {
                     Trade trade = Trade.builder()
@@ -142,10 +146,11 @@ public class OrderExecutionService {
                             .quantity(quantity)
                             .entryPrice(price)
                             .symbol(instrument)
-                            .strategyName(strategyName != null ? strategyName : "Unknown")
+                            .strategyName(effectiveStrategyName)
                             .reason("Signal execution")
                             .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
                             .status(Trade.TradeStatus.OPEN)
+                            .assetType(Trade.AssetType.STOCK)
                             .build();
                     dataLoggingService.logTrade(trade);
                 }
