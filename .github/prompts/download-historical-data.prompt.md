@@ -27,16 +27,13 @@ lsof -i :8888
 **Start Java Application:**
 ```bash
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader
-mkdir -p logs
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > "logs/java-${LOG_TS}.log" 2>&1 &
+nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > /tmp/java-bot.log 2>&1 &
 ```
 
 **Start Python Bridge:**
 ```bash
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader/python
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-JASYPT_PASSWORD=<JASYPT_PASSWORD> TRADING_MODE=stock ../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > "logs/bridge-${LOG_TS}.log" 2>&1 &
+JASYPT_PASSWORD=<JASYPT_PASSWORD> TRADING_MODE=stock ../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > /tmp/bridge.log 2>&1 &
 ```
 
 ### 3. Wait for Services to be Healthy
@@ -63,8 +60,7 @@ curl -s http://localhost:8888/health | jq '.'
 Replace `<YEARS>` with desired number of years (e.g., 10):
 
 ```bash
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-curl -s -X POST "http://localhost:16350/api/history/download?years=<YEARS>" -o "logs/history-download-${LOG_TS}.json" &
+curl -s -X POST "http://localhost:16350/api/history/download?years=<YEARS>" &
 ```
 
 ### 5. Monitor Download Progress
@@ -83,36 +79,28 @@ docker exec psql psql -U dreamer -d auto_equity_trader -c "SELECT symbol, COUNT(
 
 ```bash
 # Check for errors or rate limiting
-tail -100 logs/bridge-*.log | rg -i "(error|fail|429|rate)"
+tail -100 /tmp/bridge.log | rg -i "(error|fail|429|rate)"
 
 # Check date ranges being fetched
-tail -100 logs/bridge-*.log | rg "📅"
+tail -100 /tmp/bridge.log | rg "📅"
 
 # Check data sources
-tail -100 logs/bridge-*.log | rg "✅ Merged"
+tail -100 /tmp/bridge.log | rg "✅ Merged"
 ```
 
 ## Expected Results
 
 - **Date Range**: Should see data from ~2018-2020 to current date (depending on stock availability)
-  - Most stocks achieve 7+ years of historical coverage
-  - Actual coverage depends on when each stock was listed
 - **Coverage**: All 50 configured stocks should have data
 - **Sources**: Data primarily from Yahoo Finance (multi-year historical), supplemented by Shioaji (recent data) and TWSE
 - **Duration**: Full 10-year download takes approximately 5-10 minutes for 50 stocks
-- **Expected Total**: ~130,000-140,000 records for 50 stocks over 7 years
 
 ## Data Source Priority
 
 Current configuration (as of 2025-12-27):
-1. **Yahoo Finance** (Primary): Best for multi-year historical data, no rate limiting observed in normal usage
-2. **Shioaji** (Supplement): Limited to 2020-03-02 onwards for stocks, used to validate/fill recent data
+1. **Yahoo Finance** (Primary): Best for multi-year historical data, no rate limiting observed
+2. **Shioaji** (Supplement): Limited to 2020-03-02 onwards for stocks
 3. **TWSE** (Supplement): Taiwan Stock Exchange direct data
-
-This priority ensures:
-- Maximum historical depth (back to 2015-2018 for most stocks)
-- Reliable data coverage without hitting API limitations
-- Yahoo Finance provides the broadest date range despite Shioaji being the official broker API
 
 ## Troubleshooting
 
@@ -121,7 +109,7 @@ This priority ensures:
 
 **Solutions**:
 1. Check Python bridge is running: `lsof -i :8888`
-2. Check Python logs: `tail -f logs/bridge-*.log`
+2. Check Python logs: `tail -f /tmp/bridge.log`
 3. Verify Shioaji connection: `curl http://localhost:8888/health | jq '.shioaji_connected'`
 4. Restart Python bridge if disconnected
 
@@ -129,7 +117,7 @@ This priority ensures:
 **Symptoms**: All records show same 1-year date range
 
 **Solutions**:
-1. Check if date ranges are properly passed: `tail logs/bridge-*.log | rg "📅"`
+1. Check if date ranges are properly passed: `tail /tmp/bridge.log | rg "📅"`
 2. Verify code uses explicit start_date/end_date (not just days from today)
 3. Ensure `fetch_historical_data` receives start_date/end_date parameters from Java
 
@@ -138,7 +126,7 @@ This priority ensures:
 
 **Solutions**:
 1. Database tables should be truncated at start of download
-2. Check Java logs for batch download details: `tail logs/java-*.log`
+2. Check Java logs for batch download details: `tail /tmp/java-bot.log`
 3. Verify no concurrent downloads running
 
 ## Notes
