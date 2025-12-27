@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Git commit-msg hook wrapper - delegates to validation script
+set -euo pipefail
+
+MSG_FILE="$1"
+SCRIPTDIR="$(dirname "$0")/.."
+HOOK_SCRIPT="$SCRIPTDIR/scripts/operational/validate-commit-and-version.sh"
+
+if [ ! -x "$HOOK_SCRIPT" ]; then
+  echo "Validation script not found or not executable: $HOOK_SCRIPT" >&2
+  exit 0
+fi
+
+# Run validation; allow it to block commit if it fails
+"$HOOK_SCRIPT" "$MSG_FILE"
