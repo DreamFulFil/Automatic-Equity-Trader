@@ -70,6 +70,8 @@ jobs:
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           chmod +x run-tests.sh
-          ./run-tests.sh "$JASYPT_PASSWORD" || echo "Integration tests require services - unit tests passed"
+          ./run-tests.sh "$JASYPT_PASSWORD"
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
+          # Ensure Ollama isn't required on CI by default; tests will skip integration if not available
+          OLLAMA_HOST: "http://127.0.0.1:11434"
