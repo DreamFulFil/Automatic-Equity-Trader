@@ -24,15 +24,22 @@ Designed for capital preservation with 80,000 TWD starting capital.
 ### 🎯 Stock Name Display & Database Integration Fixes
 
 **Critical Fixes**
-- ✅ Fixed NULL stock names in Telegram messages (created TaiwanStockNameService with 50-stock mapping)
+- ✅ **Fixed NULL stock names** in Telegram messages (created TaiwanStockNameService with 50-stock mapping)
+- ✅ **Fixed duplicate key error** in auto-selection (changed deleteAll() to deleteAllInBatch())
 - ✅ Updated BacktestController to populate stock names when saving backtest results
 - ✅ Synchronized stock name mappings between Java and Python services
 - ✅ Fixed Python bridge database authentication (added POSTGRES_PASSWORD to Fish script)
 - ✅ Fixed circular dependency in strategy selection (Python now calls Java AutoStrategySelector)
 - ✅ Added direct Java strategy selection endpoint (`/api/backtest/select-strategy-direct`)
-- ✅ Removed outdated SQL in Python service (stock_settings table structure changed)
 - ✅ All 333 Java unit tests passing
 - ✅ 70 Python unit tests passing
+
+**Architectural Improvements**
+- ✅ **Removed all SQL operations from Python service** (129 lines deleted)
+- ✅ **Java (Hibernate) is now sole database owner** - eliminates schema inconsistencies
+- ✅ Python service exclusively calls Java REST endpoints for all database operations
+- ✅ Removed legacy auto_select_best_strategy method with direct SQL queries
+- ✅ Removed shadow_mode_stocks and active_strategy_config table manipulation from Python
 
 ### 🏢 Stock Universe Coverage
 - Comprehensive Taiwan stock name mappings for 50 major stocks
