@@ -1,95 +1,49 @@
 server:
-  port: 16350
-
-# PostgreSQL Database (for agents, settings, trades)
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/auto_equity_trader
-    username: dreamer
-    password: ENC(9GDI62q7tkjCK3Dk7llB2qd8u4kwN5sLWTCGjxONfDuzR1gcPVwyUA==)
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-      pool-name: BacktestHikariPool
-  jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        jdbc:
-          batch_size: 1000
-          order_inserts: true
-          order_updates: true
-
-# Jasypt encryption configuration
-jasypt:
-  encryptor:
-    algorithm: PBEWithMD5AndDES
-    iv-generator-classname: org.jasypt.iv.NoIvGenerator
-
-# Actuator configuration
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
-  endpoint:
-    health:
-      show-details: always
+  port: 8080
 
 trading:
+  # Trading window: 11:30 - 13:00 Taipei time
+  window:
+    start: "11:30"
+    end: "13:00"
+  
+  # Risk limits
+  risk:
+    max-position: 1
+    daily-loss-limit: 4500
+  
   # Python bridge
   bridge:
     url: "http://localhost:8888"
     timeout-ms: 3000
 
-# Telegram bot configuration (encrypted with Jasypt)
+# Telegram bot configuration
 telegram:
-  bot-token: "ENC(zhPmZqsWyPszF/4uiTNaqVhibSgO7LgXcAvITv3vL2KZt5R9BG+F9c6yOjy8lsjt7VmbKMRHt+w=)"
-  chat-id: "ENC(OWDtjgnAjrtdlx+XBMO/neVd30Wc8nX7)"
+  bot-token: "YOUR_TELEGRAM_BOT_TOKEN"
+  chat-id: "YOUR_TELEGRAM_CHAT_ID"
   enabled: true
 
-# Shioaji credentials (encrypted with Jasypt)
+# Shioaji credentials (used by Python bridge)
 shioaji:
-  stock:
-    api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
-    secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
-  future:
-    api-key: "ENC(+jmihAk/Wa8e0EES6j05sPGjQ17usvEx0Qb+BI9cHfALLbhofOH5qFVrg+SVdUsnXkFab491S58=)"
-    secret-key: "ENC(RRZ8DTuV8oxlzoUhA1TC5V62JlHKkt42AMu23W+FJ04fl+5ZERHfDOgy+TeZzNEQQOThDseYALw=)"
-  ca-path: "Sinopac.pfx"
-  ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
-  person-id: "ENC(fNJEeUmwdyu2PCWL6YfIwbpLYY3XKmmI)"
-  # Set to true for paper trading - now managed dynamically via database
-  # simulation: false
+  api-key: "YOUR_SHIOAJI_API_KEY"
+  secret-key: "YOUR_SHIOAJI_SECRET_KEY"
+  ca-path: "/path/to/Sinopac.pfx"
+  ca-password: "YOUR_CA_PASSWORD"
+  # Set to true for paper trading
+  simulation: true
 
 # Ollama configuration
 ollama:
   url: "http://localhost:11434"
-  model: "mistral:7b-instruct-v0.2-q5_K_M"
+  model: "llama3.1:8b-instruct-q5_K_M"
 
 logging:
   level:
     root: INFO
-    '[tw.gc.mtxfbot]': DEBUG
+    tw.gc.mtxfbot: DEBUG
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-  logback:
-    rollingpolicy:
-      file-name-pattern: "logs/java/auto-equity-trader-%d{yyyy-MM-dd}.%i.log"
-      max-file-size: 5MB
-      max-history: 30
-      total-size-cap: 500MB
   file:
-    name: logs/java/auto-equity-trader.log
-
-# Earnings blackout refresh configuration
-earnings:
-  refresh:
-    enabled: true
+    name: logs/mtxf-bot.log
+    max-size: 10MB
+    max-history: 7

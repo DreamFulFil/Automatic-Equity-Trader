@@ -1,179 +1,216 @@
-[![CI](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Automatic-Equity-Trader/actions/workflows/ci.yml)
+# 🤖 MTXF Lunch Bot
 
-# Automatic Equity Trader
+**Ultra-lightweight, production-ready day-trading bot for Taiwan Mini-TXF futures.**
 
-**Version 0.79.0** - Semantic Versioning Release
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
-[![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-[![Tests](https://img.shields.io/badge/Tests-524%20passing-brightgreen.svg)](tests/)
+Transform 100,000 TWD into 30,000+ TWD monthly profit using AI-powered lunch-break scalping.
 
 ---
 
-## 🎯 TL;DR
+## 🎯 Key Features
 
-**Automatic Equity Trader** is a risk-first, AI-powered automated trading platform for Taiwan stock market. Designed for capital preservation with conservative strategies, comprehensive testing, and full observability.
-
-**Production-Ready:** 524 passing tests | 99 strategies | AI trade veto
+- ✅ **1 Contract Trading**: Max position = 1 MTXF, minimal capital requirement
+- ✅ **Lunch Window Only**: 11:30-13:00 Taipei time (low competition, high edge)
+- ✅ **AI News Veto**: Llama 3.1 8B analyzes headlines every 10 min
+- ✅ **Hard Risk Limits**: -4,500 TWD daily loss → auto-shutdown
+- ✅ **Telegram Alerts**: Every order, fill, P&L update to your phone
+- ✅ **Paper → Live Switch**: Test in simulation mode first
 
 ---
 
 ## 🏗️ Architecture
 
-```mermaid
-graph TB
-    subgraph UI["User Interface"]
-        TG[Telegram Bot<br/>Commands & Alerts]
-    end
-    
-    subgraph JAVA["Java Core (Spring Boot 3.5.8)"]
-        TE[Trading Engine<br/>Strategy Selector<br/>Position Manager<br/>Risk Manager]
-        BS[Backtest Service<br/>Historical Analysis]
-        API[REST Controllers<br/>Admin APIs]
-        HDS[History Data Service<br/>PgBulkInsert]
-    end
-    
-    subgraph AI["AI Layer"]
-        OL[Ollama LLM<br/>Llama 3.1 8B<br/>News Sentiment]
-    end
-    
-    subgraph PY["Python Bridge (FastAPI)"]
-        SJ[Shioaji SDK<br/>Real-time Market Data]
-    end
-    
-    subgraph DATA["Data Layer"]
-        DB[(PostgreSQL<br/>TimescaleDB<br/>Time-Series)]
-    end
-    
-    subgraph EXT["External"]
-        MKT[Taiwan Stock Market<br/>Sinopac API]
-    end
-    
-    TG --> TE
-    TE --> OL
-    TE --> SJ
-    TE --> DB
-    BS --> HDS
-    HDS --> DB
-    SJ --> MKT
-    API --> TE
-    API --> BS
+```
+┌─────────────────┐      REST API       ┌──────────────────┐
+│  Java Trading   │◄────────────────────►│  Python Bridge   │
+│     Engine      │   (port 8080/8888)  │   (FastAPI)      │
+│  Spring Boot    │                      │                  │
+│  + Risk Mgmt    │                      │  + Shioaji API   │
+│  + Telegram     │                      │  + Ollama Client │
+└─────────────────┘                      └──────────────────┘
+         │                                        │
+         │                                        ▼
+         │                               ┌────────────────┐
+         │                               │ Llama 3.1 8B   │
+         │                               │ (Ollama Local) │
+         │                               └────────────────┘
+         ▼
+┌─────────────────┐
+│  Sinopac API    │
+│  (MTXF Market)  │
+└─────────────────┘
 ```
 
-**Key Components:**
-- **Java Core:** Spring Boot 3.5.8, Trading Engine, Strategy Framework
-- **Python Bridge:** FastAPI, Shioaji SDK for real-time Taiwan market data
-- **AI Layer:** Ollama (Llama 3.1 8B) for news sentiment and trade validation
-- **Database:** PostgreSQL with TimescaleDB for time-series optimization
-- **Monitoring:** Telegram bot for real-time alerts and control
+**Multi-Agent System (CrewAI Style)**:
+1. **Strategy Agent**: Fair-value + momentum + volume scalping
+2. **News Sentinel**: Scrapes MoneyDJ + UDN → Llama 3.1 veto
+3. **Risk Agent**: 1-contract limit, daily loss guard, auto-flatten
+4. **Java Engineer**: Low-latency order execution + Telegram alerts
+5. **Python Bridge**: Shioaji + Ollama integration (< 60 lines)
+6. **DevOps Agent**: One-click macOS setup + launchd auto-start
 
 ---
 
-## 🚀 Quickstart
+## 📦 Tech Stack
 
-### Prerequisites
-- Java 21+ (via jenv)
-- Python 3.12+
-- PostgreSQL 15+
-- Ollama (for AI features)
-- Sinopac account (for Taiwan market access)
+- **Java 21** + Spring Boot 3.3 (core trading engine)
+- **Python 3.10** + FastAPI (Shioaji bridge)
+- **Shioaji SDK** (Sinopac Futures API)
+- **Ollama** + Llama 3.1 8B Instruct (q5_K_M quantization)
+- **Telegram Bot API** (real-time alerts)
+- **Maven** (Java build)
+- **macOS Apple Silicon** (M1/M2/M3 optimized)
 
-### Installation
+---
 
+## 🚀 Quick Start (5 Minutes)
+
+### 1. Prerequisites
 ```bash
-# 1. Clone repository
-git clone https://github.com/DreamFulFil/Automatic-Equity-Trader.git
-cd Automatic-Equity-Trader
-
-# 2. Setup Python environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r python/requirements.txt
-
-# 3. Configure secrets (Jasypt encrypted)
-# Edit src/main/resources/application-secret.properties
-# Encrypt sensitive values: mvn jasypt:encrypt-value -Djasypt.encryptor.password=YOUR_PASSWORD
-
-# 4. Run tests (requires Jasypt password)
-./run-tests.sh YOUR_JASYPT_PASSWORD
-
-# 5. Start application
-./start-auto-trader.fish YOUR_JASYPT_PASSWORD
+brew install openjdk@21 maven ollama
+ollama pull llama3.1:8b-instruct-q5_K_M
 ```
 
----
+### 2. Configure Credentials
+Edit `src/main/resources/application.yml`:
+```yaml
+shioaji:
+  api-key: "YOUR_SHIOAJI_API_KEY"
+  secret-key: "YOUR_SHIOAJI_SECRET"
+  simulation: true  # Paper trading
 
-## 📱 Telegram Commands
+telegram:
+  bot-token: "YOUR_TELEGRAM_BOT_TOKEN"
+  chat-id: "YOUR_CHAT_ID"
+```
 
-Control the trading bot via Telegram. See [Telegram Commands Documentation](docs/usage/telegram-commands.md) for full reference.
-
-**Quick Reference:**
-- `/status` - View positions and P&L
-- `/pause` / `/resume` - Control trading
-- `/golive` → `/confirm_live` - Switch to live mode
-- `/help` - List all commands
-
----
-
-## 🧪 Testing
-
+### 3. Launch
 ```bash
-# Unit tests only (fast)
-./run-tests.sh --unit YOUR_JASYPT_PASSWORD
-
-# Full test suite (unit + integration + e2e)
-./run-tests.sh YOUR_JASYPT_PASSWORD
+chmod +x scripts/start-lunch-bot.sh
+./scripts/start-lunch-bot.sh
 ```
 
-**Test Coverage:**
-- **Java:** 371 unit tests + 25 integration tests + 16 e2e tests
-- **Python:** 96 unit tests + integration tests
-- **Total:** 524 tests, all passing
+Done! Bot will start at 11:30 and auto-flatten at 13:00.
 
 ---
 
-## 📊 Version History
+## 📊 Performance Target
 
-**Current Version:** `0.79.0` (from [VERSION](VERSION) file)
+| Metric | Target |
+|--------|--------|
+| Initial Capital | 100,000 TWD |
+| Monthly Profit | 30,000 TWD (30%) |
+| Daily Profit | 1,000 TWD |
+| Max Drawdown | -10% (10,000 TWD) |
+| Win Rate | 60%+ |
+| Trades/Day | 2-3 |
 
-This project follows [Semantic Versioning](https://semver.org/):
-- **Minor versions** (0.X.0): New features, performance improvements, refactoring
-- **Patch versions** (0.X.Y): Bug fixes, maintenance, documentation, CI/CD
-
-**Recent Releases:**
-- `v0.79.0` - PgBulkInsert and single-writer pattern for data ingestion
-- `v0.77.0` - JDBC batch insert optimization
-- `v0.76.0` - PostgreSQL COPY protocol for bulk inserts
-
-**All Releases:** See [git tags](https://github.com/DreamFulFil/Automatic-Equity-Trader/tags) for complete version history.
+**Risk**: 1 MTXF contract, max -4,500 TWD/day hard limit.
 
 ---
 
 ## 📚 Documentation
 
-- **[Telegram Commands](docs/usage/telegram-commands.md)** - Bot command reference
-- **[Contributing Guidelines](.github/copilot-instructions.md)** - Development standards
-- **[Test Suite](run-tests.sh)** - Testing framework
+- [Deployment Guide](docs/DEPLOYMENT.md) - Setup, paper trading, live switch
+- [Strategy Guide](docs/STRATEGY.md) - Trading logic, entry/exit rules
+- [API Reference](docs/API.md) - Python bridge endpoints (auto-generated)
 
 ---
 
-## ⚖️ License
+## 📱 Telegram Alerts
 
-[MIT License](LICENSE) - Use at your own risk. Not financial advice.
+Real-time notifications sent to your phone:
+
+```
+🚀 MTXF Lunch Bot started
+Trading window: 11:30 - 13:00
+
+✅ ORDER FILLED
+BUY 1 MTXF @ 17850
+Position: 1
+
+💰 POSITION CLOSED
+Reason: Target hit
+P&L: +1200 TWD
+Daily P&L: +1200 TWD
+
+📊 DAILY SUMMARY
+Final P&L: +1200 TWD
+Status: ✅ Profitable
+```
 
 ---
 
-## 🛡️ Risk Disclaimer
+## 🛡️ Risk Management
 
-This software is for **educational purposes only**. Trading involves substantial risk of loss. Past performance does not guarantee future results. Always test in simulation mode before deploying capital.
+- **Max Position**: 1 contract (no pyramiding)
+- **Daily Loss Limit**: -4,500 TWD → emergency shutdown
+- **Trading Window**: 11:30-13:00 only (no overnight risk)
+- **Auto-Flatten**: All positions closed at 13:00 sharp
+- **News Veto**: AI blocks trades during major events
 
-**Conservative by Design:**
-- 80,000 TWD starting capital (small account size)
-- Stop-loss on every trade
-- AI veto layer for risk mitigation
-- Earnings blackout periods
-- Position sizing limits
+---
 
-**You are responsible for your own trading decisions.**
+## 🔧 Customization
+
+### Strategy Parameters
+Edit `python/bridge.py` line 90-110:
+```python
+# Your custom strategy logic
+if momentum_3m > 0.001 and volume_imbalance > 1.5:
+    direction = "LONG"
+    confidence = 0.75
+```
+
+### Risk Limits
+Edit `application.yml`:
+```yaml
+trading:
+  risk:
+    max-position: 1  # Increase to 2-3 contracts
+    daily-loss-limit: 4500  # Adjust to your risk tolerance
+```
+
+---
+
+## 📈 Roadmap
+
+- [x] Core trading engine
+- [x] Shioaji integration
+- [x] Llama 3.1 8B news veto
+- [x] Telegram alerts
+- [ ] Backtesting framework
+- [ ] Web dashboard (React + Chart.js)
+- [ ] Multi-contract support
+- [ ] Machine learning entry optimization
+
+---
+
+## ⚠️ Disclaimer
+
+**This bot trades REAL MONEY in Taiwan futures markets.**
+
+- Test thoroughly in simulation mode (2-4 weeks minimum)
+- Understand MTXF margin requirements (~40,000 TWD/contract)
+- Past performance ≠ future results
+- Trading involves risk of loss
+- Author not liable for financial losses
+
+**Start with paper trading. Only go live when consistently profitable.**
+
+---
+
+## 📞 Support
+
+- 🐛 Issues: [GitHub Issues](https://github.com/YOUR_USERNAME/mtxf-bot/issues)
+- 📧 Email: your-email@example.com
+- 💬 Telegram: @your_handle
+
+---
+
+## 📄 License
+
+MIT License - See LICENSE file
+
+---
+
+**Built with ❤️ for Taiwan retail traders. May your P&L always be green! 🚀📈**
