@@ -13,6 +13,7 @@ import java.util.List;
 public class TradingProperties {
     
     private Window window = new Window();
+    private Stock stock = new Stock();
     private Risk risk = new Risk();
     private Bridge bridge = new Bridge();
     
@@ -23,6 +24,14 @@ public class TradingProperties {
     public static class Window {
         private String start = "11:30";
         private String end = "13:00";
+    }
+    
+    @Data
+    public static class Stock {
+        /** Base shares for stock mode (55 shares ≈79k TWD at NT$1,445/share TSMC) */
+        private int initialShares = 55;
+        /** Additional shares per 20k equity above 80k base */
+        private int shareIncrement = 27;
     }
     
     @Data

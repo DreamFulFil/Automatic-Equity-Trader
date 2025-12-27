@@ -13,6 +13,11 @@ trading:
     start: "11:30"
     end: "13:00"
   
+  # Stock mode settings (for 80k capital at NT$1,445/share TSMC)
+  stock:
+    initial-shares: 55        # Base: 55 shares (≈79k NTD at NT$1,445/share)
+    share-increment: 27       # +27 shares for every additional 20k equity
+  
   # Risk limits - NO PROFIT CAPS, unlimited upside
   risk:
     max-position: 4           # Auto-scaling: 1-4 contracts based on equity + 30d profit

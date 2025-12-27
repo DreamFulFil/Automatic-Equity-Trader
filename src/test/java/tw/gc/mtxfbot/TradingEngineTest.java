@@ -42,6 +42,9 @@ class TradingEngineTest {
     private TradingProperties.Window window;
 
     @Mock
+    private TradingProperties.Stock stock;
+
+    @Mock
     private TradingProperties.Risk risk;
 
     @Mock
@@ -61,10 +64,13 @@ class TradingEngineTest {
     @BeforeEach
     void setUp() {
         when(tradingProperties.getWindow()).thenReturn(window);
+        when(tradingProperties.getStock()).thenReturn(stock);
         when(tradingProperties.getRisk()).thenReturn(risk);
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(window.getStart()).thenReturn("11:30");
         when(window.getEnd()).thenReturn("13:00");
+        when(stock.getInitialShares()).thenReturn(55);
+        when(stock.getShareIncrement()).thenReturn(27);
         when(risk.getMaxPosition()).thenReturn(1);
         when(risk.getDailyLossLimit()).thenReturn(4500);
         when(risk.getWeeklyLossLimit()).thenReturn(15000);
@@ -72,7 +78,7 @@ class TradingEngineTest {
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         
         when(contractScalingService.getMaxContracts()).thenReturn(1);
-        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(contractScalingService.getLastEquity()).thenReturn(80000.0);
         when(contractScalingService.getLast30DayProfit()).thenReturn(0.0);
         
         when(riskManagementService.getWeeklyPnL()).thenReturn(0.0);

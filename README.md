@@ -19,24 +19,29 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 
 | Mode | Instrument | Default Quantity | Scaling |
 |------|------------|------------------|---------|
-| **stock** (default) | 2330.TW (TSMC odd lots) | 67 shares | +33 per 100k equity |
+| **stock** (default) | 2330.TW (TSMC odd lots) | 55 shares (≈79k NTD) | +27 shares per 20k equity |
 | **futures** | MTXF (Mini-TXF) | 1-4 contracts | Based on equity + 30d profit |
 
 ### Usage
 
 ```bash
-# Stock mode (default) - trades 2330.TW odd lots
+# Stock mode (default) - trades 2330.TW odd lots (perfect for 80k capital)
 ./start-lunch-bot.fish YOUR_PASSWORD
 
 # Futures mode - trades MTXF contracts
 ./start-lunch-bot.fish YOUR_PASSWORD futures
 ```
 
+### Stock Mode Sizing (for 80k Capital)
+- **Base:** 55 shares at NT$1,445/share = ~79,475 TWD (fits 80k capital perfectly)
+- **Scaling:** +27 shares for every additional 20k equity above 80k
+- **Example:** 100k equity → 55 + (20k÷20k)×27 = 82 shares
+
 ### Key Features
 - **One command switches everything** - no config edits, no rebuild
 - **Strict mode separation** - NO futures calls in stock mode and vice versa
 - **Same signals, veto, risk limits** - identical strategy for both modes
-- **Mode shown in Telegram** - "Bot started — Mode: STOCK (2330.TW odd lots)"
+- **Mode shown in Telegram** - "Bot started — Mode: STOCK (2330.TW odd lots, 55 shares)"
 - **Crontab stays safe** - default (no argument) = stock mode
 
 ---
@@ -844,5 +849,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: December 2025 (v2.0 - Dual-Mode Stock/Futures + All Elite Upgrades)*
+*Last Updated: December 2025 (v2.1 - Dual-Mode with 55-Share TSMC for 80k Capital)*
 *Owner: DreamFulFil | Status: 100/100 Complete*
