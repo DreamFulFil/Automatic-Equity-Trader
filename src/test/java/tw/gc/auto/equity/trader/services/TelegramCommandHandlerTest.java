@@ -73,7 +73,12 @@ class TelegramCommandHandlerTest {
             telegramService, tradingStateService, positionManager, riskManagementService,
             contractScalingService, stockSettingsService, shioajiSettingsService, llmService,
             orderExecutionService, applicationContext, riskSettingsService,
-            mockActiveStrategyService, mockStrategyPerformanceService, mockActiveStockService
+            mockActiveStrategyService, mockStrategyPerformanceService, mockActiveStockService,
+            mock(tw.gc.auto.equity.trader.services.BacktestService.class),
+            mock(tw.gc.auto.equity.trader.services.HistoryDataService.class),
+            mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class),
+            mock(tw.gc.auto.equity.trader.services.AutoStrategySelector.class),
+            mock(tw.gc.auto.equity.trader.services.SystemConfigService.class)
         );
         
         // Register commands to trigger internal registration logic (though we test handlers directly via reflection or by invoking registered callbacks if we could access them, but here we might need to expose handlers or test via side effects)

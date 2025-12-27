@@ -2,7 +2,6 @@ package tw.gc.auto.equity.trader.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.gc.auto.equity.trader.entities.StrategyPerformance;
@@ -26,8 +25,11 @@ public class AutoStrategySelector {
     private final ShadowModeStockService shadowModeStockService;
     private final TelegramService telegramService;
 
+    /**
+     * Manual trigger for strategy selection - can be called via REST API or Telegram command.
+     * Selection is based on backtest data, simulation stats, and LLM insights.
+     */
     @Transactional
-    @Scheduled(cron = "0 30 8 * * MON-FRI") // Daily at 08:30 before market opens
     public void selectBestStrategyAndStock() {
         log.info("🤖 AUTO-SELECTION: Starting daily strategy and stock selection...");
         
@@ -148,7 +150,7 @@ public class AutoStrategySelector {
     
     @Transactional
     public void selectShadowModeStrategies() {
-        log.info("🌙 AUTO-SELECTION: Selecting top 5 shadow mode strategies...");
+        log.info("🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies...");
         
         // Group all mappings by symbol and find best strategy per stock
         List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
@@ -167,16 +169,16 @@ public class AutoStrategySelector {
             }
         }
         
-        // Select top 5 unique stocks by score
+        // Select top 10 unique stocks by score (expanded from 5)
         List<StrategyStockMapping> topStrategies = bestPerStock.values().stream()
             .sorted((a, b) -> Double.compare(calculateScore(b), calculateScore(a)))
-            .limit(5)
+            .limit(10)
             .toList();
         
         // Clear existing shadow mode stocks
         shadowModeStockService.clearAll();
         
-        // Add top 5 unique stocks
+        // Add top 10 unique stocks
         for (StrategyStockMapping mapping : topStrategies) {
             shadowModeStockService.addShadowStock(
                 mapping.getSymbol(), 
@@ -189,7 +191,7 @@ public class AutoStrategySelector {
         }
         
         if (!topStrategies.isEmpty()) {
-            StringBuilder msg = new StringBuilder("🌙 *Shadow Mode Strategies*\n\n");
+            StringBuilder msg = new StringBuilder("🌙 *Shadow Mode Strategies (Top 10)*\n\n");
             for (int i = 0; i < topStrategies.size(); i++) {
                 StrategyStockMapping m = topStrategies.get(i);
                 msg.append(String.format("%d. %s + %s\n   Return: %.2f%%, Sharpe: %.2f\n",

@@ -39,4 +39,6 @@ public interface BarRepository extends JpaRepository<Bar, Long> {
         @Param("since") LocalDateTime since);
     
     List<Bar> findBySymbolAndTimeframeAndIsCompleteTrue(String symbol, String timeframe);
+    
+    boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, String timeframe);
 }

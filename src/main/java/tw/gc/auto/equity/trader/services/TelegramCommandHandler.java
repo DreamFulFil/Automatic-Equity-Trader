@@ -10,11 +10,17 @@ import tw.gc.auto.equity.trader.services.RiskSettingsService;
 import tw.gc.auto.equity.trader.services.StockSettingsService;
 import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 import tw.gc.auto.equity.trader.services.ContractScalingService;
+import tw.gc.auto.equity.trader.services.BacktestService;
+import tw.gc.auto.equity.trader.services.HistoryDataService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.entities.MarketData;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -37,6 +43,11 @@ public class TelegramCommandHandler {
     private final ActiveStrategyService activeStrategyService;
     private final StrategyPerformanceService strategyPerformanceService;
     private final ActiveStockService activeStockService;
+    private final BacktestService backtestService;
+    private final HistoryDataService historyDataService;
+    private final MarketDataRepository marketDataRepository;
+    private final AutoStrategySelector autoStrategySelector;
+    private final SystemConfigService systemConfigService;
 
     public void registerCommands(List<IStrategy> activeStrategies) {
         telegramService.registerCommandHandlers(
@@ -112,6 +123,31 @@ public class TelegramCommandHandler {
         // Register /change-stock command
         telegramService.registerCustomCommand("/change-stock", args -> {
             handleChangeStock(args);
+        });
+        
+        // Register /backtest command
+        telegramService.registerCustomCommand("/backtest", args -> {
+            handleBacktest(args);
+        });
+        
+        // Register /download-history command
+        telegramService.registerCustomCommand("/download-history", args -> {
+            handleDownloadHistory(args);
+        });
+        
+        // Register /auto-strategy-select command
+        telegramService.registerCustomCommand("/auto-strategy-select", args -> {
+            handleAutoStrategySelect();
+        });
+        
+        // Register /config command
+        telegramService.registerCustomCommand("/config", args -> {
+            handleConfigCommand(args);
+        });
+        
+        // Register /show-configs command
+        telegramService.registerCustomCommand("/show-configs", args -> {
+            handleShowConfigs();
         });
     }
     
@@ -353,6 +389,161 @@ public class TelegramCommandHandler {
         );
     }
     
+    private void handleBacktest(String args) {
+        if (args == null || args.trim().isEmpty()) {
+            telegramService.sendMessage(
+                "📊 BACKTEST\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Usage: /backtest <symbol> <days>\n\n" +
+                "Example: /backtest 2330.TW 365\n\n" +
+                "Runs all 54 strategies against historical data.\n" +
+                "Results saved to strategy_stock_mapping table."
+            );
+            return;
+        }
+        
+        String[] parts = args.trim().split("\\s+");
+        if (parts.length < 2) {
+            telegramService.sendMessage("❌ Invalid format. Use: /backtest <symbol> <days>");
+            return;
+        }
+        
+        final String symbol = parts[0].toUpperCase();
+        final int days;
+        
+        try {
+            days = Integer.parseInt(parts[1]);
+            if (days <= 0 || days > 3650) {
+                telegramService.sendMessage("❌ Days must be between 1 and 3650");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            telegramService.sendMessage("❌ Invalid days: " + parts[1]);
+            return;
+        }
+        
+        telegramService.sendMessage(String.format("🚀 Starting backtest for %s (%d days)...", symbol, days));
+        
+        new Thread(() -> {
+            try {
+                LocalDateTime end = LocalDateTime.now();
+                LocalDateTime start = end.minusDays(days);
+                
+                List<MarketData> history = marketDataRepository
+                    .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+                        symbol, MarketData.Timeframe.DAY_1, start, end);
+                
+                if (history.isEmpty()) {
+                    telegramService.sendMessage(String.format(
+                        "❌ No historical data found for %s\n" +
+                        "Use /download-history %s first", symbol, symbol));
+                    return;
+                }
+                
+                List<IStrategy> strategies = new ArrayList<>();
+                strategies.addAll(applicationContext.getBeansOfType(IStrategy.class).values());
+                
+                Map<String, BacktestService.BacktestResult> results = 
+                    backtestService.runBacktest(strategies, history, 80000.0);
+                
+                BacktestService.BacktestResult best = results.values().stream()
+                    .max((a, b) -> Double.compare(a.getTotalReturnPercentage(), b.getTotalReturnPercentage()))
+                    .orElse(null);
+                
+                if (best != null) {
+                    telegramService.sendMessage(String.format(
+                        "✅ BACKTEST COMPLETE\n" +
+                        "━━━━━━━━━━━━━━━━\n" +
+                        "Symbol: %s\n" +
+                        "Period: %d days (%d bars)\n" +
+                        "Strategies tested: %d\n\n" +
+                        "🏆 BEST PERFORMER:\n" +
+                        "Strategy: %s\n" +
+                        "Return: %.2f%%\n" +
+                        "Sharpe: %.2f\n" +
+                        "Max DD: %.2f%%\n" +
+                        "Win Rate: %.2f%%\n" +
+                        "Trades: %d",
+                        symbol, days, history.size(), results.size(),
+                        best.getStrategyName(),
+                        best.getTotalReturnPercentage(),
+                        best.getSharpeRatio(),
+                        best.getMaxDrawdownPercentage(),
+                        best.getWinRate(),
+                        best.getTotalTrades()
+                    ));
+                } else {
+                    telegramService.sendMessage("✅ Backtest complete but no results");
+                }
+                
+            } catch (Exception e) {
+                log.error("Backtest failed", e);
+                telegramService.sendMessage("❌ Backtest failed: " + e.getMessage());
+            }
+        }).start();
+    }
+    
+    private void handleDownloadHistory(String args) {
+        if (args == null || args.trim().isEmpty()) {
+            telegramService.sendMessage(
+                "📥 DOWNLOAD HISTORY\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Usage: /download-history <symbol> [years]\n\n" +
+                "Example: /download-history 2330.TW 5\n\n" +
+                "Downloads historical data from Yahoo Finance.\n" +
+                "Default: 10 years"
+            );
+            return;
+        }
+        
+        String[] parts = args.trim().split("\\s+");
+        final String symbol = parts[0].toUpperCase();
+        final int years;
+        
+        if (parts.length > 1) {
+            try {
+                years = Integer.parseInt(parts[1]);
+                if (years <= 0 || years > 20) {
+                    telegramService.sendMessage("❌ Years must be between 1 and 20");
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                telegramService.sendMessage("❌ Invalid years: " + parts[1]);
+                return;
+            }
+        } else {
+            years = 10;
+        }
+        
+        telegramService.sendMessage(String.format("📥 Downloading %d years of data for %s...", years, symbol));
+        
+        new Thread(() -> {
+            try {
+                HistoryDataService.DownloadResult result = 
+                    historyDataService.downloadHistoricalData(symbol, years);
+                
+                telegramService.sendMessage(String.format(
+                    "✅ DOWNLOAD COMPLETE\n" +
+                    "━━━━━━━━━━━━━━━━\n" +
+                    "Symbol: %s\n" +
+                    "Total records: %d\n" +
+                    "Inserted: %d\n" +
+                    "Skipped (duplicates): %d\n\n" +
+                    "💡 Use /backtest %s <days> to test strategies",
+                    result.getSymbol(),
+                    result.getTotalRecords(),
+                    result.getInserted(),
+                    result.getSkipped(),
+                    symbol
+                ));
+                
+            } catch (Exception e) {
+                log.error("Download failed", e);
+                telegramService.sendMessage("❌ Download failed: " + e.getMessage());
+            }
+        }).start();
+    }
+    
     /**
      * Handle /change-stock command to change the active trading stock
      */
@@ -421,5 +612,57 @@ public class TelegramCommandHandler {
                 e.getMessage(), oldStock
             ));
         }
+    }
+    
+    /**
+     * Handle /auto-strategy-select command
+     * Manually triggers the auto strategy selection based on backtest data, simulation stats, and LLM insights
+     */
+    private void handleAutoStrategySelect() {
+        telegramService.sendMessage("🎯 Starting auto-selection process...\n" +
+            "Analyzing backtest results, simulation stats, and applying AI filters...");
+        
+        new Thread(() -> {
+            try {
+                autoStrategySelector.selectBestStrategyAndStock();
+                telegramService.sendMessage("✅ Auto-selection completed successfully!");
+            } catch (Exception e) {
+                log.error("Auto-selection failed", e);
+                telegramService.sendMessage("❌ Auto-selection failed: " + e.getMessage());
+            }
+        }).start();
+    }
+    
+    /**
+     * Handle /config command
+     */
+    private void handleConfigCommand(String args) {
+        if (args == null || args.trim().isEmpty() || args.trim().equalsIgnoreCase("help")) {
+            telegramService.sendMessage(systemConfigService.getConfigHelp());
+            return;
+        }
+        
+        String[] parts = args.trim().split("\\s+", 2);
+        if (parts.length < 2) {
+            telegramService.sendMessage("❌ Usage: /config <key> <value>\nExample: /config daily_loss_limit 2000");
+            return;
+        }
+        
+        String key = parts[0].toLowerCase();
+        String value = parts[1].trim();
+        
+        String error = systemConfigService.validateAndSetConfig(key, value);
+        if (error != null) {
+            telegramService.sendMessage(error);
+        } else {
+            telegramService.sendMessage(String.format("✅ Config updated\n%s = %s", key, value));
+        }
+    }
+    
+    /**
+     * Handle /show-configs command
+     */
+    private void handleShowConfigs() {
+        telegramService.sendMessage(systemConfigService.getAllConfigsFormatted());
     }
 }

@@ -67,6 +67,11 @@ public class Trade {
     @Column(name = "trade_status")
     @Builder.Default
     private TradeStatus status = TradeStatus.OPEN;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "asset_type")
+    @Builder.Default
+    private AssetType assetType = AssetType.STOCK;
     
     public enum TradeAction {
         BUY, SELL
@@ -78,5 +83,10 @@ public class Trade {
     
     public enum TradeStatus {
         OPEN, CLOSED, CANCELLED
+    }
+    
+    public enum AssetType {
+        STOCK,
+        FUTURE
     }
 }

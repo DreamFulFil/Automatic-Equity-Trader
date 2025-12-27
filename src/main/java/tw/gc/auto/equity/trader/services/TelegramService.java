@@ -231,7 +231,10 @@ public class TelegramService {
                     "/confirmlive - Confirm live switch within 10m\n" +
                     "/backtosim - Switch to simulation\n" +
                     "/change-share <number> - Change base shares\n" +
-                    "/change-increment <number> - Change share increment");
+                    "/change-increment <number> - Change share increment\n" +
+                    "/auto-strategy-select - Run auto selection\n" +
+                    "/config <key> <value> - Set config\n" +
+                    "/show-configs - Show all configs");
         }
     }
     

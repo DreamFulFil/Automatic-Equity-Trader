@@ -299,6 +299,70 @@ public class RiskManagerAgent extends BaseAgent {
         );
     }
 
+    /**
+     * Returns the system prompt for LLM-based risk assessment.
+     * This prompt defines the Paranoid Risk Manager role for Taiwan Stock Trading.
+     */
+    public static String getRiskManagerSystemPrompt() {
+        return """
+            **Role:** Paranoid Risk Manager for Taiwan Stock Trading.
+            **Goal:** Capital Preservation / VETO by default.
+            **Constraints:**
+            1. News Sentiment: VETO if any major negative news affecting the market or specific stock
+            2. Daily Drawdown: VETO if daily loss exceeds 1,500 TWD
+            3. Weekly Drawdown: VETO if weekly loss exceeds 5,000 TWD
+            4. Monthly Drawdown: VETO if monthly loss exceeds 7,000 TWD
+            5. Trade Frequency: VETO if more than 10 trades executed in past 24 hours
+            6. Strategy Probation: VETO if strategy has <55% win rate over last 20 trades
+            7. Volatility Check: VETO if ATR is >3x normal levels
+            8. Gap Risk: VETO if overnight gap risk detected
+            9. Earnings Proximity: VETO if within 3 days of earnings announcement
+            10. Liquidity Check: VETO if bid-ask spread is abnormally wide
+
+            **Output Format:** Strictly `APPROVE` or `VETO: <reason>`.
+            """;
+    }
+
+    /**
+     * Build a comprehensive state snapshot for LLM context injection.
+     * Includes P&L, drawdown, trade count, strategy age, and volatility flags.
+     */
+    public Map<String, Object> buildStateSnapshot(TradingMode mode) {
+        Map<String, Object> snapshot = new HashMap<>();
+        
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
+        LocalDateTime startOfWeek = now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay();
+        LocalDateTime startOfMonth = now.toLocalDate().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime last24Hours = now.minusHours(24);
+        
+        double dailyPnL = tradeRepo != null ? tradeRepo.sumPnLSince(mode, startOfDay) : 0;
+        double weeklyPnL = tradeRepo != null ? tradeRepo.sumPnLSince(mode, startOfWeek) : 0;
+        double monthlyPnL = tradeRepo != null ? tradeRepo.sumPnLSince(mode, startOfMonth) : 0;
+        
+        long tradesLast24h = tradeRepo != null ? tradeRepo.countTradesSince(mode, last24Hours) : 0;
+        
+        int dailyLimitCfg = resolveLimit(BotSettings.DAILY_LOSS_LIMIT, dailyLossLimit);
+        int weeklyLimitCfg = resolveLimit(BotSettings.WEEKLY_LOSS_LIMIT, weeklyLossLimit);
+        
+        double dailyDrawdownPct = dailyLimitCfg > 0 ? (dailyPnL / dailyLimitCfg) * 100 : 0;
+        double weeklyDrawdownPct = weeklyLimitCfg > 0 ? (weeklyPnL / weeklyLimitCfg) * 100 : 0;
+        
+        snapshot.put("daily_pnl", dailyPnL);
+        snapshot.put("weekly_pnl", weeklyPnL);
+        snapshot.put("monthly_pnl", monthlyPnL);
+        snapshot.put("daily_drawdown_pct", dailyDrawdownPct);
+        snapshot.put("weekly_drawdown_pct", weeklyDrawdownPct);
+        snapshot.put("trades_last_24h", tradesLast24h);
+        snapshot.put("daily_limit", dailyLimitCfg);
+        snapshot.put("weekly_limit", weeklyLimitCfg);
+        snapshot.put("mode", mode.name());
+        snapshot.put("state", state.name());
+        snapshot.put("timestamp", now.toString());
+        
+        return snapshot;
+    }
+
     private int resolveLimit(String key, int defaultValue) {
         return botSettingsRepository.findByKey(key)
                 .map(BotSettings::getValue)

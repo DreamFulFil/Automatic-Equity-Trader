@@ -207,6 +207,16 @@ public class DailyStatistics {
     @Column(name = "trading_mode")
     private Trade.TradingMode tradingMode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "asset_type")
+    @Builder.Default
+    private AssetType assetType = AssetType.STOCK;
+
     @Column(length = 500)
     private String notes; // Manual notes or observations
+    
+    public enum AssetType {
+        STOCK,
+        FUTURE
+    }
 }
