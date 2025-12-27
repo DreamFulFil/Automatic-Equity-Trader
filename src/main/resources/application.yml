@@ -21,18 +21,19 @@ trading:
 
 # Telegram bot configuration
 telegram:
-  bot-token: "YOUR_TELEGRAM_BOT_TOKEN"
-  chat-id: "YOUR_TELEGRAM_CHAT_ID"
+  bot-token: "ENC(zhPmZqsWyPszF/4uiTNaqVhibSgO7LgXcAvITv3vL2KZt5R9BG+F9c6yOjy8lsjt7VmbKMRHt+w=)"
+  chat-id: ENC(OWDtjgnAjrtdlx+XBMO/neVd30Wc8nX7)
   enabled: true
 
 # Shioaji credentials (used by Python bridge)
 shioaji:
-  api-key: "YOUR_SHIOAJI_API_KEY"
-  secret-key: "YOUR_SHIOAJI_SECRET_KEY"
-  ca-path: "/path/to/Sinopac.pfx"
-  ca-password: "YOUR_CA_PASSWORD"
+  api-key: "ENC(V+vPahEF6gsi0hxvenBkxkLZvsfK+muifnbG5sRwqgvkCKJKehsLo29pSWGytjX8EPLvAIW+n3Q=)"
+  secret-key: "ENC(3gPVavnlQYhDfpoI5hCPLdETkJxwGdxgtcoBXwYEbG5MojYD6HsiW16r7WMo23q2rOytquA8u80=)"
+  ca-path: "/Users/gc/Downloads/work/stock/mtxf-bot/Sinopac.pfx"
+  ca-password: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
+  person-id: "ENC(T/0mMsexOIlSp3CqMdtqENRugQ0gezU7)"
   # Set to true for paper trading
-  simulation: true
+  simulation: false
 
 # Ollama configuration
 ollama:
@@ -42,7 +43,7 @@ ollama:
 logging:
   level:
     root: INFO
-    tw.gc.mtxfbot: DEBUG
+    '[tw.gc.mtxfbot]': DEBUG
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   file:
