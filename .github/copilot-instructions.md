@@ -37,10 +37,37 @@
    - During development, always run only unit tests: `./run-tests.sh --unit <jasypt-password>`
    - Before any commit or push, you must run the full test suite: `./run-tests.sh <jasypt-password>` and all tests must pass. **This is the primary and only test entry point; it executes the full suite (unit, integration, and e2e). A successful exit from this script is the absolute requirement for completion.**
 2. Wait for all tests within the script to finish. If any part fails, you must fix the code and restart the verification.
-3. **Final Documentation:** If successful, update `README.MD` concisely. Do not add new files to `docs/`.
-4. `git add .`
-5. `git commit` with a clear, descriptive message.
-6. `git push` to the current branch.
+3. **Semantic Versioning (Automatic):**
+   - After tests pass, update the `VERSION` file according to the commit type:
+     - **Minor bump (+0.1.0):** `feat:`, `perf:`, `refactor:` commits
+     - **Patch bump (+0.0.1):** `fix:`, `chore:`, `docs:`, `ci:`, `test:` commits
+   - Version must remain in `0.x.y` range (never reach 1.0.0)
+   - Example: If current VERSION is `0.79.0` and commit is `feat: add new feature`, update to `0.80.0`
+4. **Git Tag Creation (Minor versions only):**
+   - If the bump is a minor version (feat, perf, refactor), create an annotated git tag:
+     ```bash
+     git tag -a "v0.X.0" -m "Release v0.X.0"
+     ```
+   - Patch versions do NOT get tags (only tracked in VERSION file)
+5. **GitHub Release Creation (Minor versions only):**
+   - For minor version bumps, create a GitHub release:
+     ```bash
+     # Generate release body from commit message (no hashes, clean markdown)
+     # Use GitHub API or gh CLI
+     gh release create "v0.X.0" --title "v0.X.0" --notes "## <Type>\n\n- <commit message>"
+     ```
+   - Release body format:
+     ```markdown
+     ## Features (or Performance/Refactoring)
+     
+     - <commit description>
+     ```
+6. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
+7. **Commit & Push:**
+   - `git add .` (includes VERSION file)
+   - `git commit` with a clear, descriptive Conventional Commits message
+   - `git push origin <branch>`
+   - `git push origin --tags` (if tag was created)
 
 **Test Protection Policy**
 
