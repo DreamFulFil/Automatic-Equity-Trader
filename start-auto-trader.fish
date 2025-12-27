@@ -261,6 +261,8 @@ function supervise_python_bridge
         echo "🔄 [Supervisor] Starting Python bridge (attempt "(math $restart_count + 1)")..." >> $BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD $JASYPT_SECRET
+        set -x POSTGRES_PASSWORD "WSYS1r0PE0Ig0iuNX2aNi5k7"
+        set -x TRADING_MODE $TRADING_MODE
         # Use venv Python explicitly
         $BOT_DIR/python/venv/bin/python bridge.py >> $BOT_DIR/logs/python-bridge.log 2>&1
         set -l exit_code $status
@@ -300,6 +302,7 @@ nohup fish -c "
         echo '🔄 [Supervisor] Starting Python bridge (attempt '(math \$restart_count + 1)')...' >> \$BOT_DIR/logs/supervisor.log
         
         set -x JASYPT_PASSWORD \$JASYPT_SECRET
+        set -x POSTGRES_PASSWORD 'WSYS1r0PE0Ig0iuNX2aNi5k7'
         set -x TRADING_MODE \$TRADING_MODE
         # Use venv Python explicitly
         \$BOT_DIR/python/venv/bin/python bridge.py >> \$BOT_DIR/logs/python-bridge.log 2>&1

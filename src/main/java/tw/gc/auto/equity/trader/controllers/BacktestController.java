@@ -15,6 +15,7 @@ import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
+import tw.gc.auto.equity.trader.services.AutoStrategySelector;
 import tw.gc.auto.equity.trader.services.BacktestService;
 import tw.gc.auto.equity.trader.services.DataOperationsService;
 import tw.gc.auto.equity.trader.services.TaiwanStockNameService;
@@ -32,6 +33,7 @@ public class BacktestController {
     private final StrategyStockMappingRepository mappingRepository;
     private final DataOperationsService dataOperationsService;
     private final TaiwanStockNameService stockNameService;
+    private final AutoStrategySelector autoStrategySelector;
 
     // ========================================================================
     // SINGLE STOCK BACKTEST
@@ -251,6 +253,24 @@ public class BacktestController {
         log.info("🎯 Auto-selecting best strategy (sharpe>={}, return>={}, winRate>={})", 
                 minSharpe, minReturn, minWinRate);
         return dataOperationsService.autoSelectBestStrategy(minSharpe, minReturn, minWinRate);
+    }
+    
+    @PostMapping("/select-strategy-direct")
+    public Map<String, Object> autoSelectStrategyDirect() {
+        log.info("🎯 Auto-selecting best strategy (direct Java call)");
+        try {
+            autoStrategySelector.selectBestStrategyAndStock();
+            return Map.of(
+                "status", "success",
+                "message", "Strategy selection completed successfully"
+            );
+        } catch (Exception e) {
+            log.error("Failed to select strategy", e);
+            return Map.of(
+                "status", "error",
+                "message", "Failed to select strategy: " + e.getMessage()
+            );
+        }
     }
 
     @PostMapping("/full-pipeline")
