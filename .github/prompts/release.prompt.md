@@ -194,4 +194,15 @@ curl -sS -X PATCH \
 # Validate the operation: check HTTP code and saved log for success or failure
 ```
 
+Convenience: update an existing release body
+- Use `scripts/operational/update-release-body.sh <tag> <body-file>` to PATCH an existing release body by tag (this repository includes example bodies under `scripts/operational/release-bodies/`).
+
+Troubleshooting & Tips
+- If you see an HTTP 4xx/5xx from the API:
+  - Confirm `GITHUB_TOKEN` is exported and has `repo` scope.
+  - Confirm the annotated tag `v${NEW_VERSION}` exists on `origin` (use `git ls-remote --tags origin`).
+  - Check the log file in `logs/` for the full request/response and JSON error details.
+- Shells: if using fish, prefer `$GITHUB_TOKEN` (no braces) in curl header values, or run the commands via `bash -lc "..."`.
+- Validation: the API returns HTTP 201 for successful creation (POST) and HTTP 200 for successful updates (PATCH). The response includes `html_url` and `published_at` when published.
+
 End of instructions
