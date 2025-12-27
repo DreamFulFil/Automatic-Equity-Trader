@@ -13,6 +13,7 @@ import tw.gc.mtxfbot.config.TradingProperties;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,6 +25,8 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,12 +54,17 @@ public class TradingEngine {
     // Explicit timezone for Taiwan futures trading
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
     private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
+    private static final String EARNINGS_BLACKOUT_FILE = "config/earnings-blackout-dates.json";
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final TelegramService telegramService;
     private final TradingProperties tradingProperties;
     private final ApplicationContext applicationContext;
+    
+    // Earnings blackout dates loaded from JSON
+    private final Set<String> earningsBlackoutDates = new HashSet<>();
+    private String earningsBlackoutStock = null; // Which stock triggered blackout
     
     // Position and P&L tracking
     private final AtomicInteger currentPosition = new AtomicInteger(0);
@@ -85,6 +93,9 @@ public class TradingEngine {
         // Load weekly P&L from file (persists across restarts)
         loadWeeklyPnL();
         
+        // Load earnings blackout dates from JSON file
+        loadEarningsBlackoutDates();
+        
         // Check if today is earnings blackout day
         checkEarningsBlackout();
         
@@ -111,7 +122,8 @@ public class TradingEngine {
             tradingProperties.getRisk().getMaxHoldMinutes(),
             weeklyPnL.get(),
             weeklyLimitHit ? "\n⚠️ WEEKLY LIMIT HIT - Paused until Monday" : "",
-            earningsBlackout ? "\n📅 EARNINGS BLACKOUT - No trading today" : ""
+            earningsBlackout ? String.format("\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
+                earningsBlackoutStock != null ? earningsBlackoutStock : "earnings day") : ""
         );
         telegramService.sendMessage(startupMessage);
         
@@ -211,12 +223,43 @@ public class TradingEngine {
     }
     
     /**
+     * Load earnings blackout dates from config/earnings-blackout-dates.json
+     * This file is updated daily at 09:00 by the Python scraper
+     */
+    private void loadEarningsBlackoutDates() {
+        try {
+            File file = new File(EARNINGS_BLACKOUT_FILE);
+            if (!file.exists()) {
+                log.warn("📅 Earnings blackout file not found: {} - no blackout dates loaded", EARNINGS_BLACKOUT_FILE);
+                return;
+            }
+            
+            JsonNode root = objectMapper.readTree(file);
+            JsonNode dates = root.path("dates");
+            
+            if (dates.isArray()) {
+                for (JsonNode dateNode : dates) {
+                    earningsBlackoutDates.add(dateNode.asText());
+                }
+            }
+            
+            String lastUpdated = root.path("last_updated").asText("unknown");
+            log.info("📅 Loaded {} earnings blackout dates (last updated: {})", 
+                earningsBlackoutDates.size(), lastUpdated);
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to load earnings blackout dates: {}", e.getMessage());
+        }
+    }
+    
+    /**
      * Check if today is an earnings blackout day
      */
     private void checkEarningsBlackout() {
         String today = LocalDate.now(TAIPEI_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        if (tradingProperties.getEarningsBlackoutDates().contains(today)) {
+        if (earningsBlackoutDates.contains(today)) {
             earningsBlackout = true;
+            earningsBlackoutStock = "TSMC/major earnings"; // Could be enhanced to show which stock
             log.warn("📅 EARNINGS BLACKOUT DAY: {}", today);
         }
     }

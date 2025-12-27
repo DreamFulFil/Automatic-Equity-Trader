@@ -22,14 +22,9 @@ trading:
     # NO daily-profit-cap - let winners run!
     # NO monthly-profit-cap - unlimited upside!
   
-  # Earnings blackout dates - bot stays flat on these days
-  # Format: YYYY-MM-DD (Taiwan company earnings, FOMC, major events)
-  earnings-blackout-dates:
-    - "2026-01-16"  # TSMC Q4 2025 earnings
-    - "2026-04-17"  # TSMC Q1 2026 earnings
-    - "2026-07-18"  # TSMC Q2 2026 earnings
-    - "2026-10-17"  # TSMC Q3 2026 earnings
-    # Add more dates as needed
+  # Earnings blackout dates are now auto-scraped from Yahoo Finance
+  # Stored in: config/earnings-blackout-dates.json
+  # Updated daily at 09:00 via cron: python3 python/bridge.py --scrape-earnings
   
   # Python bridge
   bridge:
