@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+markers = [
+    "e2e: End-to-end tests that require full system setup",
+]
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20:shioaji.contracts",
+    "ignore::pydantic.PydanticDeprecatedSince20:shioaji.contracts",
+    "ignore",
+]

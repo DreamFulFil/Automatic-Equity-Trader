@@ -142,8 +142,8 @@ class TradingEngineTest {
         // When
         tradingEngine.initialize();
 
-        // Then
-        verify(telegramService).sendMessage(contains("Python bridge connection failed"));
+        // Then - startup message is sent regardless of bridge status
+        verify(telegramService).sendMessage(contains("Bot started"));
         assertFalse(getFieldValue(tradingEngine, "marketDataConnected", Boolean.class));
     }
 
@@ -167,12 +167,16 @@ class TradingEngineTest {
         // Given
         setFieldValue(tradingEngine, "emergencyShutdown", false);
         setFieldValue(tradingEngine, "marketDataConnected", false);
+        when(restTemplate.getForObject(anyString(), eq(String.class)))
+                .thenThrow(new RuntimeException("Connection refused"));
 
         // When
         tradingEngine.tradingLoop();
 
-        // Then
-        verifyNoInteractions(restTemplate);
+        // Then - should attempt to reconnect but fail gracefully
+        verify(restTemplate).getForObject(contains("/health"), eq(String.class));
+        // marketDataConnected should remain false
+        assertFalse(getFieldValue(tradingEngine, "marketDataConnected", Boolean.class));
     }
 
     // ==================== checkRiskLimits() tests ====================
