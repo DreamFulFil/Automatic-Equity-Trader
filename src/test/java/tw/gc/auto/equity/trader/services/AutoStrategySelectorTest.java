@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
-import tw.gc.auto.equity.trader.repositories.StrategyPerformanceRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import java.util.Arrays;
@@ -17,12 +17,10 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class AutoStrategySelectorTest {
-
-    @Mock
-    private StrategyPerformanceRepository performanceRepository;
 
     @Mock
     private StrategyStockMappingRepository mappingRepository;
@@ -39,6 +37,9 @@ class AutoStrategySelectorTest {
     @Mock
     private TelegramService telegramService;
 
+    @Mock
+    private TaiwanStockComplianceService complianceService;
+
     private AutoStrategySelector autoStrategySelector;
 
     @BeforeEach
@@ -46,13 +47,16 @@ class AutoStrategySelectorTest {
         tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository selectionRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
         
+        // Use lenient to avoid strict stubbing issues when not all tests use this stub
+        lenient().when(complianceService.fetchCurrentCapital()).thenReturn(80_000.0);
+        
         autoStrategySelector = new AutoStrategySelector(
-            performanceRepository,
             mappingRepository,
             activeStrategyService,
             activeStockService,
             shadowModeStockService,
             telegramService,
+            complianceService,
             selectionRepo
         );
     }

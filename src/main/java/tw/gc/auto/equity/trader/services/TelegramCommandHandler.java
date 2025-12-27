@@ -185,6 +185,35 @@ public class TelegramCommandHandler {
         telegramService.registerCustomCommand("/data-status", args -> {
             handleDataStatusCommand(args);
         });
+        
+        // Register /auto-select command
+        telegramService.registerCustomCommand("/auto-select", args -> {
+            handleAutoSelectCommand();
+        });
+    }
+    
+    /**
+     * Handle /auto-select command for triggering strategy selection
+     */
+    private void handleAutoSelectCommand() {
+        telegramService.sendMessage(
+            "🎯 AUTO-SELECTION STARTED" + System.lineSeparator() +
+            "━━━━━━━━━━━━━━━━" + System.lineSeparator() +
+            "Analyzing backtest results..." + System.lineSeparator() +
+            "Applying strategy filters..." + System.lineSeparator() +
+            "Checking Taiwan compliance rules..."
+        );
+        
+        new Thread(() -> {
+            try {
+                autoStrategySelector.selectBestStrategyAndStock();
+                autoStrategySelector.selectShadowModeStrategies();
+                telegramService.sendMessage("✅ Auto-selection completed!");
+            } catch (Exception e) {
+                log.error("Auto-selection failed", e);
+                telegramService.sendMessage("❌ Auto-selection failed: " + e.getMessage());
+            }
+        }).start();
     }
     
     /**
