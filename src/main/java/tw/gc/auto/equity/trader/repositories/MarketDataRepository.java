@@ -54,6 +54,9 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
     long countSince(@Param("symbol") String symbol, @Param("timeframe") Timeframe timeframe,
                     @Param("since") LocalDateTime since);
 
+    long countBySymbolAndTimeframeAndTimestampBetween(
+            String symbol, Timeframe timeframe, LocalDateTime start, LocalDateTime end);
+
     void deleteByTimestampBefore(LocalDateTime before);
     
     boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, Timeframe timeframe);

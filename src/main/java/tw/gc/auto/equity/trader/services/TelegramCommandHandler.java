@@ -7,7 +7,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
 import tw.gc.auto.equity.trader.services.StockSettingsService;
 import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 import tw.gc.auto.equity.trader.services.ContractScalingService;
@@ -40,7 +40,7 @@ public class TelegramCommandHandler {
     private final LlmService llmService;
     private final OrderExecutionService orderExecutionService;
     private final ApplicationContext applicationContext;
-    private final RiskSettingsService riskSettingsService;
+    private final StockRiskSettingsService stockRiskSettingsService;
     private final ActiveStrategyService activeStrategyService;
     private final StrategyPerformanceService strategyPerformanceService;
     private final ActiveStockService activeStockService;
@@ -772,12 +772,12 @@ public class TelegramCommandHandler {
      */
     private void handleRiskCommand(String args) {
         if (args == null || args.trim().isEmpty()) {
-            telegramService.sendMessage(riskSettingsService.getAllRiskSettingsFormatted());
+            telegramService.sendMessage(stockRiskSettingsService.getAllStockRiskSettingsFormatted());
             return;
         }
         
         if ("help".equalsIgnoreCase(args.trim())) {
-            telegramService.sendMessage(riskSettingsService.getRiskSettingsHelp());
+            telegramService.sendMessage(stockRiskSettingsService.getStockRiskSettingsHelp());
             return;
         }
         
@@ -790,7 +790,7 @@ public class TelegramCommandHandler {
         String key = parts[0].toLowerCase();
         String value = parts[1].trim();
         
-        String error = riskSettingsService.updateRiskSetting(key, value);
+        String error = stockRiskSettingsService.updateRiskSetting(key, value);
         if (error != null) {
             telegramService.sendMessage(error);
         } else {

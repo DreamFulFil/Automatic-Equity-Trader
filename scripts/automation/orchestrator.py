@@ -5,16 +5,18 @@ Orchestrator - Full System Boot & Backtest Automation
 This script:
 1. Starts Java (Port 16350) and Python Bridge (Port 8888)
 2. Polls health endpoints until services are ready
-3. Triggers backtest via REST API
-4. Monitors backtest progress with 30-second polling
-5. Provides summary table of Download/Backtest results
-6. Executes auto-selection
+3. Downloads historical data via /api/history/download (optional)
+4. Triggers backtest via /api/backtest/run
+5. Monitors backtest progress with 30-second polling
+6. Provides summary table of Download/Backtest results
+7. Executes auto-selection
 
 Usage:
-    python orchestrator.py <jasypt-password>
+    python orchestrator.py <jasypt-password> [--download]
     
 Example:
-    python orchestrator.py mysecretpassword
+    python orchestrator.py mysecretpassword           # Backtest only (uses existing data)
+    python orchestrator.py mysecretpassword --download # Download data first, then backtest
 """
 
 import os
@@ -164,6 +166,54 @@ def start_python_bridge(jasypt_password: str) -> Optional[subprocess.Popen]:
     except Exception as e:
         log(f"Failed to start Python Bridge: {e}", "ERROR")
         return None
+
+
+def trigger_history_download() -> bool:
+    """Trigger historical data download via REST API"""
+    log("Triggering historical data download via POST /api/history/download...", "INFO")
+    
+    try:
+        response = requests.post(
+            f"{JAVA_SERVICE_URL}/api/history/download",
+            timeout=600  # 10 minutes timeout for download
+        )
+        if response.status_code in [200, 202]:
+            data = response.json()
+            total_downloaded = sum(r.get("totalRecords", 0) for r in data.values())
+            log(f"Download complete: {len(data)} stocks, {total_downloaded} total records", "OK")
+            return True
+        else:
+            log(f"Download failed: HTTP {response.status_code}", "ERROR")
+            return False
+    except requests.exceptions.RequestException as e:
+        log(f"Download failed: {e}", "ERROR")
+        return False
+
+
+def poll_download_progress():
+    """Poll download progress until complete"""
+    log(f"Monitoring download progress (poll every {BACKTEST_POLL_INTERVAL}s)...", "WAIT")
+    
+    start = time.time()
+    poll_count = 0
+    
+    while time.time() - start < BACKTEST_TIMEOUT:
+        status = check_backtest_status()
+        poll_count += 1
+        
+        elapsed = int(time.time() - start)
+        elapsed_str = f"{elapsed // 60}m {elapsed % 60}s"
+        
+        if status["download_running"]:
+            log(f"[Poll #{poll_count}] Download in progress... ({elapsed_str})", "WAIT")
+        else:
+            log(f"Download completed in {elapsed_str}", "OK")
+            return True
+        
+        time.sleep(BACKTEST_POLL_INTERVAL)
+    
+    log(f"Download timed out after {BACKTEST_TIMEOUT}s", "ERROR")
+    return False
 
 
 def trigger_backtest() -> bool:
@@ -332,12 +382,14 @@ def main():
     print_banner()
     
     if len(sys.argv) < 2:
-        print("❌ Usage: python orchestrator.py <jasypt-password>")
-        print("\nExample:")
-        print("  python orchestrator.py mysecretpassword")
+        print("❌ Usage: python orchestrator.py <jasypt-password> [--download]")
+        print("\nExamples:")
+        print("  python orchestrator.py mysecretpassword           # Backtest only")
+        print("  python orchestrator.py mysecretpassword --download # Download data first")
         sys.exit(1)
     
     jasypt_password = sys.argv[1]
+    should_download = "--download" in sys.argv
     java_process = None
     bridge_process = None
     
@@ -361,6 +413,17 @@ def main():
             sys.exit(1)
         
         log("All services ready!", "OK")
+        
+        # Step 2.5: Download data if requested
+        if should_download:
+            log("=" * 50, "INFO")
+            log("PHASE 2a: Downloading Historical Data", "INFO")
+            log("=" * 50, "INFO")
+            
+            if not trigger_history_download():
+                log("Download trigger failed, continuing with existing data...", "WARN")
+            else:
+                poll_download_progress()
         
         # Step 3: Trigger backtest
         log("=" * 50, "INFO")

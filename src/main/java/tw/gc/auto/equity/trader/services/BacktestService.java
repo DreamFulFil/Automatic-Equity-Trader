@@ -627,6 +627,9 @@ public class BacktestService {
      * - Single dedicated writer thread for BacktestResult persistence
      * - PgBulkInsert (COPY protocol) with JdbcTemplate fallback
      * 
+     * NOTE: This method does NOT download historical data.
+     * Data must be downloaded separately via HistoryDataService.
+     * 
      * @param strategies List of strategies to test
      * @param initialCapital Starting capital for backtest
      * @return Map of stock symbol to backtest results
@@ -642,12 +645,40 @@ public class BacktestService {
             List<String> stocks = fetchTop50Stocks();
             log.info("📊 Selected {} stocks for backtesting", stocks.size());
             
-            downloadHistoricalDataForStocks(stocks, 10);
+            // Check data availability - do NOT download
+            List<String> stocksWithData = filterStocksWithHistoricalData(stocks);
             
-            return executeParallelBacktests(stocks, strategies, initialCapital);
+            if (stocksWithData.isEmpty()) {
+                log.warn("⚠️ No historical data available for any stocks. " +
+                    "Use /api/history/download to download data first.");
+                return new HashMap<>();
+            }
+            
+            log.info("📊 Found historical data for {}/{} stocks", stocksWithData.size(), stocks.size());
+            
+            return executeParallelBacktests(stocksWithData, strategies, initialCapital);
         } finally {
             systemStatusService.completeBacktest();
         }
+    }
+    
+    /**
+     * Filter stocks that have historical data in the database.
+     */
+    private List<String> filterStocksWithHistoricalData(List<String> stocks) {
+        LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
+        LocalDateTime now = LocalDateTime.now();
+        
+        return stocks.stream()
+            .filter(symbol -> {
+                long count = marketDataRepository.countBySymbolAndTimeframeAndTimestampBetween(
+                    symbol, MarketData.Timeframe.DAY_1, tenYearsAgo, now);
+                if (count == 0) {
+                    log.debug("No data for {}", symbol);
+                }
+                return count > 0;
+            })
+            .collect(Collectors.toList());
     }
     
     /**
@@ -1004,16 +1035,6 @@ public class BacktestService {
             mapInteger("data_points", r -> r.getDataPoints() != null ? r.getDataPoints() : 0);
             mapTimeStamp("created_at", r -> r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
         }
-    }
-    
-    /**
-     * Download historical data for a list of stocks concurrently.
-     * Uses Virtual Threads with a global writer for optimal throughput.
-     */
-    private void downloadHistoricalDataForStocks(List<String> stocks, int years) {
-        log.info("📥 Starting concurrent download for {} stocks ({} years each)", stocks.size(), years);
-        historyDataService.downloadHistoricalDataForMultipleStocks(stocks, years);
-        log.info("✅ Concurrent download complete for {} stocks", stocks.size());
     }
     
     /**

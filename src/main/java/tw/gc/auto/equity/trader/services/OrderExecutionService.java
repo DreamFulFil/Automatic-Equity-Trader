@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.RiskSettingsService;
+import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
 import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
@@ -40,7 +40,7 @@ public class OrderExecutionService {
     private final DataLoggingService dataLoggingService;
     private final PositionManager positionManager;
     private final RiskManagementService riskManagementService;
-    private final RiskSettingsService riskSettingsService;
+    private final StockRiskSettingsService stockRiskSettingsService;
     private final EarningsBlackoutService earningsBlackoutService;
     private final TaiwanStockComplianceService taiwanComplianceService;
     private final LlmService llmService;
@@ -140,7 +140,7 @@ public class OrderExecutionService {
         }
         
         // Ollama AI veto check (if enabled)
-        if (!isExit && riskSettingsService.isAiVetoEnabled()) {
+        if (!isExit && stockRiskSettingsService.isAiVetoEnabled()) {
             try {
                 Map<String, Object> tradeProposal = new HashMap<>();
                 tradeProposal.put("symbol", instrument);
@@ -285,7 +285,7 @@ public class OrderExecutionService {
             
             double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
             double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
-            riskManagementService.recordPnL(instrument, pnl, riskSettingsService.getWeeklyLossLimit());
+            riskManagementService.recordPnL(instrument, pnl, stockRiskSettingsService.getWeeklyLossLimit());
 
             Trade.TradingMode mode = emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE;
             dataLoggingService.closeLatestTrade(instrument, mode, currentPrice, pnl, holdDurationMinutes);
