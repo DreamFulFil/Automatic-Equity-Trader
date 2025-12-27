@@ -83,32 +83,53 @@
    
    **IF** commit type is `feat:`, `perf:`, or `refactor:` AND tag was created:
    
-   **Option A - Using gh CLI (preferred):**
+   **Use curl (REQUIRED - NOT gh CLI):**
    ```bash
    # Extract commit message without type prefix
    COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/^[^:]*: //')
    
-   # Determine section header
-   case "$TYPE" in
-     feat) SECTION="Features" ;;
-     perf) SECTION="Performance" ;;
-     refactor) SECTION="Refactoring" ;;
-   esac
+   # Get files changed in this commit
+   FILES_CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD)
    
-   # Create release
-   gh release create "v${NEW_VERSION}" \
-     --title "v${NEW_VERSION}" \
-     --notes "## ${SECTION}\n\n- ${COMMIT_MSG}"
-   ```
+   # Create a concise summary of changes (at least 3 items)
+   # Example: "Updated 5 Java files", "Modified 2 Python scripts", "Enhanced test coverage"
    
-   **Option B - Using curl:**
-   ```bash
-   curl -X POST \
-     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+   # Build release body with proper format
+   BODY="# Release v${NEW_VERSION}
+
+## Summary
+- ${COMMIT_MSG}
+
+## Changes
+- [Change summary 1]
+- [Change summary 2]
+- [Change summary 3]"
+   
+   # Escape body for JSON
+   BODY_ESCAPED=$(echo "$BODY" | jq -Rs .)
+   
+   # Create release using curl
+   curl -L -X POST \
      -H "Accept: application/vnd.github+json" \
-     -d "{\"tag_name\":\"v${NEW_VERSION}\",\"name\":\"v${NEW_VERSION}\",\"body\":\"## ${SECTION}\\n\\n- ${COMMIT_MSG}\"}" \
-     https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases
+     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+     -H "X-GitHub-Api-Version: 2022-11-28" \
+     https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases \
+     -d "{
+       \"tag_name\": \"v${NEW_VERSION}\",
+       \"target_commitish\": \"main\",
+       \"name\": \"v${NEW_VERSION}\",
+       \"body\": ${BODY_ESCAPED},
+       \"draft\": false,
+       \"prerelease\": false,
+       \"generate_release_notes\": false
+     }"
    ```
+   
+   **Release Body Format Requirements:**
+   - Must start with `# Release vX.Y.Z`
+   - Must have `## Summary` section with clean commit message (text after colon)
+   - Must have `## Changes` section with at least 3 bullet points
+   - Changes should summarize file modifications concisely (e.g., "Updated 3 Java files", "Modified configuration", "Enhanced tests")
    
    **ELSE** (patch bump): Skip GitHub release creation
 
