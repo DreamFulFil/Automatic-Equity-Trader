@@ -106,10 +106,12 @@ public class AutoStrategySelector {
     
     private Optional<StrategyStockMapping> findBestStrategyStockCombo() {
         // Criteria: High return, low risk, good Sharpe ratio, high win rate
+        // EXCLUDE intraday strategies - Taiwan stocks don't support odd lot day trading
         List<StrategyStockMapping> all = mappingRepository.findAll();
         
         return all.stream()
             .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
+            .filter(m -> !isIntradayStrategy(m.getStrategyName())) // Exclude intraday/day trading strategies
             .filter(m -> m.getTotalReturnPct() > 5.0) // At least 5% return
             .filter(m -> m.getSharpeRatio() > 1.0) // Good risk-adjusted return
             .filter(m -> m.getWinRatePct() != null && m.getWinRatePct() > 50.0) // Win rate > 50%
@@ -159,8 +161,10 @@ public class AutoStrategySelector {
         log.info("🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies...");
         
         // Group all mappings by symbol and find best strategy per stock
+        // EXCLUDE intraday strategies - Taiwan stocks don't support odd lot day trading
         List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
             .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
+            .filter(m -> !isIntradayStrategy(m.getStrategyName())) // Exclude intraday/day trading strategies
             .filter(m -> m.getTotalReturnPct() > 3.0) // At least 3% return
             .filter(m -> m.getSharpeRatio() > 0.8)
             .toList();
@@ -211,5 +215,21 @@ public class AutoStrategySelector {
             }
             telegramService.sendMessage(msg.toString());
         }
+    }
+    
+    /**
+     * Check if a strategy is intraday/day trading based.
+     * Taiwan stocks don't support odd lot for intraday trading, so exclude these.
+     */
+    private boolean isIntradayStrategy(String strategyName) {
+        if (strategyName == null) return false;
+        
+        String lower = strategyName.toLowerCase();
+        return lower.contains("intraday") ||
+               lower.contains("pivot points") ||
+               lower.contains("vwap") ||
+               lower.contains("twap") ||
+               lower.contains("day trad") ||
+               lower.contains("price volume rank");
     }
 }
