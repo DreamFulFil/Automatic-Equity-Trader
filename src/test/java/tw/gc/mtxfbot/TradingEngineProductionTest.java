@@ -168,7 +168,7 @@ class TradingEngineProductionTest {
         tradingEngine.handleResumeCommand();
         
         // Then: Should reject resume request
-        verify(telegramService).sendMessage("❌ Cannot resume - Weekly loss limit hit\\nWait until next Monday");
+        verify(telegramService).sendMessage("❌ Cannot resume - Weekly loss limit hit\nWait until next Monday");
     }
 
     @Test
