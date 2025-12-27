@@ -27,11 +27,17 @@ class HistoryDataServiceTest {
     @Mock
     private MarketDataRepository marketDataRepository;
 
+    @Mock
+    private org.springframework.web.client.RestTemplate restTemplate;
+
+    @Mock
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
     private HistoryDataService historyDataService;
 
     @BeforeEach
     void setUp() {
-        historyDataService = new HistoryDataService(barRepository, marketDataRepository);
+        historyDataService = new HistoryDataService(barRepository, marketDataRepository, restTemplate, objectMapper);
     }
 
     @Test

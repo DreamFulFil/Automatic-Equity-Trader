@@ -23,7 +23,11 @@ class BacktestServiceTest {
     void setUp() {
         tw.gc.auto.equity.trader.repositories.BacktestResultRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.BacktestResultRepository.class);
-        backtestService = new BacktestService(mockRepo);
+        tw.gc.auto.equity.trader.repositories.MarketDataRepository mockMarketDataRepo = 
+            org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class);
+        HistoryDataService mockHistoryService = 
+            org.mockito.Mockito.mock(HistoryDataService.class);
+        backtestService = new BacktestService(mockRepo, mockMarketDataRepo, mockHistoryService);
         strategies = new ArrayList<>();
         strategies.add(new RSIStrategy(14, 70, 30));
 

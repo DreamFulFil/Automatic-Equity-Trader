@@ -2,6 +2,7 @@ package tw.gc.auto.equity.trader.controllers;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -17,7 +18,6 @@ import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.services.AutoStrategySelector;
 import tw.gc.auto.equity.trader.services.BacktestService;
-import tw.gc.auto.equity.trader.services.DataOperationsService;
 import tw.gc.auto.equity.trader.services.TaiwanStockNameService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.impl.*;
@@ -79,7 +79,6 @@ public class BacktestController {
     private final BacktestService backtestService;
     private final MarketDataRepository marketDataRepository;
     private final StrategyStockMappingRepository mappingRepository;
-    private final DataOperationsService dataOperationsService;
     private final TaiwanStockNameService stockNameService;
     private final AutoStrategySelector autoStrategySelector;
 
@@ -379,21 +378,21 @@ public class BacktestController {
     }
     
     // ========================================================================
-    // DATA OPERATIONS (Multi-Stock Pipeline)
+    // DATA OPERATIONS (Multi-Stock Pipeline) - Now uses Java-native implementation
     // ========================================================================
     
     @PostMapping("/populate-data")
     public Map<String, Object> populateHistoricalData(@RequestParam(defaultValue = "730") int days) {
-        log.info("📊 Populating historical data for {} days", days);
-        return dataOperationsService.populateHistoricalData(days);
+        log.info("📊 Populating historical data for {} days (Java-native)", days);
+        return backtestService.populateHistoricalDataInternal(days);
     }
 
     @PostMapping("/run-all")
     public Map<String, Object> runCombinationalBacktests(
             @RequestParam(defaultValue = "80000") double capital,
             @RequestParam(defaultValue = "730") int days) {
-        log.info("🧪 Running combinatorial backtests (capital={}, days={})", capital, days);
-        return dataOperationsService.runCombinationalBacktests(capital, days);
+        log.info("🧪 Running combinatorial backtests (capital={}, days={}) (Java-native)", capital, days);
+        return backtestService.runCombinationalBacktestsInternal(capital, days);
     }
 
     @PostMapping("/select-strategy")
@@ -403,7 +402,24 @@ public class BacktestController {
             @RequestParam(defaultValue = "50.0") double minWinRate) {
         log.info("🎯 Auto-selecting best strategy (sharpe>={}, return>={}, winRate>={})", 
                 minSharpe, minReturn, minWinRate);
-        return dataOperationsService.autoSelectBestStrategy(minSharpe, minReturn, minWinRate);
+        try {
+            autoStrategySelector.selectBestStrategyAndStock();
+            return Map.of(
+                "status", "success",
+                "message", "Strategy selection completed successfully",
+                "criteria", Map.of(
+                    "min_sharpe", minSharpe,
+                    "min_return", minReturn,
+                    "min_win_rate", minWinRate
+                )
+            );
+        } catch (Exception e) {
+            log.error("Failed to select strategy", e);
+            return Map.of(
+                "status", "error",
+                "message", "Failed to select strategy: " + e.getMessage()
+            );
+        }
     }
     
     @PostMapping("/select-strategy-direct")
@@ -426,13 +442,55 @@ public class BacktestController {
 
     @PostMapping("/full-pipeline")
     public Map<String, Object> runFullPipeline(@RequestParam(defaultValue = "730") int days) {
-        log.info("🚀 Running full data pipeline ({} days)", days);
-        return dataOperationsService.runFullPipeline(days);
+        log.info("🚀 Running full data pipeline ({} days) (Java-native)", days);
+        
+        Map<String, Object> results = new HashMap<>();
+        results.put("started_at", LocalDateTime.now().toString());
+        List<Map<String, Object>> steps = new ArrayList<>();
+        
+        // Step 1: Populate data
+        Map<String, Object> populateResult = backtestService.populateHistoricalDataInternal(days);
+        steps.add(Map.of("step", "populate_data", "result", populateResult));
+        
+        if (!"success".equals(populateResult.get("status")) && !"partial".equals(populateResult.get("status"))) {
+            results.put("status", "failed");
+            results.put("failed_at", "populate_data");
+            results.put("steps", steps);
+            return results;
+        }
+        
+        // Step 2: Run backtests
+        Map<String, Object> backtestResult = backtestService.runCombinationalBacktestsInternal(80000, days);
+        steps.add(Map.of("step", "run_backtests", "result", backtestResult));
+        
+        if (!"success".equals(backtestResult.get("status")) && !"partial".equals(backtestResult.get("status"))) {
+            results.put("status", "failed");
+            results.put("failed_at", "run_backtests");
+            results.put("steps", steps);
+            return results;
+        }
+        
+        // Step 3: Select strategy
+        try {
+            autoStrategySelector.selectBestStrategyAndStock();
+            steps.add(Map.of("step", "select_strategy", "result", Map.of("status", "success")));
+        } catch (Exception e) {
+            steps.add(Map.of("step", "select_strategy", "result", Map.of("status", "error", "message", e.getMessage())));
+            results.put("status", "failed");
+            results.put("failed_at", "select_strategy");
+            results.put("steps", steps);
+            return results;
+        }
+        
+        results.put("status", "success");
+        results.put("completed_at", LocalDateTime.now().toString());
+        results.put("steps", steps);
+        return results;
     }
 
     @GetMapping("/data-status")
     public Map<String, Object> getDataStatus() {
-        log.debug("📈 Getting data operations status");
-        return dataOperationsService.getDataStatus();
+        log.debug("📈 Getting data operations status (Java-native)");
+        return backtestService.getDataStatus();
     }
 }

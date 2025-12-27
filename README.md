@@ -2,20 +2,49 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.0** - Complete System Rebuild
+**Version 2.0.3** - Complete System Rebuild
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-[![Tests](https://img.shields.io/badge/Tests-333%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-375%20passing-brightgreen.svg)](tests/)
 
 Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
 Designed for capital preservation with 80,000 TWD starting capital.
 
-**Production-ready** with 333 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
+**Production-ready** with 375 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.3 (2025-12-19)
+
+### 🏗️ Architecture Migration: Python → Java Data Operations
+
+**Major Refactoring Complete**
+- ✅ **Moved all data operations from Python to Java** - eliminates Python bridge dependencies
+- ✅ **Removed DataOperationsService** - all functionality now in BacktestService
+- ✅ **375 Java unit tests passing** (up from 333)
+- ✅ All backtesting, data population, and strategy selection now Java-native
+
+**New Java-Native Methods in BacktestService:**
+- `populateHistoricalDataInternal(int days)` - downloads data for 50 stocks
+- `runCombinationalBacktestsInternal(double capital, int days)` - runs stock×strategy backtests
+- `getDataStatus()` - returns database statistics
+- `fetchTop50Stocks()` - curated list of Taiwan stocks
+
+**Files Removed:**
+- `DataOperationsService.java` - moved to BacktestService
+- `DataOperationsServiceTest.java` - no longer needed
+- `HistoryDataService_old.java` - cleanup
+- Python `/data/populate`, `/data/backtest`, `/data/select-strategy` endpoints (deprecated)
+
+**Updated Components:**
+- `BacktestController` - uses BacktestService directly, removed DataOperationsService dependency
+- `TelegramCommandHandler` - uses BacktestService for `/populate-data`, `/run-backtests` commands
+- `python/app/main.py` - data operations endpoints removed, kept only real-time Shioaji functions
 
 ---
 

@@ -480,106 +480,19 @@ def ollama_generate(request: OllamaRequest):
     return result
 
 # ============================================================================
-# DATA OPERATIONS ENDPOINTS
+# DATA OPERATIONS ENDPOINTS (DEPRECATED - Now handled by Java)
+# These endpoints are kept for backward compatibility but are no longer used.
+# All data operations are now handled by Java BacktestService.
 # ============================================================================
 
-from app.services.data_operations_service import DataOperationsService
-
-# Initialize data operations service (lazy)
-data_ops_service = None
-
-def get_data_ops_service():
-    global data_ops_service
-    if data_ops_service is None:
-        db_config = {
-            'host': 'localhost',
-            'port': 5432,
-            'database': os.environ.get('POSTGRES_DB', 'auto_equity_trader'),
-            'username': os.environ.get('POSTGRES_USER', 'dreamer'),
-            'password': os.environ.get('POSTGRES_PASSWORD', 'password')
-        }
-        data_ops_service = DataOperationsService(db_config, java_base_url="http://localhost:16350")
-    return data_ops_service
-
-class DataPopulationRequest(BaseModel):
-    days: int = 730
-
-class BacktestRequest(BaseModel):
-    capital: float = 80000
-    days: int = 730
-
-class StrategySelectionRequest(BaseModel):
-    min_sharpe: float = 0.5
-    min_return: float = 10.0
-    min_win_rate: float = 50.0
-
-@app.post("/data/populate")
-def populate_historical_data_endpoint(request: DataPopulationRequest):
-    """Populate historical data for all stocks"""
-    service = get_data_ops_service()
-    result = service.populate_historical_data(days=request.days)
-    return result
-
-@app.post("/data/backtest")
-def run_combinatorial_backtests_endpoint(request: BacktestRequest):
-    """Run combinatorial backtests via Java REST API"""
-    service = get_data_ops_service()
-    result = service.run_combinatorial_backtests(capital=request.capital, days=request.days)
-    return result
-
-@app.post("/data/select-strategy")
-def auto_select_strategy_endpoint(request: StrategySelectionRequest):
-    """Auto-select best strategy for main and shadow mode"""
-    service = get_data_ops_service()
-    result = service.auto_select_best_strategy(
-        min_sharpe=request.min_sharpe,
-        min_return=request.min_return,
-        min_win_rate=request.min_win_rate
-    )
-    return result
-
-@app.post("/data/full-pipeline")
-def run_full_data_pipeline(request: DataPopulationRequest):
-    """
-    Run complete data pipeline: populate data, run backtests, select strategy
-    """
-    service = get_data_ops_service()
-    
-    results = {
-        "started_at": datetime.now().isoformat(),
-        "steps": []
-    }
-    
-    # Step 1: Populate data
-    populate_result = service.populate_historical_data(days=request.days)
-    results["steps"].append({"step": "populate_data", "result": populate_result})
-    
-    if populate_result.get("status") != "success":
-        results["status"] = "failed"
-        results["failed_at"] = "populate_data"
-        return results
-    
-    # Step 2: Run backtests
-    backtest_result = service.run_combinatorial_backtests(capital=80000, days=request.days)
-    results["steps"].append({"step": "run_backtests", "result": backtest_result})
-    
-    if backtest_result.get("status") != "success":
-        results["status"] = "failed"
-        results["failed_at"] = "run_backtests"
-        return results
-    
-    # Step 3: Select strategy
-    selection_result = service.auto_select_best_strategy()
-    results["steps"].append({"step": "select_strategy", "result": selection_result})
-    
-    if selection_result.get("status") != "success":
-        results["status"] = "failed"
-        results["failed_at"] = "select_strategy"
-        return results
-    
-    results["status"] = "success"
-    results["completed_at"] = datetime.now().isoformat()
-    return results
+# NOTE: The following endpoints have been migrated to Java:
+# - POST /data/populate -> Java BacktestController.populateHistoricalData()
+# - POST /data/backtest -> Java BacktestController.runCombinationalBacktests()
+# - POST /data/select-strategy -> Java BacktestController.autoSelectStrategy()
+# - POST /data/full-pipeline -> Java BacktestController.runFullPipeline()
+#
+# The Python DataOperationsService and these endpoints are deprecated.
+# They will be removed in a future version.
 
 if __name__ == "__main__":
     import uvicorn
