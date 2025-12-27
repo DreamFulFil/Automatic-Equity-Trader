@@ -50,110 +50,14 @@
 
 2. Wait for all tests within the script to finish. If any part fails, you must fix the code and restart the verification.
 
-3. **VERSION File Management (MANDATORY - https://semver.org/):**
-   
-   **Step 3a - Read current version:**
-   ```bash
-   CURRENT_VERSION=$(cat VERSION)  # e.g., "0.79.0"
-   ```
-   
-   **Step 3b - Calculate new version based on commit type:**
-   - **Minor bump (+0.1.0):** For `feat:`, `perf:`, `refactor:` commits
-     - Example: `0.79.0` → `0.80.0` (reset patch to 0)
-   - **Patch bump (+0.0.1):** For `fix:`, `chore:`, `docs:`, `ci:`, `test:` commits
-     - Example: `0.79.0` → `0.79.1`
-   - **Version cap:** NEVER reach 1.0.0 (stay in 0.x.y range)
-   
-   **Step 3c - Update VERSION file:**
-   ```bash
-   echo "0.80.0" > VERSION
-   ```
-
-4. **Git Tag Creation (Minor versions ONLY):**
-   
-   **IF** commit type is `feat:`, `perf:`, or `refactor:` (minor bump):
-   ```bash
-   NEW_VERSION=$(cat VERSION)  # e.g., "0.80.0"
-   git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
-   ```
-   
-   **ELSE** (patch bump): Skip tag creation
-
-5. **GitHub Release Creation (Minor versions ONLY):**
-   
-   **IF** commit type is `feat:`, `perf:`, or `refactor:` AND tag was created:
-   
-   **Use curl (REQUIRED - NOT gh CLI):**
-   ```bash
-   # Extract commit message without type prefix
-   COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/^[^:]*: //')
-   
-   # Get files changed in this commit
-   FILES_CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD)
-   
-   # Create a concise summary of changes (at least 3 items)
-   # Example: "Updated 5 Java files", "Modified 2 Python scripts", "Enhanced test coverage"
-   
-   # Build release body with proper format
-   BODY="# Release v${NEW_VERSION}
-
-## Summary
-- ${COMMIT_MSG}
-
-## Changes
-- [Change summary 1]
-- [Change summary 2]
-- [Change summary 3]"
-   
-   # Escape body for JSON
-   BODY_ESCAPED=$(echo "$BODY" | jq -Rs .)
-   
-   # Create release using curl
-   curl -L -X POST \
-     -H "Accept: application/vnd.github+json" \
-     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-     -H "X-GitHub-Api-Version: 2022-11-28" \
-     https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases \
-     -d "{
-       \"tag_name\": \"v${NEW_VERSION}\",
-       \"target_commitish\": \"main\",
-       \"name\": \"v${NEW_VERSION}\",
-       \"body\": ${BODY_ESCAPED},
-       \"draft\": false,
-       \"prerelease\": false,
-       \"generate_release_notes\": false
-     }"
-   ```
-   
-   **Release Body Format Requirements:**
-   - Must start with `# Release vX.Y.Z`
-   - Must have `## Summary` section with clean commit message (text after colon)
-   - Must have `## Changes` section with at least 3 bullet points
-   - Changes should summarize file modifications concisely (e.g., "Updated 3 Java files", "Modified configuration", "Enhanced tests")
-   
-   **ELSE** (patch bump): Skip GitHub release creation
-
-6. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
-
-**Quick Reference - Version Bump Decision Tree:**
-```
-Commit type?
-├─ feat/perf/refactor → Minor bump (0.79.0 → 0.80.0) → CREATE TAG → CREATE RELEASE
-└─ fix/chore/docs/ci/test → Patch bump (0.79.0 → 0.79.1) → NO TAG → NO RELEASE
-```
-
-**Helper Script (Optional):**
-```bash
-./scripts/bump-version.sh <commit-type>  # Automates steps 3-5
-```
+3. **Final Documentation:** Update `README.MD` concisely if needed. Do not add new files to `docs/`.
 
 **Test Protection Policy**
-
 * **Coverage:** Unit tests are mandatory for every Java or Python code change.
 * **Integration Testing:** Required for interactions with external components. Mocks are permitted if the external interaction is resource-heavy.
 * **Framework Independence:** Integration tests should be Spring-independent where possible. Avoid `@SpringBootTest`; prioritize **Mockito** for faster, decoupled execution.
 * **Web Layer Testing:** For Java Controllers, prefer **Slice Testing** using `MockMvc`. The agent may exercise discretion to choose the most appropriate testing strategy based on complexity.
-* **Deprecation Warning:** Explicitly forbid the use of `@MockitoBean`. Note that it is deprecated and slated for removal; use `@MockitoBean` instead.
+* **Deprecation Warning:** Explicitly forbid the use of `@MockBean`. Note that it is deprecated and slated for removal; use `@MockitoBean` instead.
 
 **Claude Model Restriction:**
 * If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.
