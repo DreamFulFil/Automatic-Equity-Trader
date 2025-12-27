@@ -1,3 +1,5 @@
+[![CI](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml)
+
 # 🤖 MTXF Lunch Bot – Final Production Version (December 2025)
 
 **Fully automated Taiwan Mini-TXF futures trading bot for macOS Apple Silicon.**
