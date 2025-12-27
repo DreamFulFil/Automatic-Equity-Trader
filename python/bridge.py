@@ -225,6 +225,64 @@ class ShioajiWrapper:
                 return self.place_order(action, quantity, price)
             raise
     
+    def get_account_info(self):
+        """Get account equity and margin info"""
+        if not self.connected:
+            if not self.reconnect():
+                raise Exception("Cannot get account info - not connected")
+        
+        try:
+            # Get futures account margin status
+            margin = self.api.margin(self.api.futopt_account)
+            
+            # Calculate total equity = equity + unrealized P&L
+            equity = float(margin.equity) if hasattr(margin, 'equity') else 0
+            available_margin = float(margin.available_margin) if hasattr(margin, 'available_margin') else 0
+            
+            return {
+                "equity": equity,
+                "available_margin": available_margin,
+                "status": "ok"
+            }
+        except Exception as e:
+            print(f"❌ Failed to get account info: {e}")
+            return {"equity": 0, "available_margin": 0, "status": "error", "error": str(e)}
+    
+    def get_profit_loss_history(self, days=30):
+        """Get realized P&L for the last N days from Shioaji"""
+        if not self.connected:
+            if not self.reconnect():
+                raise Exception("Cannot get P&L history - not connected")
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            
+            # Get profit/loss records from Shioaji
+            # This uses the settle_profitloss endpoint for realized P&L
+            pnl_records = self.api.list_profit_loss(
+                self.api.futopt_account,
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d")
+            )
+            
+            total_pnl = 0.0
+            for record in pnl_records:
+                if hasattr(record, 'pnl'):
+                    total_pnl += float(record.pnl)
+            
+            return {
+                "total_pnl": total_pnl,
+                "days": days,
+                "record_count": len(pnl_records),
+                "status": "ok"
+            }
+        except Exception as e:
+            print(f"❌ Failed to get P&L history: {e}")
+            return {"total_pnl": 0, "days": days, "record_count": 0, "status": "error", "error": str(e)}
+    
     def logout(self):
         """Graceful logout"""
         try:
@@ -334,6 +392,48 @@ def health():
         "shioaji_connected": shioaji.connected,
         "time": datetime.now().isoformat()
     }
+
+@app.get("/account")
+def get_account():
+    """Get account equity and margin info for contract scaling"""
+    try:
+        account_info = shioaji.get_account_info()
+        return {
+            "equity": account_info.get("equity", 0),
+            "available_margin": account_info.get("available_margin", 0),
+            "status": account_info.get("status", "error"),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "equity": 0,
+            "available_margin": 0,
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/account/profit-history")
+def get_profit_history(days: int = 30):
+    """Get realized P&L for the last N days for contract scaling"""
+    try:
+        pnl_history = shioaji.get_profit_loss_history(days)
+        return {
+            "total_pnl": pnl_history.get("total_pnl", 0),
+            "days": days,
+            "record_count": pnl_history.get("record_count", 0),
+            "status": pnl_history.get("status", "error"),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "total_pnl": 0,
+            "days": days,
+            "record_count": 0,
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 @app.post("/shutdown")
 def shutdown():
