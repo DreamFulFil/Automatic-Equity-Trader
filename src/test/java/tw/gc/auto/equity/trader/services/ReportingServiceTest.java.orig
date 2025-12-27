@@ -40,8 +40,6 @@ class ReportingServiceTest {
     private TradingStateService tradingStateService;
     @Mock
     private StrategyManager strategyManager;
-    @Mock
-    private ActiveStockService activeStockService;
 
     private ReportingService reportingService;
 
@@ -59,7 +57,7 @@ class ReportingServiceTest {
         reportingService = new ReportingService(
             endOfDayStatisticsService, dailyStatisticsRepository, llmService,
             riskManagementService, contractScalingService, stockSettingsService,
-            telegramService, tradingStateService, strategyManager, activeStockService
+            telegramService, tradingStateService, strategyManager
         );
     }
 

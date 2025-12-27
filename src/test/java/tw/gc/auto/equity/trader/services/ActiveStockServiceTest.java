@@ -27,18 +27,18 @@ class ActiveStockServiceTest {
 
     @Test
     void getActiveStock_whenConfigExists_shouldReturnSymbol() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("current_active_stock")))
-            .thenReturn("2454.TW");
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK")))
+            .thenReturn("2330.TW");
 
         String result = activeStockService.getActiveStock();
 
-        assertEquals("2454.TW", result);
-        verify(jdbcTemplate).queryForObject(anyString(), eq(String.class), eq("current_active_stock"));
+        assertEquals("2330.TW", result);
+        verify(jdbcTemplate).queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK"));
     }
 
     @Test
     void getActiveStock_whenConfigNotExists_shouldReturnDefault() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("current_active_stock")))
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK")))
             .thenThrow(new EmptyResultDataAccessException(1));
 
         String result = activeStockService.getActiveStock();
@@ -48,7 +48,7 @@ class ActiveStockServiceTest {
 
     @Test
     void getActiveStock_whenDatabaseError_shouldReturnDefault() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("current_active_stock")))
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK")))
             .thenThrow(new RuntimeException("Database error"));
 
         String result = activeStockService.getActiveStock();
@@ -62,7 +62,7 @@ class ActiveStockServiceTest {
 
         verify(jdbcTemplate).update(
             contains("INSERT INTO system_config"),
-            eq("current_active_stock"),
+            eq("CURRENT_ACTIVE_STOCK"),
             eq("2330.TW")
         );
     }
@@ -97,12 +97,12 @@ class ActiveStockServiceTest {
 
     @Test
     void getActiveSymbol_whenStockMode_shouldReturnActiveStock() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("current_active_stock")))
-            .thenReturn("2454.TW");
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK")))
+            .thenReturn("2330.TW");
 
         String result = activeStockService.getActiveSymbol("stock");
 
-        assertEquals("2454.TW", result);
+        assertEquals("2330.TW", result);
     }
 
     @Test
@@ -115,7 +115,7 @@ class ActiveStockServiceTest {
 
     @Test
     void getActiveSymbol_whenStockModeAndDatabaseError_shouldReturnDefault() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("current_active_stock")))
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("CURRENT_ACTIVE_STOCK")))
             .thenThrow(new RuntimeException("Database error"));
 
         String result = activeStockService.getActiveSymbol("stock");

@@ -30,6 +30,7 @@ public class ReportingService {
     private final TelegramService telegramService;
     private final TradingStateService tradingStateService;
     private final StrategyManager strategyManager;
+    private final ActiveStockService activeStockService;
 
     /**
      * Calculate daily statistics at 14:00 (30 minutes after market close).
@@ -131,6 +132,6 @@ public class ReportingService {
     }
 
     private String getActiveSymbol() {
-        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
     }
 }

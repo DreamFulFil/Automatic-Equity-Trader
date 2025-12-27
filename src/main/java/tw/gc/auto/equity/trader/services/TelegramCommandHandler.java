@@ -36,6 +36,7 @@ public class TelegramCommandHandler {
     private final RiskSettingsService riskSettingsService;
     private final ActiveStrategyService activeStrategyService;
     private final StrategyPerformanceService strategyPerformanceService;
+    private final ActiveStockService activeStockService;
 
     public void registerCommands(List<IStrategy> activeStrategies) {
         telegramService.registerCommandHandlers(
@@ -106,6 +107,11 @@ public class TelegramCommandHandler {
         // Register /set-main-strategy command
         telegramService.registerCustomCommand("/set-main-strategy", args -> {
             handleSetMainStrategy(args, activeStrategies);
+        });
+        
+        // Register /change-stock command
+        telegramService.registerCustomCommand("/change-stock", args -> {
+            handleChangeStock(args);
         });
     }
     
@@ -275,7 +281,8 @@ public class TelegramCommandHandler {
         
         String tradingMode = tradingStateService.getTradingMode();
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK (2454.TW)\nShares: %d (base %d +%d/20k)", 
+            ? String.format("Mode: STOCK (%s)\nShares: %d (base %d +%d/20k)", 
+                activeStockService.getActiveStock(),
                 stockSettingsService.getBaseStockQuantity(contractScalingService.getLastEquity()),
                 stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
@@ -333,7 +340,7 @@ public class TelegramCommandHandler {
     }
 
     private String getActiveSymbol() {
-        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
     }
 
     // Helper to delegate to OrderExecutionService
@@ -344,5 +351,75 @@ public class TelegramCommandHandler {
             tradingStateService.getTradingMode(), 
             tradingStateService.isEmergencyShutdown()
         );
+    }
+    
+    /**
+     * Handle /change-stock command to change the active trading stock
+     */
+    private void handleChangeStock(String args) {
+        if (!"stock".equals(tradingStateService.getTradingMode())) {
+            telegramService.sendMessage("⚠️ This command only works in STOCK mode\nCurrent mode: FUTURES");
+            return;
+        }
+        
+        if (args == null || args.trim().isEmpty()) {
+            String currentStock = activeStockService.getActiveStock();
+            telegramService.sendMessage(String.format(
+                "📊 CHANGE ACTIVE STOCK\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Current stock: %s\n\n" +
+                "Usage: /change-stock <symbol>\n" +
+                "Example: /change-stock 2330.TW\n\n" +
+                "⚠️ WARNING: This will flatten current position and switch to new stock",
+                currentStock
+            ));
+            return;
+        }
+        
+        String newStock = args.trim().toUpperCase();
+        
+        // Validate stock format (basic check)
+        if (!newStock.matches("\\d{4}\\.TW")) {
+            telegramService.sendMessage(
+                "❌ Invalid stock symbol format\n" +
+                "Must be in format: XXXX.TW (e.g., 2330.TW, 2454.TW)"
+            );
+            return;
+        }
+        
+        String oldStock = activeStockService.getActiveStock();
+        
+        if (newStock.equals(oldStock)) {
+            telegramService.sendMessage(String.format("ℹ️ Already trading %s", newStock));
+            return;
+        }
+        
+        try {
+            // Flatten current position if any
+            if (positionManager.getPosition(oldStock) != 0) {
+                telegramService.sendMessage(String.format("📤 Flattening position in %s...", oldStock));
+                flattenPosition("Stock change requested");
+            }
+            
+            // Update active stock in database
+            activeStockService.setActiveStock(newStock);
+            
+            telegramService.sendMessage(String.format(
+                "✅ Active stock changed\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "From: %s\n" +
+                "To: %s\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "System will now trade %s on next signal",
+                oldStock, newStock, newStock
+            ));
+            
+        } catch (Exception e) {
+            telegramService.sendMessage(String.format(
+                "❌ Failed to change stock: %s\n" +
+                "Current stock remains: %s",
+                e.getMessage(), oldStock
+            ));
+        }
     }
 }

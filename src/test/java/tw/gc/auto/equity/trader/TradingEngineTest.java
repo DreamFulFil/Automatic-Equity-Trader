@@ -49,6 +49,7 @@ class TradingEngineTest {
     @Mock private OrderExecutionService orderExecutionService;
     @Mock private StrategyManager strategyManager;
     @Mock private ReportingService reportingService;
+    @Mock private ActiveStockService activeStockService;
 
     // Real instances for state
     private TradingStateService tradingStateService;
@@ -93,13 +94,17 @@ class TradingEngineTest {
         when(mockActiveStrategyService.getActiveStrategyName()).thenReturn("RSIStrategy");
         tradingStateService = new TradingStateService(mockActiveStrategyService);
         positionManager = new PositionManager();
+        
+        when(activeStockService.getActiveStock()).thenReturn("2454.TW");
+        when(activeStockService.getActiveSymbol("stock")).thenReturn("2454.TW");
+        when(activeStockService.getActiveSymbol("futures")).thenReturn("AUTO_EQUITY_TRADER");
 
         tradingEngine = new TradingEngineService(
             restTemplate, objectMapper, telegramService, tradingProperties, applicationContext,
             contractScalingService, riskManagementService, stockSettingsService, riskSettingsService,
             dataLoggingService, endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService,
             tradingStateService, telegramCommandHandler, orderExecutionService, positionManager,
-            strategyManager, reportingService
+            strategyManager, reportingService, activeStockService
         );
     }
 

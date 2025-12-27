@@ -53,6 +53,7 @@ public class TradingEngineService {
     private final PositionManager positionManager;
     private final StrategyManager strategyManager;
     private final ReportingService reportingService;
+    private final ActiveStockService activeStockService;
 
     @PostConstruct
     public void initialize() {
@@ -63,7 +64,7 @@ public class TradingEngineService {
         // Strategies are initialized by StrategyManager @PostConstruct
         
         log.info("📈 Trading Mode: {} ({})", tradingStateService.getTradingMode().toUpperCase(), 
-            "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW odd lots" : "MTXF futures");
+            "stock".equals(tradingStateService.getTradingMode()) ? activeStockService.getActiveStock() + " odd lots" : "MTXF futures");
         
         telegramCommandHandler.registerCommands(strategyManager.getActiveStrategies());
         
@@ -106,7 +107,7 @@ public class TradingEngineService {
         String tradingModeLabel = getTradingModeLabel();
         
         String modeDescription = "stock".equals(tradingStateService.getTradingMode()) 
-            ? "Mode: STOCK (2454.TW odd lots)" 
+            ? String.format("Mode: STOCK (%s odd lots)", activeStockService.getActiveStock())
             : "Mode: FUTURES (MTXF)";
         
         String scalingInfo = "stock".equals(tradingStateService.getTradingMode())
@@ -151,7 +152,7 @@ public class TradingEngineService {
     }
 
     private String getActiveSymbol() {
-        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        return activeStockService.getActiveSymbol(tradingStateService.getTradingMode());
     }
     
     private String getBridgeUrl() {
