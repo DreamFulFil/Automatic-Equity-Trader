@@ -3,6 +3,8 @@ package tw.gc.mtxfbot;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ApplicationContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,7 +12,11 @@ import org.springframework.web.bind.annotation.RestController;
 import tw.gc.mtxfbot.entities.ShioajiSettings;
 
 /**
- * REST endpoint for triggering graceful shutdown in testing
+ * REST endpoint for graceful application shutdown
+ * 
+ * The application now runs indefinitely until explicitly stopped via:
+ * - POST /api/shutdown endpoint
+ * - External OS signal (SIGTERM/SIGINT)
  */
 @RestController
 @RequestMapping("/api")
@@ -22,26 +28,33 @@ public class ShutdownController {
     private final TradingEngine tradingEngine;
     @NonNull
     private final ShioajiSettingsService shioajiSettingsService;
+    @NonNull
+    private final ApplicationContext applicationContext;
     
     /**
-     * Trigger autoFlatten shutdown for testing
-     * This sends daily summary (e) and shutdown messages (f,g)
+     * Gracefully shutdown the application
+     * Flattens all positions, calculates statistics, and stops the Spring context
      */
     @PostMapping("/shutdown")
     public String triggerShutdown() {
-        log.info("Shutdown endpoint called - triggering autoFlatten");
+        log.info("🛑 Shutdown endpoint called - initiating graceful shutdown");
         
         // Run in background thread so response can be sent
         new Thread(() -> {
             try {
-                Thread.sleep(50); // Let response be sent first
-                tradingEngine.autoFlatten();
+                Thread.sleep(100); // Let response be sent first
+                log.info("🛑 Flattening positions before shutdown...");
+                tradingEngine.flattenPosition("Manual shutdown via endpoint");
+                
+                log.info("🛑 Closing Spring application context...");
+                int exitCode = SpringApplication.exit(applicationContext, () -> 0);
+                System.exit(exitCode);
             } catch (Exception e) {
-                log.error("Error during shutdown", e);
+                log.error("❌ Error during graceful shutdown", e);
             }
         }).start();
         
-        return "Shutdown initiated - daily summary and bot stopped messages will be sent";
+        return "Graceful shutdown initiated - flattening positions and stopping application";
     }
     
     /**

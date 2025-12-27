@@ -1,15 +1,107 @@
 [![CI](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamFulFil/Lunch-Investor-Bot/actions/workflows/ci.yml)
 
-# 🤖 Lunch Investor Bot – Dual-Mode Production Version (December 2025)
+# 🤖 Lunch Investor Bot – Multi-Market Multi-Strategy Platform (December 2025)
 
-**Fully automated Taiwan trading bot for macOS Apple Silicon supporting BOTH stock (2454.TW) and futures (MTXF) trading.**
+**Enterprise-grade automated trading platform for macOS Apple Silicon with multi-market support, concurrent strategy execution, and local LLM analytics.**
 
-Trade during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, automatic scaling, and bulletproof risk limits. Switch between stock and futures mode with a single command-line argument.
+Advanced trading platform supporting Taiwan stocks/futures with indefinite lifecycle, comprehensive data persistence, structured LLM intelligence, and extensible multi-market/multi-strategy architecture.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
+
+---
+
+## 🚀 MAJOR REFACTOR: Multi-Market Multi-Strategy Platform (December 2025)
+
+### Architecture Evolution
+
+The system has been substantially refactored from a single-market, intraday-only day-trading application into a **robust, highly extensible, multi-market, multi-strategy trading platform** with the following major improvements:
+
+#### 1. Indefinite Application Lifecycle ✅
+- **Removed hard shutdown** at 13:00 trading window close
+- Application runs **indefinitely** until explicitly stopped via:
+  - `/shutdown` Telegram command
+  - `POST /api/shutdown` REST endpoint
+  - External OS termination (SIGTERM/SIGINT)
+- Auto-flattens positions at 13:00 but **continues running**
+- Prominent **SIMULATION MODE** or **LIVE TRADING MODE** notification on startup
+
+#### 2. Comprehensive Persistence Layer ✅
+**New Data Domains:**
+
+| Entity | Purpose |
+|--------|---------|
+| **LlmInsight** | First-class LLM-generated intelligence (never ephemeral) |
+| **Quote** | Tick/Level-2 quote data for deep market analysis |
+| **Bar** | OHLCV bars (1min, 3min, 5min, 15min, 1hour, 1day) |
+| **EconomicNews** | External news with LLM sentiment/impact scoring |
+| **VetoEvent** | Complete veto provenance (system/manual/LLM) |
+| **MarketConfig** | Multi-market configuration (TSE, TAIFEX, NYSE, etc.) |
+| **StrategyConfig** | Multi-strategy concurrent execution settings |
+
+**Supports:**
+- Intraday trading ✅
+- Swing and position trading ✅
+- Long-term investment analysis ✅
+- Detailed post-trade forensics and ML/LLM analytics ✅
+
+#### 3. Advanced Local LLM Integration ✅
+**Ollama Llama 3.1 8B-Instruct as Analytical Feature Generator**
+
+**Enforced Structured Output:**
+- Every LLM prompt demands **JSON schema compliance**
+- Responses directly deserializable into Java objects
+- No free-form prose outside schema fields
+- All outputs persisted in `LlmInsight` entity
+
+**Implemented Use Cases:**
+1. **News Impact Scoring** - Sentiment, impact, affected symbols/sectors
+2. **Veto Rationale Augmentation** - Rich evidence-based explanations
+3. **Statistical Pattern Interpretation** - Actionable signals from time-series data
+
+**Integration:**
+- Low latency (local execution)
+- Complete data privacy (no external API calls)
+- Structured JSON output only
+- Full historical audit trail
+
+#### 4. Multi-Market Architecture ✅
+**Simultaneous, conflict-free operation across:**
+- US equities (NYSE, NASDAQ) - *ready for configuration*
+- Taiwan equities (TSE) - *active*
+- Futures contracts (TAIFEX) - *active*
+- Market-specific logic behind clear abstractions
+
+**Market isolation:**
+- Separate market configurations
+- Independent trading sessions
+- Market-specific risk settings
+- Timezone-aware scheduling
+
+#### 5. Multi-Strategy Concurrent Execution ✅
+**Strategy Types Supported:**
+
+| Category | Strategies |
+|----------|-----------|
+| **Intraday** | Current lunch-break strategy, momentum, mean reversion |
+| **Swing** | Moving average crossover, Bollinger bands |
+| **Position** | VWAP/TWAP execution strategies |
+| **Long-term** | DCA, auto-rebalancing, dividend reinvestment, tax-loss harvesting |
+
+**Features:**
+- Strategies run independently or in parallel
+- Per-strategy risk limits
+- Priority-based execution order
+- Dynamic enable/disable
+- LLM enhancement optional per strategy
+
+#### 6. Statistical Computation Audit ✅
+- **Eliminated duplicate computations** across startup/shutdown
+- Clear ownership for each statistic
+- Optimal performance under concurrent workloads
+- Database-driven deduplication checks
 
 ---
 
@@ -253,9 +345,10 @@ This is a **production-ready, set-and-forget** trading system running the exact 
 | **11:15** | Cron launches bot (15 min warmup before trading window) |
 | **11:30** | Trading window opens, signal checks begin |
 | **Every 30s** | Price/momentum/volume signal calculation |
-| **Every 10m** | Llama 3.1 8B news veto check (RSS feeds) |
-| **13:00** | Auto-flatten all positions |
-| **13:05** | Daily summary sent to Telegram, bot shuts down |
+| **Every 10m** | Llama 3.1 8B news veto check (RSS feeds) + LLM insight persistence |
+| **13:00** | Auto-flatten all positions, send daily summary |
+| **13:05+** | **Bot continues running indefinitely** - use `/shutdown` to stop |
+| **Manual** | `/shutdown` command or `POST /api/shutdown` for graceful termination |
 
 ---
 
@@ -759,9 +852,10 @@ sudo pmset -a disablesleep 0
 | Command | Action |
 |---------|--------|
 | `/status` | Show position, P&L, bot state |
-| `/pause` | Pause new entries (still flattens at 13:00) |
+| `/pause` | Pause new entries (positions still auto-flatten at 13:00) |
 | `/resume` | Resume trading |
 | `/close` | Immediately flatten all positions |
+| `/shutdown` | **Gracefully stop the application** (flattens positions and exits) |
 
 ### Example `/status` Response
 
@@ -774,7 +868,7 @@ Today P&L: +800 TWD
 Week P&L: +3200 TWD
 News Veto: ✅ Clear
 ━━━━━━━━━━━━━━━━
-Commands: /pause /resume /close
+Commands: /pause /resume /close /shutdown
 ```
 
 ### Notification Types
