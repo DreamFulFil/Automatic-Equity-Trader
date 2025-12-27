@@ -118,6 +118,7 @@ class TelegramServiceTest {
         when(telegramProperties.getChatId()).thenReturn("123456789");
         
         String multilineMessage = "Line 1\nLine 2\nLine 3";
+        String expectedMessage = "Line 1<br>Line 2<br>Line 3";
 
         // When
         telegramService.sendMessage(multilineMessage);
@@ -127,7 +128,7 @@ class TelegramServiceTest {
         verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
         
         Map<String, Object> body = requestCaptor.getValue().getBody();
-        assertEquals(multilineMessage, body.get("text"));
+        assertEquals(expectedMessage, body.get("text"));
     }
 
     // ==================== registerCommandHandlers() tests ====================

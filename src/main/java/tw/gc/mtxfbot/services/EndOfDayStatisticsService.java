@@ -70,10 +70,19 @@ public class EndOfDayStatisticsService {
     }
 
     /**
-     * Calculate statistics for a specific day and symbol.
+     * Calculate and save statistics for a specific day and symbol.
      */
-    @Transactional(readOnly = true)
-    public DailyStatistics calculateStatisticsForDay(LocalDate date, String symbol) {
+    @Transactional
+    public DailyStatistics calculateAndSaveStatisticsForDay(LocalDate date, String symbol) {
+        DailyStatistics stats = calculateStatisticsForDay(date, symbol);
+        if (stats != null) {
+            dailyStatisticsRepository.save(stats);
+            log.info("✅ Daily statistics saved for {} on {}", symbol, date);
+        }
+        return stats;
+    }
+
+    DailyStatistics calculateStatisticsForDay(LocalDate date, String symbol) {
         LocalDateTime dayStart = date.atTime(LocalTime.of(11, 30));
         LocalDateTime dayEnd = date.atTime(LocalTime.of(13, 0));
 

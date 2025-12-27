@@ -420,9 +420,13 @@ public class TelegramService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
+            // Replace \n with <br> for HTML parse_mode
+            message = message.replace("\n", "<br>");
+
             Map<String, Object> body = new HashMap<>();
             body.put("chat_id", telegramProperties.getChatId());
             body.put("text", message);
+            body.put("parse_mode", "HTML");
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             restTemplate.postForObject(url, request, String.class);

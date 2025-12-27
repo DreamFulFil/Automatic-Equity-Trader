@@ -13,7 +13,9 @@ import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
 import tw.gc.mtxfbot.entities.StockSettings;
 import tw.gc.mtxfbot.entities.RiskSettings;
+import tw.gc.mtxfbot.repositories.DailyStatisticsRepository;
 import tw.gc.mtxfbot.services.DataLoggingService;
+import tw.gc.mtxfbot.services.EndOfDayStatisticsService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -35,6 +37,8 @@ class TradingEngineProductionTest {
     @Mock private RiskSettingsService riskSettingsService;
     @Mock private ApplicationContext applicationContext;
     @Mock private DataLoggingService dataLoggingService;
+    @Mock private EndOfDayStatisticsService endOfDayStatisticsService;
+    @Mock private DailyStatisticsRepository dailyStatisticsRepository;
     
     private TradingEngine tradingEngine;
     private TradingProperties tradingProperties;
@@ -71,7 +75,8 @@ class TradingEngineProductionTest {
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService
+            stockSettingsService, riskSettingsService, dataLoggingService,
+            endOfDayStatisticsService, dailyStatisticsRepository
         );
     }
 
@@ -205,7 +210,8 @@ class TradingEngineProductionTest {
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
             applicationContext, contractScalingService, riskManagementService,
-            stockSettingsService, riskSettingsService, dataLoggingService
+            stockSettingsService, riskSettingsService, dataLoggingService,
+            endOfDayStatisticsService, dailyStatisticsRepository
         );
         
         when(contractScalingService.getMaxContracts()).thenReturn(3);

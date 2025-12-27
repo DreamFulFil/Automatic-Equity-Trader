@@ -13,7 +13,9 @@ import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
 import tw.gc.mtxfbot.entities.StockSettings;
 import tw.gc.mtxfbot.entities.RiskSettings;
+import tw.gc.mtxfbot.repositories.DailyStatisticsRepository;
 import tw.gc.mtxfbot.services.DataLoggingService;
+import tw.gc.mtxfbot.services.EndOfDayStatisticsService;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -64,6 +66,12 @@ class TradingEngineTest {
     @Mock
     private DataLoggingService dataLoggingService;
 
+    @Mock
+    private EndOfDayStatisticsService endOfDayStatisticsService;
+
+    @Mock
+    private DailyStatisticsRepository dailyStatisticsRepository;
+
     private TradingEngine tradingEngine;
 
     @BeforeEach
@@ -113,7 +121,9 @@ class TradingEngineTest {
                 riskManagementService,
                 stockSettingsService,
                 riskSettingsService,
-                dataLoggingService
+                dataLoggingService,
+                endOfDayStatisticsService,
+                dailyStatisticsRepository
         );
     }
 
