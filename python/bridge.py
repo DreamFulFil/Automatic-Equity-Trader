@@ -69,9 +69,11 @@ def decrypt_config_value(value, password: str):
 
 def load_config_with_decryption(password: str):
     """Load application.yml and decrypt ENC() values"""
-    # Get the directory where bridge.py is located
+    # Get the directory where bridge.py is located (python/)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, '../src/main/resources/application.yml')
+    # Project root is one level up from python/
+    project_root = os.path.dirname(script_dir)
+    config_path = os.path.join(project_root, 'src/main/resources/application.yml')
     
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -82,21 +84,13 @@ def load_config_with_decryption(password: str):
             if key in config['shioaji']:
                 config['shioaji'][key] = decrypt_config_value(config['shioaji'][key], password)
         
-        # Resolve ca-path: check env var first, then relative path
-        ca_path = config['shioaji'].get('ca-path', '')
-        if ca_path.startswith('${') and ':' in ca_path:
-            # Parse Spring-style ${ENV_VAR:default} syntax
-            match = re.match(r'\$\{([^:}]+):?([^}]*)\}', ca_path)
-            if match:
-                env_var, default = match.groups()
-                ca_path = os.environ.get(env_var, default)
-        
-        # If relative path, resolve from project root
+        # Resolve ca-path relative to project root
+        ca_path = config['shioaji'].get('ca-path', 'Sinopac.pfx')
         if not os.path.isabs(ca_path):
-            project_root = os.path.join(script_dir, '..')
             ca_path = os.path.join(project_root, ca_path)
-        
         config['shioaji']['ca-path'] = os.path.abspath(ca_path)
+        
+        print(f"✅ CA certificate path: {config['shioaji']['ca-path']}")
     
     return config
 
