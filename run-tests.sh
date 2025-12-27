@@ -404,6 +404,17 @@ fi
 if check_bridge; then
     echo -e "${YELLOW}Ensuring earnings blackout dates are available (scrape)...${NC}"
     JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/python python/bridge.py --scrape-earnings || echo "Warning: scrape-earnings failed"
+    
+    # FINAL FIX: Only seed empty file in CI when truly needed
+    BLACKOUT_FILE="$SCRIPT_DIR/config/earnings-blackout-dates.json"
+    if [ "${CI:-false}" = "true" ]; then
+        if [ ! -f "$BLACKOUT_FILE" ] || [ "$(jq 'length' "$BLACKOUT_FILE" 2>/dev/null || echo 0)" -eq 0 ]; then
+            echo "[]" > "$BLACKOUT_FILE"
+            echo "[CI] Seeded empty earnings blackout file (safety net)"
+        else
+            echo "[CI] Preserving $(jq 'length' "$BLACKOUT_FILE") real blackout dates"
+        fi
+    fi
 fi
 
 echo ""
