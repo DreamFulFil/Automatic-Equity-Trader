@@ -591,10 +591,10 @@ public class TradingEngine {
                 telegramService.sendMessage("⚠️ SHORT signal received but ignored (retail investors cannot short sell stocks in Taiwan)");
                 return;
             } else {
-                // Futures mode allows short selling
-                quantity = checkBalanceAndAdjustQuantity("SELL", quantity, currentPrice, instrument);
+                // Futures mode allows short selling - check available margin (like BUY orders)
+                quantity = checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument);
                 if (quantity <= 0) {
-                    log.warn("⚠️ No position to sell - skipping futures SHORT order");
+                    log.warn("⚠️ Insufficient margin for SHORT order - skipping futures SHORT order");
                     return;
                 }
                 executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);

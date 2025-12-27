@@ -46,6 +46,9 @@ class TradingEngineProductionTest {
 
     @BeforeEach
     void setUp() {
+        // Set trading mode to futures for SHORT order tests
+        System.setProperty("trading.mode", "futures");
+        
         objectMapper = new ObjectMapper();
         tradingProperties = new TradingProperties();
         tradingProperties.getWindow().setStart("11:30");
@@ -278,6 +281,16 @@ class TradingEngineProductionTest {
         when(restTemplate.postForObject(eq("http://localhost:8888/order"), any(Map.class), eq(String.class)))
             .thenReturn("order_filled");
         
+        // Mock account response for margin check
+        String accountJson = """
+            {
+                "status": "ok",
+                "available_margin": 1000000.0
+            }
+            """;
+        when(restTemplate.getForObject(eq("http://localhost:8888/account"), eq(String.class)))
+            .thenReturn(accountJson);
+        
         // When: evaluateEntry is called
         tradingEngine.evaluateEntry();
         
@@ -290,6 +303,9 @@ class TradingEngineProductionTest {
             }),
             eq(String.class)
         );
+        
+        // Cleanup
+        System.clearProperty("trading.mode");
     }
 
     @Test

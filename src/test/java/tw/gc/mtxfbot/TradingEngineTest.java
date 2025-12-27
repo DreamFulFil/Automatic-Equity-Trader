@@ -76,6 +76,9 @@ class TradingEngineTest {
 
     @BeforeEach
     void setUp() {
+        // Set trading mode to futures for SHORT order tests
+        System.setProperty("trading.mode", "futures");
+        
         when(tradingProperties.getWindow()).thenReturn(window);
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(window.getStart()).thenReturn("11:30");
@@ -281,6 +284,9 @@ class TradingEngineTest {
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
         when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        
+        // Mock account response for margin check
+        when(restTemplate.getForObject(contains("/account"), eq(String.class))).thenReturn("{\"status\":\"ok\",\"available_margin\":1000000.0}");
 
         // When
         invokePrivateMethod(tradingEngine, "evaluateEntry");
