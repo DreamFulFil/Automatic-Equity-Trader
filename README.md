@@ -93,8 +93,9 @@ jenv exec mvn clean package -DskipTests
 ✅ **Multi-Market Support** - Taiwan stocks (TSE), Taiwan futures (TAIFEX)  
 ✅ **Real-Time Market Data** - Tick-level streaming quotes and Level 2 order book depth  
 ✅ **Smart Execution** - TWAP, VWAP algorithms with strategy-level tracking  
-✅ **Shadow Mode** - Run all 50 strategies in parallel simulation for performance comparison
-✅ **Comprehensive Backtesting** - Test strategies against 18 major Taiwan stocks with detailed analytics
+✅ **Shadow Mode** - Track multiple stocks with assigned strategies in parallel simulation for performance comparison
+✅ **Multi-Stock Shadow Tracking** - Monitor top 10 stocks simultaneously with optimized strategy assignments
+✅ **Comprehensive Backtesting** - Test strategies against 18 major Taiwan stocks with enhanced metrics (return %, Sharpe ratio, max drawdown)
 
 ### AI Integration
 ✅ **LLM-Powered Analysis** - Ollama Llama 3.1 8B for news sentiment, signal enhancement, risk assessment  
@@ -184,6 +185,6 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 395/395 passing ✅ | **Last Updated**: December 2025
+**Status**: Production-ready ✅ | **Tests**: 404/404 passing ✅ | **Last Updated**: December 2025
 
 *Owner: DreamFulFil | License: MIT*

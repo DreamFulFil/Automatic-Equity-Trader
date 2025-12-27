@@ -1,5 +1,6 @@
 package tw.gc.auto.equity.trader.services;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +45,7 @@ public class BacktestService {
                 .build();
             
             portfolios.put(strategy.getName(), p);
-            results.put(strategy.getName(), new BacktestResult(strategy.getName()));
+            results.put(strategy.getName(), new BacktestResult(strategy.getName(), initialCapital));
         }
         
         // Run Simulation Loop
@@ -56,6 +57,9 @@ public class BacktestService {
                 try {
                     TradeSignal signal = strategy.execute(p, data);
                     processSignal(strategy, p, data, signal, result);
+                    
+                    // Track equity curve for drawdown calculation
+                    result.trackEquity(p.getEquity());
                 } catch (Exception e) {
                     log.error("Error in backtest for strategy {}", strategy.getName(), e);
                 }
@@ -70,6 +74,7 @@ public class BacktestService {
                 BacktestResult result = results.get(strategy.getName());
                 closeAllPositions(p, lastData, result);
                 result.setFinalEquity(p.getEquity());
+                result.calculateMetrics();
             }
         }
         
@@ -147,19 +152,84 @@ public class BacktestService {
     @lombok.Data
     public static class BacktestResult {
         private final String strategyName;
+        private final double initialCapital;
         private double finalEquity;
         private int totalTrades;
         private int winningTrades;
         private double totalPnL;
         
+        // Additional metrics
+        private double totalReturnPercentage;
+        private double sharpeRatio;
+        private double maxDrawdownPercentage;
+        
+        // Track equity curve for advanced metrics
+        private final List<Double> equityCurve = new ArrayList<>();
+        private final List<Double> tradePnLs = new ArrayList<>();
+        
         public void addTrade(double pnl) {
             totalTrades++;
             totalPnL += pnl;
+            tradePnLs.add(pnl);
             if (pnl > 0) winningTrades++;
+        }
+        
+        public void trackEquity(double equity) {
+            equityCurve.add(equity);
         }
         
         public double getWinRate() {
             return totalTrades == 0 ? 0 : (double) winningTrades / totalTrades * 100;
+        }
+        
+        public void calculateMetrics() {
+            // Calculate total return percentage
+            if (initialCapital > 0) {
+                totalReturnPercentage = ((finalEquity - initialCapital) / initialCapital) * 100.0;
+            }
+            
+            // Calculate max drawdown
+            maxDrawdownPercentage = calculateMaxDrawdown();
+            
+            // Calculate Sharpe ratio
+            sharpeRatio = calculateSharpeRatio();
+        }
+        
+        private double calculateMaxDrawdown() {
+            if (equityCurve.isEmpty()) return 0.0;
+            
+            double maxEquity = equityCurve.get(0);
+            double maxDrawdown = 0.0;
+            
+            for (double equity : equityCurve) {
+                if (equity > maxEquity) {
+                    maxEquity = equity;
+                }
+                double drawdown = ((maxEquity - equity) / maxEquity) * 100.0;
+                if (drawdown > maxDrawdown) {
+                    maxDrawdown = drawdown;
+                }
+            }
+            
+            return maxDrawdown;
+        }
+        
+        private double calculateSharpeRatio() {
+            if (tradePnLs.isEmpty()) return 0.0;
+            
+            // Calculate average return
+            double avgReturn = tradePnLs.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            
+            // Calculate standard deviation
+            double variance = tradePnLs.stream()
+                .mapToDouble(pnl -> Math.pow(pnl - avgReturn, 2))
+                .average()
+                .orElse(0.0);
+            
+            double stdDev = Math.sqrt(variance);
+            
+            // Sharpe ratio (assuming risk-free rate = 0 for simplicity)
+            return stdDev == 0 ? 0.0 : avgReturn / stdDev;
         }
     }
 }

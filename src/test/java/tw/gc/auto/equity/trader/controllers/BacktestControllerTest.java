@@ -49,7 +49,7 @@ class BacktestControllerTest {
                 .thenReturn(List.of(bar));
 
         Map<String, BacktestService.BacktestResult> results = new HashMap<>();
-        results.put("TestStrategy", new BacktestService.BacktestResult("TestStrategy"));
+        results.put("TestStrategy", new BacktestService.BacktestResult("TestStrategy", 80000.0));
         when(backtestService.runBacktest(any(), any(), anyDouble())).thenReturn(results);
 
         // Execute
