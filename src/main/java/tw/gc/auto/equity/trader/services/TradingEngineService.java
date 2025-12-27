@@ -351,7 +351,11 @@ public class TradingEngineService {
         }
         
         if ("LONG".equals(direction)) {
-            orderExecutionService.executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
+            new tw.gc.auto.equity.trader.command.BuyCommand(
+    orderExecutionService,
+    signalEntity,
+    new tw.gc.auto.equity.trader.command.StockOrderCommandParams(quantity, currentPrice, instrument, tradingStateService.isEmergencyShutdown())
+).execute();
         } else if ("SHORT".equals(direction)) {
             if ("stock".equals(tradingMode)) {
                 log.warn("⚠️ SHORT signal ignored - Taiwan retail investors cannot short sell stocks");
@@ -363,7 +367,11 @@ public class TradingEngineService {
                     log.warn("⚠️ Insufficient margin for SHORT order - skipping futures SHORT order");
                     return;
                 }
-                orderExecutionService.executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
+                new tw.gc.auto.equity.trader.command.SellCommand(
+    orderExecutionService,
+    signalEntity,
+    new tw.gc.auto.equity.trader.command.StockOrderCommandParams(quantity, currentPrice, instrument, tradingStateService.isEmergencyShutdown())
+).execute();
             }
         }
     }

@@ -123,71 +123,122 @@ class DataOperationsService:
             password=self.db_config['password']
         )
     
-    def generate_mock_ohlcv(self, stock_code: str, days: int) -> List[Dict]:
-        """Generate realistic OHLCV data with trends and volatility"""
-        base_price = self.BASE_PRICES.get(stock_code, 100.0)
-        data = []
-        current_date = datetime.now() - timedelta(days=days)
-        price = base_price
-        trend = random.uniform(-0.0001, 0.0003)
-        
-        for _ in range(days):
-            # Skip weekends
-            if current_date.weekday() >= 5:
-                current_date += timedelta(days=1)
-                continue
-            
-            # Daily volatility and price movement
-            daily_volatility = random.uniform(0.02, 0.04)
-            change_pct = random.gauss(trend, daily_volatility)
-            price *= (1 + change_pct)
-            
-            # Generate OHLC
-            daily_range = price * random.uniform(0.015, 0.04)
-            open_price = price + random.uniform(-daily_range/2, daily_range/2)
-            high = max(open_price, price) + random.uniform(0, daily_range/2)
-            low = min(open_price, price) - random.uniform(0, daily_range/2)
-            close = price
-            
-            # Ensure OHLC relationships
-            high = max(high, open_price, close)
-            low = min(low, open_price, close)
-            
-            # Volume (log-normal distribution)
-            volume = int(1_000_000 * random.lognormvariate(0, 1.5))
-            
-            data.append({
-                'date': current_date,
-                'open': round(open_price, 2),
-                'high': round(high, 2),
-                'low': round(low, 2),
-                'close': round(close, 2),
-                'volume': volume
-            })
-            
-            current_date += timedelta(days=1)
-        
-        return data
+    def fetch_historical_data(self, stock_code: str, days: int) -> List[Dict]:
+        """
+        Fetch historical OHLCV data for a Taiwan stock, merging TWSE, Shioaji, Yahoo Finance to fill all available days.
+        Returns a list of dicts with keys: date, open, high, low, close, volume
+        """
+        from datetime import datetime
+        import pandas as pd
+        import yfinance as yf
+        today = datetime.now()
+        start = today - timedelta(days=days-1)
+        # Helper to normalize date to date only
+        def norm_date(d):
+            if isinstance(d, datetime):
+                return d.date()
+            return d
+        # Fetch from all sources
+        twse = self._fetch_twse(stock_code, start, today)
+        shioaji = self._fetch_shioaji(stock_code, start, today)
+        yahoo = self._fetch_yahoo(stock_code, start, today)
+        # Merge by date, priority: TWSE > Shioaji > Yahoo
+        merged = {}
+        for src in (twse, shioaji, yahoo):
+            for bar in src:
+                d = norm_date(bar['date'])
+                if d not in merged:
+                    merged[d] = bar
+        # Return sorted by date
+        return [merged[d] for d in sorted(merged.keys())]
+
+    def _fetch_twse(self, stock_code: str, start, end) -> List[Dict]:
+        import pandas as pd
+        from datetime import datetime
+        ohlcv = []
+        for year in range(start.year, end.year + 1):
+            for month in range(1, 13):
+                if year == end.year and month > end.month:
+                    break
+                date_str = f"{year}{month:02d}01"
+                url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=csv&date={date_str}&stockNo={stock_code}"
+                try:
+                    resp = requests.get(url, timeout=10)
+                    if resp.status_code != 200:
+                        continue
+                    lines = resp.text.splitlines()
+                    csv_lines = [l for l in lines if l and l[0].isdigit()]
+                    if not csv_lines:
+                        continue
+                    df = pd.read_csv(pd.compat.StringIO('\n'.join(csv_lines)), header=None)
+                    for _, row in df.iterrows():
+                        try:
+                            d = datetime.strptime(str(row[0]).strip(), "%Y/%m/%d").date()
+                            if d < start.date() or d > end.date():
+                                continue
+                            ohlcv.append({
+                                'date': d,
+                                'open': float(row[3]),
+                                'high': float(row[4]),
+                                'low': float(row[5]),
+                                'close': float(row[6]),
+                                'volume': int(str(row[1]).replace(',', ''))
+                            })
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+        return ohlcv
+
+    def _fetch_shioaji(self, stock_code: str, start, end) -> List[Dict]:
+        try:
+            from app.services.shioaji_service import ShioajiWrapper
+            sjw = ShioajiWrapper(self.db_config)
+            bars = sjw.fetch_ohlcv(stock_code, (end - start).days + 1)
+            # Filter to date range
+            return [bar for bar in bars if start.date() <= bar['date'] <= end.date()]
+        except Exception:
+            return []
+
+    def _fetch_yahoo(self, stock_code: str, start, end) -> List[Dict]:
+        import yfinance as yf
+        symbol = f"{stock_code}.TW"
+        try:
+            df = yf.download(symbol, start=start.date(), end=(end+timedelta(days=1)).date())
+            if df.empty:
+                return []
+            ohlcv = []
+            for idx, row in df.iterrows():
+                d = idx.date() if hasattr(idx, 'date') else idx
+                ohlcv.append({
+                    'date': d,
+                    'open': float(row['Open']),
+                    'high': float(row['High']),
+                    'low': float(row['Low']),
+                    'close': float(row['Close']),
+                    'volume': int(row['Volume'])
+                })
+            return ohlcv
+        except Exception:
+            return []
+
     
     def populate_historical_data(self, days: int = 730) -> Dict:
         """
-        Populate historical data for all stocks
-        
+        Populate historical data for all stocks using TWSE, Shioaji, Yahoo fallback order.
         Returns:
             Dict with status and stats
         """
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
-            
             total_records = 0
             stock_results = {}
-            
             for stock_code in self.TAIWAN_STOCKS:
-                # Generate data
-                data = self.generate_mock_ohlcv(stock_code, days)
-                
-                # Prepare records
+                data = self.fetch_historical_data(stock_code, days)
+                if not data:
+                    stock_results[f"{stock_code}.TW"] = 0
+                    continue
                 records = []
                 for bar in data:
                     records.append((
@@ -200,23 +251,17 @@ class DataOperationsService:
                         bar['volume'],
                         'DAY_1'
                     ))
-                
-                # Batch insert
                 insert_query = """
                     INSERT INTO market_data 
                     (symbol, timestamp, open_price, high_price, low_price, close_price, volume, timeframe)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                
                 execute_batch(cursor, insert_query, records, page_size=100)
                 conn.commit()
-                
                 total_records += len(records)
                 stock_results[f"{stock_code}.TW"] = len(records)
-            
             cursor.close()
             conn.close()
-            
             return {
                 "status": "success",
                 "message": "Historical data populated successfully",
@@ -225,7 +270,6 @@ class DataOperationsService:
                 "days": days,
                 "stock_details": stock_results
             }
-            
         except Exception as e:
             return {
                 "status": "error",

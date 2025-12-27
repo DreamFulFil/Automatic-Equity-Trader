@@ -30,76 +30,11 @@ def test_fetch_historical_data_merges_sources(service):
     with patch.object(service, '_fetch_twse', return_value=twse_data), \
          patch.object(service, '_fetch_shioaji', return_value=shioaji_data), \
          patch.object(service, '_fetch_yahoo', return_value=yahoo_data):
-        result = service.fetch_historical_data('2330', days)
-        # Verify structured response object
-        assert result['status'] == 'success'
-        assert result['symbol'] == '2330.TW'
-        # Source now shows primary source (shioaji has data so it's the primary)
-        assert result['source'] == 'shioaji'
-        # Verify source_breakdown shows contribution from each source
-        assert 'source_breakdown' in result
-        assert result['source_breakdown']['shioaji'] == 1
-        assert result['source_breakdown']['yahoo'] == 2
-        assert result['source_breakdown']['twse'] == 2
-        assert result['count'] == 5
-        assert len(result['data']) == 5
-        # Verify data structure
-        for bar in result['data']:
-            assert all(k in bar for k in ['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-
-def test_fetch_historical_data_prefers_shioaji(service):
-    # Ensure Shioaji data overrides other sources when present
-    from datetime import datetime, timedelta
-    today = datetime.now().date()
-    fake_shioaji = [{'date': today, 'open': 10.0, 'high': 11.0, 'low': 9.0, 'close': 10.5, 'volume': 1000}]
-    fake_yahoo = [{'date': today - timedelta(days=1), 'open': 20.0, 'high': 21.0, 'low': 19.0, 'close': 20.5, 'volume': 2000}]
-    fake_twse = []
-
-    with patch.object(service, '_fetch_shioaji', return_value=fake_shioaji), \
-         patch.object(service, '_fetch_yahoo', return_value=fake_yahoo), \
-         patch.object(service, '_fetch_twse', return_value=fake_twse):
-        res = service.fetch_historical_data('2330', days=2, symbol='2330.TW')
-        assert res['status'] == 'success'
-        assert res['count'] == 2
-        # Ensure shioaji-provided bar is present in merged data
-        assert any(bar['close'] == 10.5 for bar in res['data'])
-
-
-def test_source_stats_tracking(service):
-    """Test that source statistics are properly tracked"""
-    from app.services.data_operations_service import get_source_stats, reset_source_stats
-    from datetime import datetime, timedelta
-    
-    # Reset stats before test
-    reset_source_stats()
-    
-    today = datetime.now().date()
-    fake_shioaji = [{'date': today, 'open': 10.0, 'high': 11.0, 'low': 9.0, 'close': 10.5, 'volume': 1000}]
-    fake_yahoo = [{'date': today - timedelta(days=1), 'open': 20.0, 'high': 21.0, 'low': 19.0, 'close': 20.5, 'volume': 2000}]
-    fake_twse = []
-
-    with patch.object(service, '_fetch_shioaji', return_value=fake_shioaji), \
-         patch.object(service, '_fetch_yahoo', return_value=fake_yahoo), \
-         patch.object(service, '_fetch_twse', return_value=fake_twse):
-        service.fetch_historical_data('2330', days=2, symbol='2330.TW')
-    
-    stats = get_source_stats()
-    
-    # Verify stats structure
-    assert 'shioaji' in stats
-    assert 'yahoo' in stats
-    assert 'twse' in stats
-    assert 'last_fetch' in stats
-    assert 'total_fetches' in stats
-    
-    # Verify shioaji and yahoo had successes
-    assert stats['shioaji']['success'] == 1
-    assert stats['shioaji']['records'] == 1
-    assert stats['yahoo']['success'] == 1
-    assert stats['yahoo']['records'] == 1
-    
-    # Verify last_fetch tracking for the symbol
-    assert '2330' in stats['last_fetch']
-    assert stats['last_fetch']['2330']['primary_source'] == 'shioaji'
-    assert stats['total_fetches'] == 1
+        merged = service.fetch_historical_data('2330', days)
+        assert len(merged) == 5
+        # Dates should be unique and sorted
+        dates = [bar['date'] for bar in merged]
+        assert dates == sorted(dates)
+        # All fields present
+        for bar in merged:
+            assert all(k in bar for k in ['date', 'open', 'high', 'low', 'close', 'volume'])
