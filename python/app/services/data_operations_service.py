@@ -186,8 +186,16 @@ class DataOperationsService:
         from datetime import datetime
         import pandas as pd
         import yfinance as yf
-        today = datetime.now()
-        start = today - timedelta(days=days-1)
+        
+        # Use explicit start_date/end_date if provided, otherwise calculate from days
+        if start_date and end_date:
+            start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            today = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            print(f"📅 Using explicit date range for {stock_code}: {start.date()} to {today.date()}")
+        else:
+            today = datetime.now()
+            start = today - timedelta(days=days-1)
+            print(f"📅 Calculated date range for {stock_code}: {start.date()} to {today.date()} ({days} days)")
         
         # Helper to normalize date to date only
         def norm_date(d):
@@ -199,8 +207,22 @@ class DataOperationsService:
         source_breakdown = {"shioaji": 0, "yahoo": 0, "twse": 0}
         primary_source = None
         
-        # Fetch in preferred priority: Shioaji (main), Yahoo (fallback), TWSE (supplement)
+        # Fetch in preferred priority: Yahoo (primary for historical data), Shioaji (supplement), TWSE (supplement)
         print(f"📥 Fetching {days} days of data for {stock_code}...")
+        
+        try:
+            yahoo = self._fetch_yahoo(stock_code, start, today)
+            with _source_stats_lock:
+                if yahoo:
+                    _source_stats["yahoo"]["success"] += 1
+                    _source_stats["yahoo"]["records"] += len(yahoo)
+                else:
+                    _source_stats["yahoo"]["failed"] += 1
+        except Exception as e:
+            print(f"⚠️ Yahoo fetch failed for {stock_code}: {e}")
+            yahoo = []
+            with _source_stats_lock:
+                _source_stats["yahoo"]["failed"] += 1
         
         try:
             shioaji = self._fetch_shioaji(stock_code, start, today)
@@ -217,20 +239,6 @@ class DataOperationsService:
                 _source_stats["shioaji"]["failed"] += 1
 
         try:
-            yahoo = self._fetch_yahoo(stock_code, start, today)
-            with _source_stats_lock:
-                if yahoo:
-                    _source_stats["yahoo"]["success"] += 1
-                    _source_stats["yahoo"]["records"] += len(yahoo)
-                else:
-                    _source_stats["yahoo"]["failed"] += 1
-        except Exception as e:
-            print(f"⚠️ Yahoo fetch failed for {stock_code}: {e}")
-            yahoo = []
-            with _source_stats_lock:
-                _source_stats["yahoo"]["failed"] += 1
-
-        try:
             twse = self._fetch_twse(stock_code, start, today)
             with _source_stats_lock:
                 if twse:
@@ -244,12 +252,19 @@ class DataOperationsService:
             with _source_stats_lock:
                 _source_stats["twse"]["failed"] += 1
 
-        print(f"📡 Raw data counts for {stock_code}: shioaji={len(shioaji)}, yahoo={len(yahoo)}, twse={len(twse)}")
+        print(f"📡 Raw data counts for {stock_code}: yahoo={len(yahoo)}, shioaji={len(shioaji)}, twse={len(twse)}")
 
-        # Merge by date using preferred order: shioaji -> yahoo -> twse
+        # Merge by date using preferred order: yahoo -> shioaji -> twse
         # Track which source provided each date
         merged = {}
         date_sources = {}  # Track which source provided each date
+        
+        for bar in yahoo:
+            d = norm_date(bar['date'])
+            if d not in merged:
+                merged[d] = bar
+                date_sources[d] = "yahoo"
+                source_breakdown["yahoo"] += 1
         
         for bar in shioaji:
             d = norm_date(bar['date'])
@@ -257,13 +272,6 @@ class DataOperationsService:
                 merged[d] = bar
                 date_sources[d] = "shioaji"
                 source_breakdown["shioaji"] += 1
-                
-        for bar in yahoo:
-            d = norm_date(bar['date'])
-            if d not in merged:
-                merged[d] = bar
-                date_sources[d] = "yahoo"
-                source_breakdown["yahoo"] += 1
                 
         for bar in twse:
             d = norm_date(bar['date'])
@@ -273,10 +281,10 @@ class DataOperationsService:
                 source_breakdown["twse"] += 1
 
         # Determine primary source (which contributed most data)
-        if source_breakdown["shioaji"] > 0:
-            primary_source = "shioaji"
-        elif source_breakdown["yahoo"] > 0:
+        if source_breakdown["yahoo"] > 0:
             primary_source = "yahoo"
+        elif source_breakdown["shioaji"] > 0:
+            primary_source = "shioaji"
         elif source_breakdown["twse"] > 0:
             primary_source = "twse"
         else:
@@ -284,7 +292,9 @@ class DataOperationsService:
             
         # Log detailed breakdown
         print(f"✅ Merged data for {stock_code}: {len(merged)} days total "
-              f"(shioaji={source_breakdown['shioaji']}, "
+              f"(yahoo={source_breakdown['yahoo']}, "
+              f"shioaji={source_breakdown['shioaji']}, "
+              f"twse={source_breakdown['twse']}) "
               f"yahoo={source_breakdown['yahoo']}, "
               f"twse={source_breakdown['twse']}) "
               f"[primary: {primary_source}]")
@@ -383,8 +393,9 @@ class DataOperationsService:
                 print(f"⚠️ Shioaji not available for {stock_code} - skipping Shioaji source")
                 return []
                 
-            bars = global_shioaji.fetch_ohlcv(stock_code, (end - start).days + 1)
-            # Filter to date range
+            # Pass actual start/end dates instead of days from today
+            bars = global_shioaji.fetch_ohlcv(stock_code, start_date=start, end_date=end)
+            # Filter to date range (defensive)
             return [bar for bar in bars if start.date() <= bar['date'] <= end.date()]
         except ImportError as e:
             print(f"⚠️ Cannot import shioaji from main: {e}")
