@@ -19,8 +19,9 @@ Bulletproof Features:
 - Strict mode separation: NO futures calls in stock mode and vice versa
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import sys
 import os
@@ -63,6 +64,62 @@ async def lifespan(app: FastAPI):
     # Shutdown: cleanup if needed (currently none)
 
 app = FastAPI(lifespan=lifespan)
+
+# ============================================================================
+# ERROR HANDLING MIDDLEWARE
+# ============================================================================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler with LLM-enhanced error explanations"""
+    error_type = type(exc).__name__
+    error_message = str(exc)
+    
+    # Get LLM explanation
+    llm_explanation = call_llama_error_explanation(
+        error_type=error_type,
+        error_message=error_message,
+        context=f"Endpoint: {request.url.path}"
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "error_type": error_type,
+            "error": error_message,
+            "explanation": llm_explanation.get("explanation", error_message),
+            "suggestion": llm_explanation.get("suggestion", "Please check logs"),
+            "severity": llm_explanation.get("severity", "medium"),
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with LLM explanation"""
+    error_details = exc.errors()
+    error_summary = "; ".join([f"{e['loc'][-1]}: {e['msg']}" for e in error_details])
+    
+    llm_explanation = call_llama_error_explanation(
+        error_type="ValidationError",
+        error_message=error_summary,
+        context=f"Endpoint: {request.url.path}"
+    )
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": "error",
+            "error_type": "ValidationError",
+            "error": error_summary,
+            "details": error_details,
+            "explanation": llm_explanation.get("explanation", "Invalid request data"),
+            "suggestion": llm_explanation.get("suggestion", "Check request parameters"),
+            "severity": "low",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
 
 # ============================================================================
 # JASYPT DECRYPTION
@@ -653,6 +710,48 @@ Score: 0.0=very bearish, 0.5=neutral, 1.0=very bullish"""
         return json.loads(result)
     except:
         return {"veto": False, "score": 0.5, "reason": "Analysis failed"}
+
+def call_llama_error_explanation(error_type: str, error_message: str, context: str = "") -> dict:
+    """Call Ollama to generate human-readable error explanation"""
+    # Check if Ollama is initialized
+    if not OLLAMA_URL or not OLLAMA_MODEL:
+        return {
+            "explanation": error_message,
+            "suggestion": "System is initializing. Please try again in a moment.",
+            "severity": "medium"
+        }
+    
+    prompt = f"""You are an expert trading system support agent. Explain this error in simple, actionable terms for a trader.
+
+Error Type: {error_type}
+Error Message: {error_message}
+Context: {context}
+
+Respond ONLY with valid JSON:
+{{"explanation": "brief user-friendly explanation", "suggestion": "what the user should do", "severity": "low/medium/high"}}
+
+Be concise, friendly, and actionable. Focus on what the trader can do to resolve the issue."""
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.3}
+            },
+            timeout=3
+        )
+        result = response.json()['response']
+        import json
+        return json.loads(result)
+    except:
+        return {
+            "explanation": error_message,
+            "suggestion": "Please check the logs or contact support",
+            "severity": "medium"
+        }
 
 # ============================================================================
 # API ENDPOINTS
