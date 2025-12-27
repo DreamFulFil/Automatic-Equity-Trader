@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# MTXF Lunch Bot - Complete Test Suite Runner
+# Automatic-Equity-Trader - Complete Test Suite Runner
 #
 # Usage: ./run-tests.sh <jasypt-password>
 #
@@ -59,7 +59,7 @@ BRIDGE_PID=""
 BOT_PID=""
 
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║         MTXF Lunch Bot - Complete Test Suite                  ║${NC}"
+echo -e "${BLUE}║         Automatic-Equity-Trader - Complete Test Suite         ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "Project: ${SCRIPT_DIR}"
@@ -79,7 +79,7 @@ check_bridge() {
 }
 
 check_bot() {
-    pgrep -f "java.*mtxf-bot.*jar" > /dev/null 2>&1
+    pgrep -f "java.*auto-equity-trader.jar" > /dev/null 2>&1
 }
 
 start_ollama() {
@@ -111,11 +111,7 @@ start_bridge() {
     echo -e "${YELLOW}🐍 Starting Python Bridge...${NC}"
     
     cd "$SCRIPT_DIR/python"
-    if [ -x "venv/bin/python" ]; then
-        JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > /tmp/bridge.log 2>&1 &
-    else
-        JASYPT_PASSWORD="$JASYPT_PASSWORD" python3 bridge.py > /tmp/bridge.log 2>&1 &
-    fi
+    JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > /tmp/bridge.log 2>&1 &
     BRIDGE_PID=$!
     cd "$SCRIPT_DIR"
     
@@ -145,7 +141,7 @@ start_bot() {
         SPRING_PROFILE=""
     fi
     
-    JASYPT_PASSWORD="$JASYPT_PASSWORD" $JAVA_CMD -jar target/mtxf-bot-*.jar \
+    JASYPT_PASSWORD="$JASYPT_PASSWORD" $JAVA_CMD -jar target/auto-equity-trader.jar \
         --jasypt.encryptor.password="$JASYPT_PASSWORD" $SPRING_PROFILE > /tmp/bot.log 2>&1 &
     BOT_PID=$!
     
@@ -169,7 +165,7 @@ shutdown_gracefully() {
     fi
     
     # Trigger daily summary and shutdown via REST API (SKIP IN CI)
-    if [ "$CI" != "true" ] && pgrep -f "java.*mtxf-bot.*jar" >/dev/null 2>&1; then
+    if [ "$CI" != "true" ] && pgrep -f "java.*auto-equity-trader.jar" >/dev/null 2>&1; then
         echo "Triggering autoFlatten via REST API..."
         curl -s -X POST http://localhost:16350/api/shutdown >/dev/null 2>&1 || true
         sleep 25  # Wait for autoFlatten to complete and app to exit gracefully
@@ -177,9 +173,9 @@ shutdown_gracefully() {
     
     # Don't force kill - let it exit gracefully
     # Only kill if it's still running after 25 seconds
-    if pgrep -f "java.*mtxf-bot.*jar" >/dev/null 2>&1; then
+    if pgrep -f "java.*auto-equity-trader.jar" >/dev/null 2>&1; then
         echo "Java bot still running after 25s, force stopping..."
-        /bin/pkill -9 -f "java.*mtxf-bot.*jar" 2>/dev/null || true
+        /bin/pkill -9 -f "java.*auto-equity-trader.jar" 2>/dev/null || true
     fi
     
     # Shutdown bridge
@@ -248,18 +244,39 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}🐍 Phase 2: Python Unit Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Ensure venv is ready
-if [ ! -d "python/venv" ]; then
-    echo "Creating Python venv..."
-    python3 -m venv python/venv
-    python/venv/bin/pip install -q --upgrade pip
-    python/venv/bin/pip install -q -r python/requirements.txt
+# Ensure venv is ready and uses python3.12
+PYTHON_BIN="python3.12"
+if ! command -v $PYTHON_BIN >/dev/null 2>&1; then
+    echo -e "${RED}Error: python3.12 is not installed. Please install Python 3.12.${NC}"
+    exit 1
 fi
 
-# Ensure pytest is installed
-if [ ! -f "python/venv/bin/pytest" ]; then
-    echo "Installing pytest..."
+VENV_OK=false
+if [ -d "python/venv" ]; then
+    VENV_PY=$(python/venv/bin/python -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "broken")
+    PYTEST_OK=true
+    if [ -f "python/venv/bin/pytest" ]; then
+        if ! python/venv/bin/pytest --version >/dev/null 2>&1; then
+            PYTEST_OK=false
+        fi
+    else
+        PYTEST_OK=false
+    fi
+    if [ "$VENV_PY" = "python3.12" ] && [ "$PYTEST_OK" = true ]; then
+        VENV_OK=true
+    else
+        echo "Removing old venv (wrong Python version or broken pytest)..."
+        rm -rf python/venv
+    fi
+fi
+
+if [ "$VENV_OK" != true ]; then
+    echo "Creating Python venv with python3.12..."
+    $PYTHON_BIN -m venv python/venv
+    python/venv/bin/pip install -q --upgrade pip
+    python/venv/bin/pip install -q -r python/requirements.txt
     python/venv/bin/pip install pytest
+    VENV_OK=true
 fi
 
 PYTHON_UNIT_START=$(date +%s)
@@ -391,24 +408,63 @@ echo ""
 # Phase 7: Graceful Shutdown (triggered by trap, Telegram messages e,f,g skipped in CI)
 ###############################################################################
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}📊 Test Summary${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "╔════════════════════════════════════════════════════════════════╗"
-echo -e "║                      📊 TEST RESULTS SUMMARY                   ║"
-echo -e "╠════════════════════════════════════════════════════════════════╣"
-echo -e "║  Test Suite             │  Result      │  Details             ║"
-echo -e "╟────────────────────────────────────────────────────────────────╢"
-printf "║  Java Unit Tests        │  %-11s │  %-20s ║\n" "$([ "$JAVA_UNIT_RESULT" = "PASSED" ] && echo -e "${GREEN}✅ PASSED${NC}" || echo -e "${RED}❌ FAILED${NC}")" "$JAVA_UNIT_SUMMARY"
-printf "║  Python Unit Tests      │  %-11s │  %-20s ║\n" "$([ "$PYTHON_UNIT_RESULT" = "PASSED" ] && echo -e "${GREEN}✅ PASSED${NC}" || echo -e "${RED}❌ FAILED${NC}")" "$(echo $PYTHON_UNIT_SUMMARY | cut -d' ' -f1-2)"
-printf "║  Java Integration       │  %-11s │  %-20s ║\n" "$([ "$JAVA_INT_RESULT" = "PASSED" ] && echo -e "${GREEN}✅ PASSED${NC}" || echo -e "${RED}❌ FAILED${NC}")" "$JAVA_INT_SUMMARY"
-printf "║  Python Integration     │  %-11s │  %-20s ║\n" "$([ "$PYTHON_INT_RESULT" = "PASSED" ] && echo -e "${GREEN}✅ PASSED${NC}" || echo -e "${RED}❌ FAILED${NC}")" "$(echo $PYTHON_INT_SUMMARY | cut -d' ' -f1-2)"
-printf "║  E2E Tests              │  %-11s │  %-20s ║\n" "$([ "$E2E_RESULT" = "PASSED" ] && echo -e "${GREEN}✅ PASSED${NC}" || echo -e "${RED}❌ FAILED${NC}")" "$(echo $E2E_SUMMARY | cut -d' ' -f1-2)"
-echo -e "╠════════════════════════════════════════════════════════════════╣"
-printf "║  ⏱️  Java Unit Duration   │  ${YELLOW}%3ds${NC}                                   ║\n" "$JAVA_UNIT_DURATION"
-printf "║  ⏱️  Python Unit Duration │  ${YELLOW}%3ds${NC}                                   ║\n" "$PYTHON_UNIT_DURATION"
-echo -e "╚════════════════════════════════════════════════════════════════╝"
+
+# Summary table (ASCII, fixed-width columns) - parse numeric counts for perfect alignment
+
+# Helper: parse JUnit-style summary line like: "Tests run: 240, Failures: 0, Errors: 0, Skipped: 0"
+parse_java_counts() {
+    local s="$1"
+    local tests failures errors skipped
+    tests=$(echo "$s" | grep -oE 'Tests run: *[0-9]+' | grep -oE '[0-9]+' || echo "0")
+    failures=$(echo "$s" | grep -oE 'Failures: *[0-9]+' | grep -oE '[0-9]+' || echo "0")
+    errors=$(echo "$s" | grep -oE 'Errors: *[0-9]+' | grep -oE '[0-9]+' || echo "0")
+    skipped=$(echo "$s" | grep -oE 'Skipped: *[0-9]+' | grep -oE '[0-9]+' || echo "0")
+    echo "$tests $failures $errors $skipped"
+}
+
+# Helper: parse pytest-style summary lines like: "65 passed in 1.56s", or "16 passed, 1 failed"
+parse_py_counts() {
+    local s="$1"
+    local passed failed skipped total
+    passed=$(echo "$s" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
+    failed=$(echo "$s" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
+    skipped=$(echo "$s" | grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+' || echo "0")
+    # If passed is present, assume total = passed + failed + skipped; otherwise total = failed+skipped
+    total=$((passed + failed + skipped))
+    echo "$total $failed 0 $skipped"
+}
+
+# Extract counts for each suite
+read JAVA_UNIT_TESTS JAVA_UNIT_FAILURES JAVA_UNIT_ERRORS JAVA_UNIT_SKIPPED < <(parse_java_counts "$JAVA_UNIT_SUMMARY")
+read PYTHON_UNIT_TESTS PYTHON_UNIT_FAILURES PYTHON_UNIT_ERRORS PYTHON_UNIT_SKIPPED < <(parse_py_counts "$PYTHON_UNIT_SUMMARY")
+read JAVA_INT_TESTS JAVA_INT_FAILURES JAVA_INT_ERRORS JAVA_INT_SKIPPED < <(parse_java_counts "$JAVA_INT_SUMMARY")
+read PYTHON_INT_TESTS PYTHON_INT_FAILURES PYTHON_INT_ERRORS PYTHON_INT_SKIPPED < <(parse_py_counts "$PYTHON_INT_SUMMARY")
+read E2E_TESTS E2E_FAILURES E2E_ERRORS E2E_SKIPPED < <(parse_py_counts "$E2E_SUMMARY")
+
+# Table layout widths
+TS_W=23
+R_W=7
+T_W=9
+F_W=8
+E_W=6
+S_W=7
+
+sep="+-------------------------+---------+-----------+----------+--------+---------+"
+printf "%s\n" "$sep"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %-$(printf "%s" $T_W)s | %-$(printf "%s" $F_W)s | %-$(printf "%s" $E_W)s | %-$(printf "%s" $S_W)s |\n" "Test Suite" "Result" "Tests run" "Failures" "Errors" "Skipped"
+printf "%s\n" "$sep"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Java Unit Tests" "$JAVA_UNIT_RESULT" "$JAVA_UNIT_TESTS" "$JAVA_UNIT_FAILURES" "$JAVA_UNIT_ERRORS" "$JAVA_UNIT_SKIPPED"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Python Unit Tests" "$PYTHON_UNIT_RESULT" "$PYTHON_UNIT_TESTS" "$PYTHON_UNIT_FAILURES" "$PYTHON_UNIT_ERRORS" "$PYTHON_UNIT_SKIPPED"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Java Integration" "$JAVA_INT_RESULT" "$JAVA_INT_TESTS" "$JAVA_INT_FAILURES" "$JAVA_INT_ERRORS" "$JAVA_INT_SKIPPED"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Python Integration" "$PYTHON_INT_RESULT" "$PYTHON_INT_TESTS" "$PYTHON_INT_FAILURES" "$PYTHON_INT_ERRORS" "$PYTHON_INT_SKIPPED"
+printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "E2E Tests" "$E2E_RESULT" "$E2E_TESTS" "$E2E_FAILURES" "$E2E_ERRORS" "$E2E_SKIPPED"
+printf "%s\n" "$sep"
+
+# Print durations summary (colored) below the table
+printf "Java unit duration: %s s    Python unit duration: %s s\n" "$JAVA_UNIT_DURATION" "$PYTHON_UNIT_DURATION"
+if [ "$ALL_PASSED" = true ] 2>/dev/null; then
+    echo -e "${GREEN}ALL TESTS PASSED${NC}"
+fi
 echo ""
 
 ALL_PASSED=true

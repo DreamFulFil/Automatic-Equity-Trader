@@ -56,7 +56,7 @@ public class ShioajiSettingsService {
      * Update simulation mode
      */
     @Transactional
-    public void setSimulation(boolean simulation) {
+    public void updateSimulationMode(boolean simulation) {
         ShioajiSettings settings = getSettings();
         settings.setSimulation(simulation);
         settings.setUpdatedAt(LocalDateTime.now());

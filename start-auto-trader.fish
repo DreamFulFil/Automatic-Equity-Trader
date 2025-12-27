@@ -105,11 +105,11 @@ end
 set -x PATH $JAVA_HOME/bin $PATH
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║     🤖 Automatic Equity Trader - Taiwan Stock Trading System       ║"
+echo "║     🤖 Automatic Equity Trader - Taiwan Stock Trading System    ║"
 echo "╠════════════════════════════════════════════════════════════════╣"
-echo "║  Directory: $BOT_DIR"
-echo "║  Mode:      $TRADING_MODE"
-echo "║  Started:   "(date '+%Y-%m-%d %H:%M:%S')
+echo "║  Directory: $BOT_DIR                                           ║"
+echo "║  Mode:      $TRADING_MODE"                                     ║"
+echo "║  Started:   "(date '+%Y-%m-%d %H:%M:%S')                       ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 

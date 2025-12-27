@@ -355,6 +355,29 @@ public class LlmService {
             schema
         );
     }
+
+    /**
+     * Generate a general insight from a prompt.
+     */
+    public String generateInsight(String prompt) {
+        String fullPrompt = prompt + "\n\nRespond ONLY with valid JSON matching this exact schema:\n" +
+                "{\n" +
+                "  \"insight\": \"<your insight here>\"\n" +
+                "}";
+        
+        Map<String, Class<?>> schema = new HashMap<>();
+        schema.put("insight", String.class);
+        
+        Map<String, Object> result = executeStructuredPrompt(
+                fullPrompt,
+                InsightType.MARKET_ANALYSIS,
+                "TradingEngine",
+                null,
+                schema
+        );
+        
+        return (String) result.get("insight");
+    }
     
     // Utility methods
     

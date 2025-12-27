@@ -17,6 +17,7 @@ import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
 import tw.gc.auto.equity.trader.services.DataLoggingService;
 import tw.gc.auto.equity.trader.services.EndOfDayStatisticsService;
+import tw.gc.auto.equity.trader.context.TradingContext;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -42,9 +43,6 @@ class TradingEngineTest {
 
     @Mock
     private TradingProperties tradingProperties;
-
-    @Mock
-    private TradingProperties.Window window;
 
     @Mock
     private TradingProperties.Bridge bridge;
@@ -76,6 +74,12 @@ class TradingEngineTest {
     @Mock
     private ShioajiSettingsService shioajiSettingsService;
 
+    @Mock
+    private tw.gc.auto.equity.trader.services.LlmService llmService;
+
+    @Mock
+    private TradingContext tradingContext;
+
     private TradingEngine tradingEngine;
 
     @BeforeEach
@@ -83,10 +87,7 @@ class TradingEngineTest {
         // Set trading mode to futures for SHORT order tests
         System.setProperty("trading.mode", "futures");
         
-        when(tradingProperties.getWindow()).thenReturn(window);
         when(tradingProperties.getBridge()).thenReturn(bridge);
-        when(window.getStart()).thenReturn("11:30");
-        when(window.getEnd()).thenReturn("13:00");
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         
         when(contractScalingService.getMaxContracts()).thenReturn(1);
@@ -124,21 +125,23 @@ class TradingEngineTest {
                 .build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
 
-        tradingEngine = new TradingEngine(
-                restTemplate,
-                objectMapper,
-                telegramService,
-                tradingProperties,
-                applicationContext,
-                contractScalingService,
-                riskManagementService,
-                stockSettingsService,
-                riskSettingsService,
-                dataLoggingService,
-                endOfDayStatisticsService,
-                dailyStatisticsRepository,
-                shioajiSettingsService
-        );
+        // Configure TradingContext mock
+        when(tradingContext.getRestTemplate()).thenReturn(restTemplate);
+        when(tradingContext.getObjectMapper()).thenReturn(objectMapper);
+        when(tradingContext.getTelegramService()).thenReturn(telegramService);
+        when(tradingContext.getTradingProperties()).thenReturn(tradingProperties);
+        when(tradingContext.getApplicationContext()).thenReturn(applicationContext);
+        when(tradingContext.getContractScalingService()).thenReturn(contractScalingService);
+        when(tradingContext.getRiskManagementService()).thenReturn(riskManagementService);
+        when(tradingContext.getStockSettingsService()).thenReturn(stockSettingsService);
+        when(tradingContext.getRiskSettingsService()).thenReturn(riskSettingsService);
+        when(tradingContext.getDataLoggingService()).thenReturn(dataLoggingService);
+        when(tradingContext.getEndOfDayStatisticsService()).thenReturn(endOfDayStatisticsService);
+        when(tradingContext.getDailyStatisticsRepository()).thenReturn(dailyStatisticsRepository);
+        when(tradingContext.getShioajiSettingsService()).thenReturn(shioajiSettingsService);
+        when(tradingContext.getLlmService()).thenReturn(llmService);
+
+        tradingEngine = new TradingEngine(tradingContext);
     }
 
     // ==================== initialize() tests ====================
@@ -554,22 +557,6 @@ class TradingEngineTest {
 
         // Then
         verify(telegramService).sendMessage(contains("EXCEPTIONAL DAY"));
-    }
-
-    // ==================== autoFlatten() tests ====================
-
-    @Test
-    void autoFlatten_shouldFlattenAndSendSummary() throws Exception {
-        // Given
-        tradingEngine.positionFor(tradingEngine.getActiveSymbol()).set(0); // No position to flatten
-
-        // When
-        // Note: We can't fully test autoFlatten because it calls System.exit()
-        // But we can verify the methods it calls
-        invokePrivateMethod(tradingEngine, "sendDailySummary");
-
-        // Then
-        verify(telegramService).sendMessage(contains("DAILY SUMMARY"));
     }
 
     // ==================== shutdown() tests ====================

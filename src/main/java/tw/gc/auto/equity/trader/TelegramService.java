@@ -79,6 +79,9 @@ public class TelegramService {
     // Track last processed update ID to avoid duplicate processing
     private long lastUpdateId = 0;
 
+    // Custom command handlers
+    private final Map<String, Consumer<String>> customCommands = new HashMap<>();
+
     @PostConstruct
     public void init() {
         log.info("📱 Telegram command interface initialized");
@@ -116,6 +119,11 @@ public class TelegramService {
         this.closeHandler = closeHandler;
         this.shutdownHandler = shutdownHandler;
         log.info("✅ Telegram command handlers registered (including shutdown)");
+    }
+
+    public void registerCustomCommand(String command, Consumer<String> handler) {
+        customCommands.put(command.toLowerCase(), handler);
+        log.info("✅ Registered custom command: {}", command);
     }
 
     /**
@@ -200,6 +208,14 @@ public class TelegramService {
             String arg = text.substring(18).trim();
             handleChangeIncrementCommand(arg);
         } else {
+            // Check custom commands
+            String commandKey = lowerText.split(" ")[0];
+            if (customCommands.containsKey(commandKey)) {
+                String args = text.length() > commandKey.length() ? text.substring(commandKey.length()).trim() : "";
+                customCommands.get(commandKey).accept(args);
+                return;
+            }
+            
             sendMessage("❓ Unknown command: " + text + "\n\nAvailable:\n" +
                     "/status - Bot status\n" +
                     "/pause - Pause trading\n" +
