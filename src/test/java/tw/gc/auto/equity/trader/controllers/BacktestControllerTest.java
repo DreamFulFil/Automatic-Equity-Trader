@@ -5,8 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
-import tw.gc.auto.equity.trader.entities.Bar;
-import tw.gc.auto.equity.trader.repositories.BarRepository;
+import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.services.BacktestService;
 
 import java.time.LocalDateTime;
@@ -31,7 +31,7 @@ class BacktestControllerTest {
     private BacktestService backtestService;
 
     @MockBean
-    private BarRepository barRepository;
+    private MarketDataRepository marketDataRepository;
     
     @MockBean
     private tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository mappingRepository;
@@ -39,17 +39,18 @@ class BacktestControllerTest {
     @Test
     void testRunBacktest() throws Exception {
         // Mock Data
-        Bar bar = Bar.builder()
+        MarketData data = MarketData.builder()
                 .symbol("2454.TW")
                 .open(1000.0)
                 .high(1010.0)
                 .low(990.0)
                 .close(1000.0)
                 .volume(100L)
+                .timeframe(MarketData.Timeframe.MIN_1)
                 .timestamp(LocalDateTime.now())
                 .build();
-        when(barRepository.findBySymbolAndTimeframeAndTimestampBetween(any(), any(), any(), any()))
-                .thenReturn(List.of(bar));
+        when(marketDataRepository.findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(any(), any(), any(), any()))
+                .thenReturn(List.of(data));
 
         Map<String, BacktestService.BacktestResult> results = new HashMap<>();
         results.put("TestStrategy", new BacktestService.BacktestResult("TestStrategy", 80000.0));

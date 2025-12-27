@@ -39,14 +39,13 @@ Advanced trading platform supporting Taiwan stocks/futures with indefinite lifec
 ## 📋 Quick Links
 
 **👉 NEW USERS START HERE:**
-- **[Beginner's Guide](docs/BEGINNER_GUIDE.md)** - Complete walkthrough for non-traders ⭐
-- **[Automation Features](docs/AUTOMATION_FEATURES.md)** - Set it and forget it guide
+- **[Beginner's Guide](docs/usage/BEGINNER_GUIDE.md)** - Complete walkthrough for non-traders ⭐
+- **[Automation Features](docs/usage/AUTOMATION_FEATURES.md)** - Set it and forget it guide
 - **[Quick Start](#-quick-start)** - 5-minute installation
 
 **For Advanced Users:**
-- **[Release Notes](docs/RELEASE-20251213.md)** - Detailed feature list
-- **[Testing Guide](docs/tests/TESTING.md)** - Comprehensive test documentation
-- **[Architecture Q&A](docs/misc/guides/ANSWERS_TO_QUESTIONS.md)** - Technical details
+- **[Testing Guide](docs/reference/TESTING.md)** - Comprehensive test documentation
+- **[Architecture](docs/architecture/)** - Technical details
 - **[Performance Reports](#-performance-reporting)** - Analysis scripts
 
 ---

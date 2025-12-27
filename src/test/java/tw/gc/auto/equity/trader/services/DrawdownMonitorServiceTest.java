@@ -35,6 +35,9 @@ class DrawdownMonitorServiceTest {
 
     @Mock
     private PositionManager positionManager;
+    
+    @Mock
+    private ActiveStockService activeStockService;
 
     @InjectMocks
     private DrawdownMonitorService service;
@@ -45,6 +48,7 @@ class DrawdownMonitorServiceTest {
         lenient().when(tradingStateService.getTradingMode()).thenReturn("stock");
         lenient().when(activeStrategyService.getActiveStrategyName()).thenReturn("RSIStrategy");
         lenient().when(activeStrategyService.getActiveStrategyParameters()).thenReturn(new HashMap<>());
+        lenient().when(activeStockService.getActiveSymbol(anyString())).thenReturn("2454.TW");
     }
 
     @Test
@@ -103,8 +107,8 @@ class DrawdownMonitorServiceTest {
 
         service.monitorDrawdown();
 
-        // Should trigger emergency actions
-        verify(telegramService, times(2)).sendMessage(anyString()); // Alert + switch confirmation
+        // Should trigger emergency actions: 1 alert + 1 switch confirmation
+        verify(telegramService, times(2)).sendMessage(anyString());
         verify(orderExecutionService, times(1)).flattenPosition(
             contains("Emergency"),
             eq("2454.TW"),
@@ -147,8 +151,8 @@ class DrawdownMonitorServiceTest {
 
         service.monitorDrawdown();
 
-        // Should flatten but not switch
-        verify(telegramService, times(2)).sendMessage(anyString()); // Alert + no alternative message
+        // Should flatten and send 2 messages (alert + no alternative)
+        verify(telegramService, times(2)).sendMessage(anyString());
         verify(orderExecutionService, times(1)).flattenPosition(
             contains("Emergency"),
             eq("2454.TW"),
@@ -200,6 +204,8 @@ class DrawdownMonitorServiceTest {
             .strategyName("MACDStrategy")
             .maxDrawdownPct(8.0)
             .sharpeRatio(2.0)
+            .totalReturnPct(25.0)
+            .winRatePct(70.0)
             .build();
 
         when(strategyPerformanceService.getBestPerformer(30)).thenReturn(betterPerformance);
@@ -207,9 +213,11 @@ class DrawdownMonitorServiceTest {
         service.monitorDrawdown();
 
         // Should not flatten (no position), but should switch strategy
+        // Should send 2 messages: alert + switch confirmation
+        verify(telegramService, times(2)).sendMessage(anyString());
         verify(orderExecutionService, never()).flattenPosition(anyString(), anyString(), anyString(), anyBoolean());
         verify(activeStrategyService, times(1)).switchStrategy(
-            anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any()
+            eq("MACDStrategy"), any(), anyString(), anyBoolean(), any(), any(), any(), any()
         );
     }
 }
