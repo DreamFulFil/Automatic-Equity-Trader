@@ -297,6 +297,7 @@ PYTHON_UNIT_OUTPUT=$(JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/pytest \
     python/tests/test_bridge.py \
     python/tests/test_contract.py \
     python/tests/test_shioaji_simulation.py \
+    python/tests/test_shioaji_api.py \
     -v 2>&1) || true
 
 if echo "$PYTHON_UNIT_OUTPUT" | grep -qE "passed|failed"; then
