@@ -229,6 +229,10 @@ else
     echo -e "${RED}❌ Java unit tests failed${NC}"
     JAVA_UNIT_RESULT="FAILED"
 fi
+if [ "$JAVA_UNIT_RESULT" = "FAILED" ]; then
+    echo "Java unit test output:"
+    echo "$JAVA_UNIT_OUTPUT"
+fi
 echo "   $JAVA_UNIT_SUMMARY"
 echo ""
 
@@ -248,6 +252,12 @@ if [ ! -d "python/venv" ]; then
     python/venv/bin/pip install -q -r python/requirements.txt
 fi
 
+# Ensure pytest is installed
+if [ ! -f "python/venv/bin/pytest" ]; then
+    echo "Installing pytest..."
+    python/venv/bin/pip install pytest
+fi
+
 PYTHON_UNIT_OUTPUT=$(JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/pytest \
     python/tests/test_bridge.py \
     python/tests/test_contract.py \
@@ -263,6 +273,10 @@ if echo "$PYTHON_UNIT_OUTPUT" | grep -qE "passed"; then
 else
     echo -e "${RED}❌ Python unit tests failed${NC}"
     PYTHON_UNIT_RESULT="FAILED"
+fi
+if [ "$PYTHON_UNIT_RESULT" = "FAILED" ]; then
+    echo "Python unit test output:"
+    echo "$PYTHON_UNIT_OUTPUT"
 fi
 echo "   $PYTHON_UNIT_SUMMARY"
 echo ""
@@ -321,6 +335,10 @@ else
     echo -e "${RED}❌ Java integration tests failed${NC}"
     JAVA_INT_RESULT="FAILED"
 fi
+if [ "$JAVA_INT_RESULT" = "FAILED" ]; then
+    echo "Java integration test output:"
+    echo "$JAVA_INT_OUTPUT"
+fi
 echo "   $JAVA_INT_SUMMARY"
 echo ""
 
@@ -343,6 +361,10 @@ if echo "$PYTHON_INT_OUTPUT" | grep -qE "passed"; then
 else
     echo -e "${RED}❌ Python integration tests failed${NC}"
     PYTHON_INT_RESULT="FAILED"
+fi
+if [ "$PYTHON_INT_RESULT" = "FAILED" ]; then
+    echo "Python integration test output:"
+    echo "$PYTHON_INT_OUTPUT"
 fi
 echo "   $PYTHON_INT_SUMMARY"
 echo ""
@@ -367,6 +389,10 @@ if [ $E2E_EXIT_CODE -eq 0 ] && echo "$E2E_OUTPUT" | grep -qE "passed" && ! echo 
 else
     echo -e "${RED}❌ E2E tests failed${NC}"
     E2E_RESULT="FAILED"
+fi
+if [ "$E2E_RESULT" = "FAILED" ]; then
+    echo "E2E test output:"
+    echo "$E2E_OUTPUT"
 fi
 echo "   $E2E_SUMMARY"
 echo ""
