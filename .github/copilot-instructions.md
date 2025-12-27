@@ -8,8 +8,9 @@ Focus on correctness and completion over explanation. Avoid narrating internal r
 
 * Always read and follow `.github/copilot-instructions.md`
 * Always use `jenv` for Java and Maven commands; never invoke `java`, `javac`, or `mvn` directly.
-* **Documentation Integrity:** Do not generate or modify files in the `docs/` directory unless explicitly instructed by the user.
+* **Documentation Integrity:** Do not generate or modify files in the `docs/` directory unless explicitly instructed by the user. All docs must be in proper subdirectories (usage/, reference/, development/), NOT directly under docs/.
 * **Markdown Restriction:** Do not generate arbitrary markdown files. The only permitted markdown edits are to `README.MD` during the completion workflow.
+* **Telegram Message Formatting:** NEVER use `\n` escape sequences in Telegram messages. Use actual newlines or format strings properly. Users see literal `\n` which is unacceptable.
 * PostgreSQL is running in Docker. If database inspection is needed, write a temporary Python script under `/tmp`, or use `docker exec`.
 * All code must compile, all existing tests must pass, and all new code must be covered by tests.
 * Never remove tests to make builds pass.

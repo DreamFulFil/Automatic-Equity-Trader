@@ -7,10 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +16,7 @@ import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.services.BacktestService;
+import tw.gc.auto.equity.trader.services.DataOperationsService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.impl.*;
 
@@ -31,7 +29,12 @@ public class BacktestController {
     private final BacktestService backtestService;
     private final MarketDataRepository marketDataRepository;
     private final StrategyStockMappingRepository mappingRepository;
+    private final DataOperationsService dataOperationsService;
 
+    // ========================================================================
+    // SINGLE STOCK BACKTEST
+    // ========================================================================
+    
     @GetMapping("/run")
     public Map<String, BacktestService.BacktestResult> runBacktest(
             @RequestParam(defaultValue = "2454.TW") String symbol,
@@ -217,5 +220,45 @@ public class BacktestController {
         strategies.add(new LinearRegressionStrategy());
         
         return strategies;
+    }
+    
+    // ========================================================================
+    // DATA OPERATIONS (Multi-Stock Pipeline)
+    // ========================================================================
+    
+    @PostMapping("/populate-data")
+    public Map<String, Object> populateHistoricalData(@RequestParam(defaultValue = "730") int days) {
+        log.info("📊 Populating historical data for {} days", days);
+        return dataOperationsService.populateHistoricalData(days);
+    }
+
+    @PostMapping("/run-all")
+    public Map<String, Object> runCombinationalBacktests(
+            @RequestParam(defaultValue = "80000") double capital,
+            @RequestParam(defaultValue = "730") int days) {
+        log.info("🧪 Running combinatorial backtests (capital={}, days={})", capital, days);
+        return dataOperationsService.runCombinationalBacktests(capital, days);
+    }
+
+    @PostMapping("/select-strategy")
+    public Map<String, Object> autoSelectStrategy(
+            @RequestParam(defaultValue = "0.5") double minSharpe,
+            @RequestParam(defaultValue = "10.0") double minReturn,
+            @RequestParam(defaultValue = "50.0") double minWinRate) {
+        log.info("🎯 Auto-selecting best strategy (sharpe>={}, return>={}, winRate>={})", 
+                minSharpe, minReturn, minWinRate);
+        return dataOperationsService.autoSelectBestStrategy(minSharpe, minReturn, minWinRate);
+    }
+
+    @PostMapping("/full-pipeline")
+    public Map<String, Object> runFullPipeline(@RequestParam(defaultValue = "730") int days) {
+        log.info("🚀 Running full data pipeline ({} days)", days);
+        return dataOperationsService.runFullPipeline(days);
+    }
+
+    @GetMapping("/data-status")
+    public Map<String, Object> getDataStatus() {
+        log.debug("📈 Getting data operations status");
+        return dataOperationsService.getDataStatus();
     }
 }

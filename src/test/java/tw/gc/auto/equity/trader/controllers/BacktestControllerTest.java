@@ -35,6 +35,9 @@ class BacktestControllerTest {
     
     @MockBean
     private tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository mappingRepository;
+    
+    @MockBean
+    private tw.gc.auto.equity.trader.services.DataOperationsService dataOperationsService;
 
     @Test
     void testRunBacktest() throws Exception {
