@@ -11,6 +11,7 @@ import tw.gc.auto.equity.trader.repositories.BarRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
+import javax.sql.DataSource;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,12 +35,15 @@ class HistoryDataServiceTest {
 
     @Mock
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    
+    @Mock
+    private DataSource dataSource;
 
     private HistoryDataService historyDataService;
 
     @BeforeEach
     void setUp() {
-        historyDataService = new HistoryDataService(barRepository, marketDataRepository, strategyStockMappingRepository, restTemplate, objectMapper);
+        historyDataService = new HistoryDataService(barRepository, marketDataRepository, strategyStockMappingRepository, restTemplate, objectMapper, dataSource);
     }
 
     @Test
