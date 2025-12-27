@@ -238,38 +238,40 @@ class ShioajiWrapper:
 # GLOBAL STATE
 # ============================================================================
 
-# Get Jasypt password from environment variable
-JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
-if not JASYPT_PASSWORD:
-    print("❌ JASYPT_PASSWORD environment variable not set!")
-    sys.exit(1)
-
-# Load config with decryption
-config = load_config_with_decryption(JASYPT_PASSWORD)
-print("✅ Configuration loaded and decrypted")
-
-# Initialize Shioaji with auto-reconnect wrapper
-shioaji = ShioajiWrapper(config)
-if not shioaji.connect():
-    print("❌ Failed to connect to Shioaji after all retries!")
-    sys.exit(1)
-
-# Latest market data
+# Global variables - initialized lazily for FastAPI mode only
+JASYPT_PASSWORD = None
+config = None
+shioaji = None
 latest_tick = {"price": 0, "volume": 0, "timestamp": None}
-
-# Price history for momentum calculation (keep 10 minutes of data)
 price_history = deque(maxlen=600)
 volume_history = deque(maxlen=600)
-
-# Session tracking
 session_open_price = None
 session_high = None
 session_low = None
 last_direction = "NEUTRAL"
+OLLAMA_URL = None
+OLLAMA_MODEL = None
 
-# Ollama client
-OLLAMA_URL = config['ollama']['url']
-OLLAMA_MODEL = config['ollama']['model']
+
+def init_trading_mode():
+    """Initialize Shioaji and config - only called in FastAPI server mode"""
+    global JASYPT_PASSWORD, config, shioaji, OLLAMA_URL, OLLAMA_MODEL
+    
+    JASYPT_PASSWORD = os.environ.get('JASYPT_PASSWORD')
+    if not JASYPT_PASSWORD:
+        print("❌ JASYPT_PASSWORD environment variable not set!")
+        sys.exit(1)
+    
+    config = load_config_with_decryption(JASYPT_PASSWORD)
+    print("✅ Configuration loaded and decrypted")
+    
+    shioaji = ShioajiWrapper(config)
+    if not shioaji.connect():
+        print("❌ Failed to connect to Shioaji after all retries!")
+        sys.exit(1)
+    
+    OLLAMA_URL = config['ollama']['url']
+    OLLAMA_MODEL = config['ollama']['model']
 
 # ============================================================================
 # NEWS ANALYSIS
@@ -566,11 +568,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.scrape_earnings:
-        # Standalone scraper mode - no FastAPI, no Shioaji
+        # Standalone scraper mode - no FastAPI, no Shioaji, no credentials needed
         scrape_earnings_dates()
         sys.exit(0)
     
-    # Normal FastAPI server mode
+    # Normal FastAPI server mode - initialize trading components
+    init_trading_mode()
+    
     import uvicorn
     print("🐍 Python bridge starting on port 8888...")
     uvicorn.run(app, host="0.0.0.0", port=8888, log_level="info")
