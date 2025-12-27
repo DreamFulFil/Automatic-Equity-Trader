@@ -18,15 +18,21 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bridge import (
+from app.core.config import (
     jasypt_decrypt,
     decrypt_config_value,
+)
+from app.main import (
     fetch_news_headlines,
-    call_llama_news_veto,
-    send_telegram_message,
     OrderRequest,
 )
+from app.services.ollama_service import OllamaService
+from app.services.telegram_service import send_telegram_message
 
+# Mock OllamaService for tests
+def call_llama_news_veto(headlines):
+    service = OllamaService("http://localhost:11434", "llama3.1:8b")
+    return service.call_llama_news_veto(headlines)
 
 class TestJasyptDecryption:
     """Tests for Jasypt PBEWithMD5AndDES decryption"""
@@ -35,7 +41,7 @@ class TestJasyptDecryption:
         """Should extract and decrypt ENC() wrapped values"""
         # We can't test actual decryption without a known encrypted value,
         # but we can test the wrapper detection
-        with patch('bridge.jasypt_decrypt') as mock_decrypt:
+        with patch('app.core.config.jasypt_decrypt') as mock_decrypt:
             mock_decrypt.return_value = "decrypted_value"
             result = decrypt_config_value("ENC(abc123)", "password")
             mock_decrypt.assert_called_once_with("abc123", "password")
@@ -98,7 +104,7 @@ class TestOrderRequest:
 class TestNewsAnalysis:
     """Tests for news fetching and Ollama analysis"""
     
-    @patch('bridge.feedparser.parse')
+    @patch('app.main.feedparser.parse')
     def test_fetch_news_headlines_success(self, mock_parse):
         """Should fetch and return headlines from RSS feeds"""
         mock_feed = Mock()
@@ -114,7 +120,7 @@ class TestNewsAnalysis:
         assert len(headlines) <= 15
         assert "Headline 1" in headlines
     
-    @patch('bridge.feedparser.parse')
+    @patch('app.main.feedparser.parse')
     def test_fetch_news_headlines_handles_errors(self, mock_parse):
         """Should handle feed errors gracefully"""
         mock_parse.side_effect = Exception("Network error")
@@ -123,10 +129,9 @@ class TestNewsAnalysis:
         
         assert headlines == []
     
-    @patch('bridge.requests.post')
-    @patch('bridge.OLLAMA_URL', 'http://localhost:11434')
-    @patch('bridge.OLLAMA_MODEL', 'llama3.1:8b')
-    def test_call_llama_news_veto_success(self, mock_post):
+    @patch('app.services.ollama_service.requests.post')
+    @patch('app.main.OllamaService')
+    def test_call_llama_news_veto_success(self, MockOllamaService, mock_post):
         """Should call Ollama and parse response"""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -134,35 +139,34 @@ class TestNewsAnalysis:
         }
         mock_post.return_value = mock_response
         
-        result = call_llama_news_veto(["Test headline"])
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_llama_news_veto(["Test headline"])
         
         assert result["veto"] == False
         assert result["score"] == 0.6
         assert "stable" in result["reason"]
     
-    @patch('bridge.requests.post')
-    @patch('bridge.OLLAMA_URL', 'http://localhost:11434')
-    @patch('bridge.OLLAMA_MODEL', 'llama3.1:8b')
+    @patch('app.services.ollama_service.requests.post')
     def test_call_llama_news_veto_handles_timeout(self, mock_post):
         """Should return safe defaults on timeout"""
         mock_post.side_effect = Exception("Timeout")
         
-        result = call_llama_news_veto(["Test headline"])
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_llama_news_veto(["Test headline"])
         
         assert result["veto"] == False
         assert result["score"] == 0.5
         assert "failed" in result["reason"].lower()
     
-    @patch('bridge.requests.post')
-    @patch('bridge.OLLAMA_URL', 'http://localhost:11434')
-    @patch('bridge.OLLAMA_MODEL', 'llama3.1:8b')
+    @patch('app.services.ollama_service.requests.post')
     def test_call_llama_news_veto_handles_invalid_json(self, mock_post):
         """Should return safe defaults on invalid JSON response"""
         mock_response = Mock()
         mock_response.json.return_value = {'response': 'not valid json'}
         mock_post.return_value = mock_response
         
-        result = call_llama_news_veto(["Test headline"])
+        service = OllamaService("http://localhost:11434", "llama3.1:8b")
+        result = service.call_llama_news_veto(["Test headline"])
         
         assert result["veto"] == False
         assert result["score"] == 0.5
@@ -239,9 +243,9 @@ class TestSignalGeneration:
 class TestTelegramNotification:
     """Tests for Telegram notification functionality"""
     
-    @patch('bridge.requests.post')
-    @patch('bridge.open', create=True)
-    @patch('bridge.yaml.safe_load')
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', create=True)
+    @patch('app.core.config.yaml.safe_load')
     def test_send_telegram_success(self, mock_yaml, mock_open, mock_post):
         """Should send Telegram message successfully"""
         # Mock config file
@@ -258,7 +262,7 @@ class TestTelegramNotification:
         mock_response.status_code = 200
         mock_post.return_value = mock_response
         
-        with patch('bridge.decrypt_config_value') as mock_decrypt:
+        with patch('app.services.telegram_service.decrypt_config_value') as mock_decrypt:
             mock_decrypt.side_effect = ['decrypted_token', 'decrypted_chat']
             result = send_telegram_message("Test message", "password")
         
@@ -269,9 +273,9 @@ class TestTelegramNotification:
         assert call_args[1]['json']['text'] == "Test message"
         assert call_args[1]['json']['parse_mode'] == "HTML"
     
-    @patch('bridge.requests.post')
-    @patch('bridge.open', create=True)
-    @patch('bridge.yaml.safe_load')
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', create=True)
+    @patch('app.core.config.yaml.safe_load')
     def test_send_telegram_missing_config(self, mock_yaml, mock_open, mock_post):
         """Should handle missing Telegram config gracefully"""
         mock_config = {}
@@ -282,9 +286,9 @@ class TestTelegramNotification:
         assert result is False
         mock_post.assert_not_called()
     
-    @patch('bridge.requests.post')
-    @patch('bridge.open', create=True)
-    @patch('bridge.yaml.safe_load')
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', create=True)
+    @patch('app.core.config.yaml.safe_load')
     def test_send_telegram_missing_credentials(self, mock_yaml, mock_open, mock_post):
         """Should handle missing credentials gracefully"""
         mock_config = {
@@ -295,16 +299,16 @@ class TestTelegramNotification:
         }
         mock_yaml.return_value = mock_config
         
-        with patch('bridge.decrypt_config_value') as mock_decrypt:
+        with patch('app.services.telegram_service.decrypt_config_value') as mock_decrypt:
             mock_decrypt.return_value = None
             result = send_telegram_message("Test message", "password")
         
         assert result is False
         mock_post.assert_not_called()
     
-    @patch('bridge.requests.post')
-    @patch('bridge.open', create=True)
-    @patch('bridge.yaml.safe_load')
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', create=True)
+    @patch('app.core.config.yaml.safe_load')
     def test_send_telegram_api_failure(self, mock_yaml, mock_open, mock_post):
         """Should handle Telegram API failures gracefully"""
         mock_config = {
@@ -320,14 +324,14 @@ class TestTelegramNotification:
         mock_response.status_code = 400
         mock_post.return_value = mock_response
         
-        with patch('bridge.decrypt_config_value') as mock_decrypt:
+        with patch('app.services.telegram_service.decrypt_config_value') as mock_decrypt:
             mock_decrypt.side_effect = ['token', 'chat']
             result = send_telegram_message("Test message", "password")
         
         assert result is False
     
-    @patch('bridge.requests.post')
-    @patch('bridge.open', side_effect=FileNotFoundError)
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', side_effect=FileNotFoundError)
     def test_send_telegram_config_file_missing(self, mock_open, mock_post):
         """Should handle missing config file gracefully"""
         result = send_telegram_message("Test message", "password")

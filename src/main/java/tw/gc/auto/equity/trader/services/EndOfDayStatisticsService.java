@@ -43,6 +43,8 @@ public class EndOfDayStatisticsService {
     private final MarketDataRepository marketDataRepository;
     @NonNull
     private final RestTemplate restTemplate;
+    @NonNull
+    private final tw.gc.auto.equity.trader.TelegramService telegramService;
 
     /**
      * Calculate and store end-of-day statistics.
@@ -305,11 +307,44 @@ public class EndOfDayStatisticsService {
                 stats.setInsightGeneratedAt(LocalDateTime.now(TAIPEI_ZONE));
                 dailyStatisticsRepository.save(stats);
                 log.info("✨ AI insight generated for {}", stats.getTradeDate());
+                
+                // Send summary via Telegram
+                sendTelegramSummary(stats);
             }
 
         } catch (Exception e) {
             log.warn("⚠️ Failed to generate AI insight: {}", e.getMessage());
         }
+    }
+
+    private void sendTelegramSummary(DailyStatistics stats) {
+        String message = String.format(
+            "📊 <b>Daily Trading Summary</b>\n" +
+            "📅 %s (%s)\n\n" +
+            "<b>Performance:</b>\n" +
+            "• P&L: %.0f TWD\n" +
+            "• Trades: %d (W:%d L:%d)\n" +
+            "• Win Rate: %.1f%%\n" +
+            "• Profit Factor: %.2f\n" +
+            "• Max Drawdown: %.0f\n\n" +
+            "<b>Activity:</b>\n" +
+            "• Signals: %d (L:%d S:%d)\n" +
+            "• News Vetos: %d\n" +
+            "• Avg Hold: %.1f min\n\n" +
+            "<b>🤖 AI Insight:</b>\n%s",
+            stats.getTradeDate(), stats.getSymbol(),
+            stats.getRealizedPnL(),
+            stats.getTotalTrades(), stats.getWinningTrades(), stats.getLosingTrades(),
+            stats.getWinRate(),
+            stats.getProfitFactor(),
+            stats.getMaxDrawdown(),
+            stats.getSignalsGenerated(), stats.getSignalsLong(), stats.getSignalsShort(),
+            stats.getNewsVetoCount(),
+            stats.getAvgHoldMinutes(),
+            stats.getLlamaInsight()
+        );
+        
+        telegramService.sendMessage(message);
     }
 
     private String buildInsightPrompt(DailyStatistics stats) {

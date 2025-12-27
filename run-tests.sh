@@ -111,7 +111,8 @@ start_bridge() {
     echo -e "${YELLOW}🐍 Starting Python Bridge...${NC}"
     
     cd "$SCRIPT_DIR/python"
-    JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > /tmp/bridge.log 2>&1 &
+    mkdir -p ../logs
+    JASYPT_PASSWORD="$JASYPT_PASSWORD" venv/bin/python bridge.py > ../logs/shiaoji.log 2>&1 &
     BRIDGE_PID=$!
     cd "$SCRIPT_DIR"
     
@@ -121,7 +122,7 @@ start_bridge() {
     done
     
     echo -e "${RED}❌ Bridge failed to start${NC}"
-    tail -50 /tmp/bridge.log
+    tail -50 logs/shiaoji.log
     return 1
 }
 
@@ -358,7 +359,7 @@ echo -e "${BLUE}🔗 Phase 5: Python Integration Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 PYTHON_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-    python/tests/test_integration.py -v 2>&1) || true
+    python/tests/test_integration.py -v -s 2>&1) || true
 
 PYTHON_INT_SUMMARY=$(echo "$PYTHON_INT_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
 
@@ -385,7 +386,7 @@ echo -e "${BLUE}🎯 Phase 6: E2E Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 E2E_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-    tests/e2e/test_full_session.py -v 2>&1) || true
+    tests/e2e/test_full_session.py -v -s 2>&1) || true
 E2E_EXIT_CODE=$?
 
 E2E_SUMMARY=$(echo "$E2E_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)

@@ -288,18 +288,6 @@ class ShioajiWrapper:
                 return {"status": "error", "error": "Not connected"}
 
         try:
-            # Pre-trade balance check for BUY orders
-            if action == "BUY":
-                account_info = self.get_account_info()
-                if account_info.get("status") == "ok":
-                    available = account_info.get("available_margin", 0)
-                    total_cost = quantity * price
-                    if total_cost > available:
-                        max_quantity = int(available // price)
-                        if max_quantity <= 0:
-                            return {"status": "error", "error": "Insufficient funds for purchase"}
-                        print(f"⚠️ Reducing quantity from {quantity} to {max_quantity} due to insufficient funds.")
-                        quantity = max_quantity
             if self.trading_mode == "stock":
                 return self._place_stock_order(action, quantity, price)
             else:
@@ -317,18 +305,13 @@ class ShioajiWrapper:
             if not self.reconnect():
                 return {"status": "error", "error": "Stock account unavailable"}
 
-        # Determine lot type: round lot (1000 shares) or odd lot
-        if quantity % 1000 == 0:
-            order_lot = sj.constant.StockOrderLot.Common  # Round lot
-        else:
-            order_lot = sj.constant.StockOrderLot.Odd    # Odd lot
         order_obj = self.api.Order(
             price=price,
             quantity=quantity,  # Integer for stocks
             action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
             price_type=sj.constant.StockPriceType.LMT,
             order_type=sj.constant.OrderType.ROD,
-            order_lot=order_lot,
+            order_lot=sj.constant.StockOrderLot.Odd,  # Regular odd lot trading (no day trading)
             account=self.api.stock_account
         )
 
@@ -413,115 +396,6 @@ class ShioajiWrapper:
         except Exception as e:
             print(f"❌ Failed to get account info: {e}")
             return {"equity": 0, "available_margin": 0, "status": "error", "error": str(e)}
-
-    def fetch_ohlcv(self, stock_code: str, start_date=None, end_date=None, days: int = None) -> list:
-        """Fetch OHLCV bars for a Taiwan stock using Shioaji KBars API.
-
-        Args:
-            stock_code: Stock code (e.g., "2330")
-            start_date: Start datetime (if provided, takes precedence over days)
-            end_date: End datetime (if provided, takes precedence over days)
-            days: Number of days back from today (legacy, used if start_date/end_date not provided)
-
-        This method is defensive: it attempts to connect, supports multiple
-        call signatures for K-bars across shioaji versions, and always returns
-        a list of dicts with keys: date, open, high, low, close, volume.
-        It will return an empty list on any non-fatal error to allow callers
-        to fallback to other data sources.
-        
-        The Shioaji Kbars object has structure:
-        - ts: list of nanosecond timestamps
-        - Open, High, Low, Close, Volume: lists of values
-        """
-        from datetime import datetime, timedelta
-
-        try:
-            if not self.connected:
-                if not self.connect():
-                    print(f"⚠️ Shioaji not connected - cannot fetch OHLCV for {stock_code}")
-                    return []
-
-            # Resolve contract
-            try:
-                contract = self.api.Contracts.Stocks.TSE[stock_code]
-            except Exception:
-                # Try OTC market if not found in TSE
-                try:
-                    contract = self.api.Contracts.Stocks.OTC[stock_code]
-                except Exception:
-                    print(f"⚠️ Contract for {stock_code} not found in Shioaji (TSE/OTC)")
-                    return []
-
-            # Calculate date range: prefer explicit start_date/end_date over days
-            if start_date and end_date:
-                start = start_date
-                end = end_date
-            elif days:
-                end = datetime.now()
-                start = end - timedelta(days=days)
-            else:
-                print(f"⚠️ Must provide either (start_date, end_date) or days parameter")
-                return []
-            
-            # Call kbars API with date strings
-            kbars = None
-            try:
-                kbars = self.api.kbars(
-                    contract, 
-                    start=start.strftime('%Y-%m-%d'), 
-                    end=end.strftime('%Y-%m-%d')
-                )
-            except Exception as e:
-                print(f"⚠️ Shioaji kbars call failed: {e}")
-                return []
-
-            if not kbars or not hasattr(kbars, 'ts') or len(kbars.ts) == 0:
-                print(f"⚠️ Shioaji returned no data for {stock_code}")
-                return []
-
-            # Convert Kbars object to list of dicts
-            # Kbars has parallel lists: ts, Open, High, Low, Close, Volume
-            bars = []
-            seen_dates = set()  # For daily aggregation
-            
-            for i in range(len(kbars.ts)):
-                try:
-                    # Convert nanosecond timestamp to datetime
-                    ts_ns = kbars.ts[i]
-                    ts_dt = datetime.fromtimestamp(ts_ns / 1e9)
-                    date_only = ts_dt.date()
-                    
-                    # Skip if we've already seen this date (aggregate to daily)
-                    if date_only in seen_dates:
-                        # Update high/low for this date
-                        for bar in bars:
-                            if bar['date'] == date_only:
-                                bar['high'] = max(bar['high'], float(kbars.High[i]))
-                                bar['low'] = min(bar['low'], float(kbars.Low[i]))
-                                bar['close'] = float(kbars.Close[i])  # Latest close
-                                bar['volume'] += int(kbars.Volume[i])
-                                break
-                        continue
-                    
-                    seen_dates.add(date_only)
-                    bars.append({
-                        'date': date_only,
-                        'open': float(kbars.Open[i]),
-                        'high': float(kbars.High[i]),
-                        'low': float(kbars.Low[i]),
-                        'close': float(kbars.Close[i]),
-                        'volume': int(kbars.Volume[i])
-                    })
-                except Exception as e:
-                    print(f"⚠️ Skipping malformed kbar from Shioaji: {e}")
-                    continue
-
-            print(f"✅ Shioaji: fetched {len(bars)} daily bars for {stock_code}")
-            return bars
-
-        except Exception as e:
-            print(f"❌ Failed to fetch OHLCV from Shioaji for {stock_code}: {e}")
-            return []
     
     def _get_stock_account_info(self):
         """Get stock account info"""

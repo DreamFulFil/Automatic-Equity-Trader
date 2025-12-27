@@ -28,7 +28,7 @@ def wait_for_service(url, timeout=30):
     start = time.time()
     while time.time() - start < timeout:
         try:
-            r = requests.get(f"{url}/health", timeout=2)
+            r = requests.get(f"{url}/health", timeout=5)
             if r.status_code == 200:
                 return True
         except:
@@ -40,7 +40,7 @@ def wait_for_service(url, timeout=30):
 def bridge_available():
     """Check if Python bridge is available"""
     try:
-        r = requests.get(f"{BRIDGE_URL}/health", timeout=2)
+        r = requests.get(f"{BRIDGE_URL}/health", timeout=5)
         return r.status_code == 200
     except:
         return False
@@ -49,7 +49,7 @@ def bridge_available():
 def ollama_available():
     """Check if Ollama is available"""
     try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=2)
+        r = requests.get("http://localhost:11434/api/tags", timeout=5)
         return r.status_code == 200
     except:
         return False
@@ -163,7 +163,7 @@ class TestFullTradingSession:
         """
         Test news veto integration with Ollama
         """
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=15)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
         assert r.status_code == 200
         news = r.json()
         

@@ -414,8 +414,9 @@ public class TelegramService {
     /**
      * Send daily trading summary digest at 13:05 (5 minutes after market close).
      * JUSTIFICATION: Provides daily performance summary to trader after market close.
+     * Disabled in favor of EndOfDayStatisticsService detailed report.
      */
-    @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
+    // @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void sendDailySummaryDigest() {
         if (agentService == null || botModeService == null) {
             return;
