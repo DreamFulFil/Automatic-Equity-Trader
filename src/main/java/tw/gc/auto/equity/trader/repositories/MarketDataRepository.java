@@ -61,6 +61,8 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
     
     boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, Timeframe timeframe);
     
+    List<MarketData> findBySymbolOrderByTimestampDesc(String symbol);
+    
     /**
      * Truncate all market data for clean 10-year backtest ingestion
      */

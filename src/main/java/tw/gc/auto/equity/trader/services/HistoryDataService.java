@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -53,6 +54,7 @@ public class HistoryDataService {
     private final JdbcTemplate jdbcTemplate;
     private final SystemStatusService systemStatusService;
     private final BacktestService backtestService;
+    private final TaiwanStockNameService taiwanStockNameService;
     
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
@@ -84,7 +86,8 @@ public class HistoryDataService {
                               JdbcTemplate jdbcTemplate,
                               org.springframework.transaction.PlatformTransactionManager transactionManager,
                               SystemStatusService systemStatusService,
-                              @Lazy BacktestService backtestService) {
+                              @Lazy BacktestService backtestService,
+                              TaiwanStockNameService taiwanStockNameService) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
@@ -95,6 +98,7 @@ public class HistoryDataService {
         this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         this.systemStatusService = systemStatusService;
         this.backtestService = backtestService;
+        this.taiwanStockNameService = taiwanStockNameService;
     }
     
     /**
@@ -290,6 +294,7 @@ public class HistoryDataService {
         return Bar.builder()
             .timestamp(point.getTimestamp())
             .symbol(point.getSymbol())
+            .name(point.getName())  // Populate from source
             .market("TSE")
             .timeframe("1day")
             .open(point.getOpen())
@@ -305,6 +310,7 @@ public class HistoryDataService {
         return MarketData.builder()
             .timestamp(point.getTimestamp())
             .symbol(point.getSymbol())
+            .name(point.getName())  // Populate from source
             .timeframe(MarketData.Timeframe.DAY_1)
             .open(point.getOpen())
             .high(point.getHigh())
@@ -359,6 +365,7 @@ public class HistoryDataService {
             super("public", "bar");
             mapTimeStamp("timestamp", Bar::getTimestamp);
             mapText("symbol", Bar::getSymbol);
+            mapText("name", Bar::getName);
             mapText("market", Bar::getMarket);
             mapText("timeframe", Bar::getTimeframe);
             mapDouble("open", Bar::getOpen);
@@ -378,6 +385,7 @@ public class HistoryDataService {
             super("public", "market_data");
             mapTimeStamp("timestamp", MarketData::getTimestamp);
             mapText("symbol", MarketData::getSymbol);
+            mapText("name", MarketData::getName);
             mapText("timeframe", md -> md.getTimeframe().name());
             mapDouble("open_price", MarketData::getOpen);
             mapDouble("high_price", MarketData::getHigh);
@@ -527,10 +535,18 @@ public class HistoryDataService {
                 HistoricalDataPoint point = dataQueue.poll(100, TimeUnit.MILLISECONDS);
                 
                 if (point != null) {
+                    // Log raw point name for diagnostics
+                    if (point.getName() == null || point.getName().trim().isEmpty()) {
+                        log.debug("⚠️ Downloaded point for {} @ {} missing name (open={}, close={}, vol={})", symbol, point.getTimestamp(), point.getOpen(), point.getClose(), point.getVolume());
+                    } else {
+                        log.debug("Downloaded point for {} @ {} name='{}'", symbol, point.getTimestamp(), point.getName());
+                    }
+
                     // Convert to entities
                     Bar bar = Bar.builder()
                         .timestamp(point.getTimestamp())
                         .symbol(symbol)
+                        .name(point.getName())  // Add stock name
                         .market("TSE")
                         .timeframe("1day")
                         .open(point.getOpen())
@@ -545,6 +561,7 @@ public class HistoryDataService {
                     MarketData marketData = MarketData.builder()
                         .timestamp(point.getTimestamp())
                         .symbol(symbol)
+                        .name(point.getName())  // Add stock name
                         .timeframe(MarketData.Timeframe.DAY_1)
                         .open(point.getOpen())
                         .high(point.getHigh())
@@ -556,6 +573,16 @@ public class HistoryDataService {
                     
                     // Flush when batch is full
                     if (barBatch.size() >= BULK_INSERT_BATCH_SIZE) {
+                        long missing = barBatch.stream().filter(b -> b.getName() == null || b.getName().trim().isEmpty()).count();
+                        log.info("📊 Flushing {} records for {} ({} missing names)", barBatch.size(), symbol, missing);
+
+                        // Fill any missing names from TaiwanStockNameService as a fallback
+                        if (missing > 0) {
+                            fillMissingNamesIfMissing(barBatch, marketDataBatch, symbol);
+                            long missingAfter = barBatch.stream().filter(b -> b.getName() == null || b.getName().trim().isEmpty()).count();
+                            log.info("🔧 After fallback, {} records still missing names for {}", missingAfter, symbol);
+                        }
+
                         int inserted = flushBatch(barBatch, marketDataBatch);
                         totalInserted += inserted;
                         log.info("📊 Bulk inserted {} records for {} (total: {})", 
@@ -572,6 +599,16 @@ public class HistoryDataService {
         
         // Flush remaining records
         if (!barBatch.isEmpty()) {
+            long missing = barBatch.stream().filter(b -> b.getName() == null || b.getName().trim().isEmpty()).count();
+            log.info("📊 Final flushing {} records for {} ({} missing names)", barBatch.size(), symbol, missing);
+
+            // Fill missing names before final flush
+            if (missing > 0) {
+                fillMissingNamesIfMissing(barBatch, marketDataBatch, symbol);
+                long missingAfter = barBatch.stream().filter(b -> b.getName() == null || b.getName().trim().isEmpty()).count();
+                log.info("🔧 After fallback, {} records still missing names for {}", missingAfter, symbol);
+            }
+
             int inserted = flushBatch(barBatch, marketDataBatch);
             totalInserted += inserted;
             log.info("📊 Final bulk insert: {} records for {} (total: {})", 
@@ -587,39 +624,69 @@ public class HistoryDataService {
     private int flushBatch(List<Bar> bars, List<MarketData> marketDataList) {
         return flushBatchWithFallback(bars, marketDataList);
     }
+
+    /**
+     * Fill missing Bar/MarketData names using TaiwanStockNameService as a fallback.
+     * Package-private for testing.
+     */
+    void fillMissingNamesIfMissing(List<Bar> bars, List<MarketData> marketDataList, String symbol) {
+        if (bars == null || bars.isEmpty()) {
+            return;
+        }
+
+        boolean anyMissing = bars.stream().anyMatch(b -> b.getName() == null || b.getName().trim().isEmpty());
+        if (!anyMissing) {
+            return;
+        }
+
+        try {
+            if (taiwanStockNameService != null && taiwanStockNameService.hasStockName(symbol)) {
+                String fallback = taiwanStockNameService.getStockName(symbol);
+                bars.forEach(b -> { if (b.getName() == null || b.getName().trim().isEmpty()) b.setName(fallback); });
+                marketDataList.forEach(m -> { if (m.getName() == null || m.getName().trim().isEmpty()) m.setName(fallback); });
+                log.info("🔧 Filled missing names for {} using fallback '{}'", symbol, fallback);
+            } else {
+                log.info("🔍 No fallback name available for {}", symbol);
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to fill missing names for {}: {}", symbol, e.getMessage());
+        }
+    }
     
     /**
      * JdbcTemplate batch insert - primary and only strategy.
      * PgBulkInsert disabled due to blocking/deadlock issues with connection pool.
      */
     private int jdbcBatchInsert(List<Bar> bars, List<MarketData> marketDataList) {
-        String barSql = "INSERT INTO bar (timestamp, symbol, market, timeframe, open, high, low, close, volume, is_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        String marketDataSql = "INSERT INTO market_data (timestamp, symbol, timeframe, open_price, high_price, low_price, close_price, volume, asset_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String barSql = "INSERT INTO bar (timestamp, symbol, name, market, timeframe, open, high, low, close, volume, is_complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String marketDataSql = "INSERT INTO market_data (timestamp, symbol, name, timeframe, open_price, high_price, low_price, close_price, volume, asset_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         try {
             jdbcTemplate.batchUpdate(barSql, bars, bars.size(), (ps, bar) -> {
                 ps.setObject(1, bar.getTimestamp());
                 ps.setString(2, bar.getSymbol());
-                ps.setString(3, bar.getMarket());
-                ps.setString(4, bar.getTimeframe());
-                ps.setDouble(5, bar.getOpen());
-                ps.setDouble(6, bar.getHigh());
-                ps.setDouble(7, bar.getLow());
-                ps.setDouble(8, bar.getClose());
-                ps.setLong(9, bar.getVolume());
-                ps.setBoolean(10, bar.isComplete());
+                ps.setString(3, bar.getName());
+                ps.setString(4, bar.getMarket());
+                ps.setString(5, bar.getTimeframe());
+                ps.setDouble(6, bar.getOpen());
+                ps.setDouble(7, bar.getHigh());
+                ps.setDouble(8, bar.getLow());
+                ps.setDouble(9, bar.getClose());
+                ps.setLong(10, bar.getVolume());
+                ps.setBoolean(11, bar.isComplete());
             });
             
             jdbcTemplate.batchUpdate(marketDataSql, marketDataList, marketDataList.size(), (ps, md) -> {
                 ps.setObject(1, md.getTimestamp());
                 ps.setString(2, md.getSymbol());
-                ps.setString(3, md.getTimeframe().name());
-                ps.setDouble(4, md.getOpen());
-                ps.setDouble(5, md.getHigh());
-                ps.setDouble(6, md.getLow());
-                ps.setDouble(7, md.getClose());
-                ps.setLong(8, md.getVolume());
-                ps.setString(9, md.getAssetType() != null ? md.getAssetType().name() : "STOCK");
+                ps.setString(3, md.getName());
+                ps.setString(4, md.getTimeframe().name());
+                ps.setDouble(5, md.getOpen());
+                ps.setDouble(6, md.getHigh());
+                ps.setDouble(7, md.getLow());
+                ps.setDouble(8, md.getClose());
+                ps.setLong(9, md.getVolume());
+                ps.setString(10, md.getAssetType() != null ? md.getAssetType().name() : "STOCK");
             });
             
             return bars.size();
@@ -687,6 +754,7 @@ public class HistoryDataService {
             for (Map<String, Object> point : data) {
                 HistoricalDataPoint dataPoint = new HistoricalDataPoint();
                 dataPoint.setTimestamp(LocalDateTime.parse((String) point.get("timestamp")));
+                dataPoint.setName((String) point.get("name"));  // Stock name from Python
                 dataPoint.setOpen(((Number) point.get("open")).doubleValue());
                 dataPoint.setHigh(((Number) point.get("high")).doubleValue());
                 dataPoint.setLow(((Number) point.get("low")).doubleValue());
@@ -718,6 +786,7 @@ public class HistoryDataService {
     @lombok.AllArgsConstructor
     public static class HistoricalDataPoint {
         private String symbol;
+        private String name;  // Stock name (e.g., "Taiwan Semiconductor Manufacturing")
         private LocalDateTime timestamp;
         private double open;
         private double high;
@@ -761,5 +830,30 @@ public class HistoryDataService {
      */
     public void resetTruncationFlag() {
         tablesCleared.set(false);
+    }
+    
+    /**
+     * Get stock name from historical data (Bar or MarketData tables).
+     * Returns null if not found.
+     */
+    public String getStockNameFromHistory(String symbol) {
+        try {
+            // Try Bar table first (most common for backtests)
+            Optional<Bar> latestBar = barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day");
+            if (latestBar.isPresent() && latestBar.get().getName() != null) {
+                return latestBar.get().getName();
+            }
+            
+            // Try MarketData table as fallback
+            Optional<MarketData> latestData = marketDataRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1);
+            if (latestData.isPresent() && latestData.get().getName() != null) {
+                return latestData.get().getName();
+            }
+            
+            return null; // Not found
+        } catch (Exception e) {
+            log.debug("Could not fetch stock name for {}: {}", symbol, e.getMessage());
+            return null;
+        }
     }
 }
