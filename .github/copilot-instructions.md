@@ -1,5 +1,6 @@
 **General rules (must follow):**
 * Always read and follow `.github/copilot-instructions.md`
+* Clean code principles should be followed as much as possible.
 * Always use `jenv` for Java and Maven commands; never invoke `java`, `javac`, or `mvn` directly.
 * **Documentation Integrity:** Do not generate or modify files in the `docs/` directory unless explicitly instructed by the user. All docs must be in proper subdirectories (usage/, reference/, development/), NOT directly under docs/.
 * **Markdown Restriction:** Do not generate arbitrary markdown files. The only permitted markdown edits are to `README.MD` during the completion workflow.
@@ -20,11 +21,16 @@
 * Always use Lombok `@Data`, `@AllArgsConstructor`, and `@NoArgsConstructor` instead of explicit getters, setters, or self-written constructors.
 * Always check that there are no compile warnings (e.g., unused imports, unused methods, etc.) before committing.
 
-**Tool usage rules (strict):**
-
-* Use real tools when available; never simulate outputs.
-* If you say you will run a command or inspect a file, actually do it.
-* Prefer specialized tools over generic shell commands (`fd`, `rg`, `ast-grep`, `jq`, `yq`).
+## Shell Tools Usage Guidelines
+⚠️ **IMPORTANT**: Use the following specialized tools instead of traditional Unix commands: (Install if missing)
+| Task Type | Must Use | Do Not Use |
+|-----------|----------|------------|
+| Find Files | `fd` | `find`, `ls -R` |
+| Search Text | `rg` (ripgrep) | `grep`, `ag` |
+| Analyze Code Structure | `ast-grep` | `grep`, `sed` |
+| Interactive Selection | `fzf` | Manual filtering |
+| Process JSON | `jq` | `python -m json.tool` |
+| Process YAML/XML | `yq` | Manual parsing |
 
 **File reading discipline:**
 
