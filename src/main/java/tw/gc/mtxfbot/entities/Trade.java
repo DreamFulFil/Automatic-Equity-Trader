@@ -49,7 +49,7 @@ public class Trade {
     private TradingMode mode = TradingMode.SIMULATION;
     
     @Column(length = 50)
-    private String symbol; // e.g., "2330.TW", "MTXF"
+    private String symbol; // e.g., "2454.TW", "MTXF"
     
     @Column(length = 200)
     private String reason; // Entry/exit reason from signal

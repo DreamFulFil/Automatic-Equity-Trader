@@ -241,7 +241,7 @@ class TradingEngineProductionTest {
     void testEarningsBlackout_PreventsTrading() {
         // Given: Earnings blackout is active
         when(riskManagementService.isEarningsBlackout()).thenReturn(true);
-        when(riskManagementService.getEarningsBlackoutStock()).thenReturn("TSMC earnings");
+        when(riskManagementService.getEarningsBlackoutStock()).thenReturn("MediaTek earnings");
         
         // When: tradingLoop runs
         tradingEngine.tradingLoop();

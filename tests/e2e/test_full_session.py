@@ -195,7 +195,17 @@ class TestFullTradingSession:
         assert profit["days"] == 30
 
 
+def java_available():
+    """Check if Java server is available"""
+    try:
+        r = requests.get(f"{JAVA_URL}/health", timeout=2)
+        return r.status_code == 200
+    except:
+        return False
+
+
 @pytest.mark.e2e
+@pytest.mark.skipif(not java_available(), reason="Java server not available")
 class TestEarningsBlackout:
     """Test earnings blackout day behavior via admin endpoints"""
 

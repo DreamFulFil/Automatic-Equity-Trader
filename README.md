@@ -2,7 +2,7 @@
 
 # 🤖 Lunch Investor Bot – Dual-Mode Production Version (December 2025)
 
-**Fully automated Taiwan trading bot for macOS Apple Silicon supporting BOTH stock (2330.TW) and futures (MTXF) trading.**
+**Fully automated Taiwan trading bot for macOS Apple Silicon supporting BOTH stock (2454.TW) and futures (MTXF) trading.**
 
 Trade during the 11:30–13:00 lunch window with AI news filtering, Telegram remote control, automatic scaling, and bulletproof risk limits. Switch between stock and futures mode with a single command-line argument.
 
@@ -19,13 +19,13 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 
 | Mode | Instrument | Default Quantity | Scaling |
 |------|------------|------------------|---------|
-| **stock** (default) | 2330.TW (TSMC odd lots) | 55 shares (≈79k NTD) | +27 shares per 20k equity |
+| **stock** (default) | 2454.TW (MediaTek odd lots) | 70 shares (≈77k NTD) | +27 shares per 20k equity |
 | **futures** | MTXF (Mini-TXF) | 1-4 contracts | Based on equity + 30d profit |
 
 ### Usage
 
 ```bash
-# Stock mode (default) - trades 2330.TW odd lots (perfect for 80k capital)
+# Stock mode (default) - trades 2454.TW odd lots (perfect for 80k capital)
 ./start-lunch-bot.fish YOUR_PASSWORD
 
 # Futures mode - trades MTXF contracts
@@ -33,21 +33,22 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 ```
 
 ### Stock Mode Sizing (for 80k Capital)
-- **Base:** 55 shares at NT$1,445/share = ~79,475 TWD (fits 80k capital perfectly)
+- **Base:** 70 shares at NT$1,100/share = ~77,000 TWD (fits 80k capital perfectly)
 - **Scaling:** +27 shares for every additional 20k equity above 80k
-- **Example:** 100k equity → 55 + (20k÷20k)×27 = 82 shares
+- **Example:** 100k equity → 70 + (20k÷20k)×27 = 97 shares
 
 ### Key Features
 - **One command switches everything** - no config edits, no rebuild
 - **Strict mode separation** - NO futures calls in stock mode and vice versa
 - **Same signals, veto, risk limits** - identical strategy for both modes
-- **Mode shown in Telegram** - "Bot started — Mode: STOCK (2330.TW odd lots, 55 shares)"
+- **Mode shown in Telegram** - "Bot started — Mode: STOCK (2454.TW odd lots, 70 shares)"
 - **Crontab stays safe** - default (no argument) = stock mode
 
 ---
 
 ## 📑 Table of Contents
 
+- [Quickstart](#-quickstart)
 - [Current Features (2025 Final)](#-current-features-2025-final)
 - [Dual-Mode Trading](#-new-dual-mode-trading-december-2025)
 - [Overview](#-overview)
@@ -68,6 +69,70 @@ The bot now supports **two trading modes** via command-line, with **zero config 
 - [Troubleshooting](#-troubleshooting)
 - [FAQ](#-faq)
 - [Disclaimer & License](#%EF%B8%8F-disclaimer--license)
+
+---
+
+## 🚀 Quickstart
+
+### Simulation Mode (Safe Testing)
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/DreamFulFil/Lunch-Investor-Bot.git
+cd Lunch-Investor-Bot
+
+# 2. Install dependencies
+brew install openjdk@21 maven ollama fish
+python3 -m venv python/venv
+python/venv/bin/pip install -r python/requirements.txt
+
+# 3. Download AI model
+ollama pull llama3.1:8b-instruct-q5_K_M
+
+# 4. Configure credentials in src/main/resources/application.yml
+#    Use Jasypt encryption for sensitive values (ENC(...))
+
+# 5. Build and run (simulation mode is default)
+mvn clean package -DskipTests
+./start-lunch-bot.fish YOUR_JASYPT_PASSWORD
+```
+
+### Live Trading Mode
+
+**⚠️ WARNING: Uses real money! Test thoroughly in simulation first.**
+
+```bash
+# 1. Verify simulation results are profitable
+#    Check database: data/bot.db → trades table
+#    Run: sqlite3 data/bot.db "SELECT COUNT(*), SUM(realized_pnl) FROM trades"
+
+# 2. Meet go-live criteria via /golive Telegram command:
+#    - Win rate > 55%
+#    - Max drawdown < 5%
+#    - 20+ trades completed
+
+# 3. Switch to live mode via Telegram:
+/golive
+
+# 4. Or set database directly:
+sqlite3 data/bot.db "UPDATE shioaji_settings SET simulation = false"
+
+# 5. Restart bot
+./start-lunch-bot.fish YOUR_JASYPT_PASSWORD
+```
+
+### Quick Test
+
+```bash
+# Run all tests (requires Jasypt password)
+./run-tests.sh YOUR_JASYPT_PASSWORD
+
+# Run only Java unit tests (no password needed)
+mvn test -DexcludedGroups=integration -Dspring.profiles.active=ci
+
+# Run only Python unit tests
+python/venv/bin/pytest python/tests/test_bridge.py python/tests/test_contract.py -v
+```
 
 ---
 
@@ -308,7 +373,7 @@ chmod +x start-lunch-bot.fish
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `initial_shares` | 70 | Base shares for stock mode (2330.TW) |
+| `initial_shares` | 70 | Base shares for stock mode (2454.TW) |
 | `share_increment` | 27 | Additional shares per 20k equity above base |
 
 #### Risk Settings (Database Table: `risk_settings`)
@@ -992,5 +1057,5 @@ Built for Taiwan retail traders with ❤️
 
 ---
 
-*Last Updated: December 2025 (v2.1 - Dual-Mode with 55-Share TSMC for 80k Capital)*
+*Last Updated: December 2025 (v2.2 - Dual-Mode with 70-Share MediaTek for 80k Capital)*
 *Owner: DreamFulFil | Status: 100/100 Complete*
