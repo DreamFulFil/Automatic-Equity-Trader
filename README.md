@@ -446,22 +446,24 @@ crontab -e
 **Add this line** (adjust paths to YOUR system):
 
 ```cron
-# MTXF Lunch Bot - Runs weekdays at 11:25 AM (5 min before market)
+# MTXF Lunch Bot - Runs weekdays at 11:15 AM (15 min before trading window)
 # Format: minute hour day month weekday command
 # 1-5 = Monday-Friday only
-15 11 * * 1-5 /usr/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish >> logs/cron-(date +\%Y-\%m-\%d).log 2>&1'
+15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish dreamfulfil >> /tmp/mtxf-bot-cron.log 2>&1'
 ```
+
+**⚠️ CRITICAL**: You MUST use the full path to Fish shell (`/opt/homebrew/bin/fish` or `/usr/local/bin/fish`). Cron has a minimal PATH environment and won't find `fish` otherwise. Run `which fish` to get your actual path.
 
 **Line breakdown:**
 
 | Part | Meaning |
 |------|---------|
 | `15 11 * * 1-5` | 11:15 AM, Monday-Friday only |
-| `/usr/bin/fish` | FULL path to Fish shell (CRITICAL!) |
+| `/opt/homebrew/bin/fish` | FULL path to Fish shell (CRITICAL! Use `which fish` to find yours) |
 | `-c '...'` | Execute command in Fish |
 | `cd /Users/.../mtxf-bot` | Change to project directory FIRST |
-| `&& ./start-lunch-bot.fish` | Then run startup script |
-| `>> logs/cron-...log` | Append output to daily log file |
+| `&& ./start-lunch-bot.fish dreamfulfil` | Run startup script with Jasypt password |
+| `>> /tmp/mtxf-bot-cron.log` | Append output to log file |
 | `2>&1` | Redirect errors to same log |
 
 **Save and exit**: Press `Esc`, then type `:wq` and press `Enter` (in vim/nano)
@@ -504,17 +506,11 @@ If this command succeeds, cron will succeed.
 ### Crontab Timing Recommendations
 
 ```cron
-# Conservative: Start 10 min early (11:20 AM)
-20 11 * * 1-5 /usr/bin/fish -c 'cd ... && ./start-lunch-bot.fish >> logs/cron.log 2>&1'
-
-# Recommended: Start 5 min early (11:25 AM)
-25 11 * * 1-5 /usr/bin/fish -c 'cd ... && ./start-lunch-bot.fish >> logs/cron.log 2>&1'
-
-# Aggressive: Start 1 min early (11:29 AM)
-29 11 * * 1-5 /usr/bin/fish -c 'cd ... && ./start-lunch-bot.fish >> logs/cron.log 2>&1'
+# Recommended: Start 15 min early (11:15 AM) - gives time for warmup
+15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /path/to/mtxf-bot && ./start-lunch-bot.fish YOUR_JASYPT_PASSWORD >> /tmp/mtxf-bot-cron.log 2>&1'
 ```
 
-**⚠️ Don't start too early**: Java app will idle until 11:30, but Ollama will consume RAM.
+**⚠️ Don't start too late**: The bot needs ~30 seconds to warm up (connect to Shioaji, load market data).
 
 ---
 
@@ -973,7 +969,7 @@ tail -f /tmp/cron-test.log
 
 Or run the command directly:
 ```fish
-/usr/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish'
+/opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish YOUR_JASYPT_PASSWORD'
 ```
 
 ---
