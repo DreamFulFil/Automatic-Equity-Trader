@@ -360,8 +360,7 @@ class ShioajiWrapper:
             action=sj.constant.Action.Buy if action == "BUY" else sj.constant.Action.Sell,
             price_type=sj.constant.StockPriceType.LMT,
             order_type=sj.constant.OrderType.ROD,
-            order_lot=sj.constant.StockOrderLot.IntradayOdd,  # Odd lot for small quantities
-            daytrade_short=(action == "SELL"),  # Enable day trade short selling for SELL orders
+            order_lot=sj.constant.StockOrderLot.Odd,  # Regular odd lot trading (no day trading)
             account=self.api.stock_account
         )
 
