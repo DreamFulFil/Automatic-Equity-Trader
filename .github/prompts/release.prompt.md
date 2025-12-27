@@ -3,6 +3,8 @@ agent: agent
 ---
 Release instructions — Create GitHub release via REST API (curl)
 
+**Note:** This file is an operational prompt template for maintainers. Ensure you have run unit tests and used `./scripts/operational/bump-version.sh` to update `VERSION` (and create the tag) before creating the release.
+
 This document describes the exact steps to create a GitHub Release using the GitHub Releases REST API (`2022-11-28`) with curl. Follow these steps only when a release is required by the rules in `.github/instructions/commit.instructions.md` (i.e., **minor bumps**: commit types `feat`, `perf`, `refactor`).
 
 Prerequisites
@@ -62,12 +64,17 @@ Create the Release via curl
 - Use the `GITHUB_TOKEN` environment variable with at least `repo` scope.
 
 ```bash
+# Capture release API output into logs with a timestamp
+mkdir -p logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-${LOG_TS}.log"
+
 curl -L -X POST \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   https://api.github.com/repos/<owner>/<repo>/releases \
-  -d "{\"tag_name\": \"v${NEW_VERSION}\", \"target_commitish\": \"main\", \"name\": \"v${NEW_VERSION}\", \"body\": ${BODY_ESCAPED}, \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }"
+  -d "{\"tag_name\": \"v${NEW_VERSION}\", \"target_commitish\": \"main\", \"name\": \"v${NEW_VERSION}\", \"body\": ${BODY_ESCAPED}, \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }" 2>&1 | tee "$LOGFILE"
 ```
 
 Notes & Rules (important)
