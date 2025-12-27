@@ -13,46 +13,54 @@
 
 ---
 
-## 
+## 🎯 TL;DR
+
 **Automatic Equity Trader** is a risk-first, AI-powered automated trading platform for Taiwan stock market. Designed for capital preservation with conservative strategies, comprehensive testing, and full observability.
 
 **Production-Ready:** 524 passing tests | 99 strategies | AI trade veto | GraalVM AOT support
 
 ---
 
-## 
-```
+## 🏗️ Architecture
 
-    User Commands & MonitoringTelegram   Bot  
-
-         
-            {                 echo ___BEGIN___COMMAND_OUTPUT_MARKER___;                 PS1="";PS2="";                 EC=$?;                 echo "___BEGIN___COMMAND_DONE_MARKER___$EC";             }
-          Spring Boot Application (Java)          
-     
-  TradingEngine (Core    Logic)                
- Strategy Selector (99    strategies)        
- Position    Manager                         
- Risk Manager (Stop-Loss/Take-   Profit)     
- AI Veto (Ollama    LLM)                     
-     
-                                                   
-     
-  REST    Controllers                           
- Backtest    API                             
- Shadow Mode    API                          
- Admin    APIs                               
-     
-
-                                   
-            {                 echo ___BEGIN___COMMAND_OUTPUT_MARKER___;                 PS1="";PS2="";                         EC=$?;                 echo "___BEGIN___COMMAND_DONE_MARKER___$EC";             }
- Python Bridge          PostgreSQL     
-  (  (Shioaji)   TimescaleDB)           
-            
-                                   
-            {                 echo ___BEGIN___COMMAND_OUTPUT_MARKER___;                 PS1="";PS2="";                 EC=$?;                 echo "___BEGIN___COMMAND_DONE_MARKER___$EC";             }
- Taiwan Stock                              
- Market (Sinopac)                          
-                          
+```mermaid
+graph TB
+    subgraph "User Interface"
+        TG[Telegram Bot<br/>Commands & Alerts]
+    end
+    
+    subgraph "Java Core - Spring Boot 3.5.8"
+        TE[Trading Engine<br/>Strategy Selector<br/>Position Manager<br/>Risk Manager]
+        BS[Backtest Service<br/>Historical Analysis]
+        API[REST Controllers<br/>Admin APIs]
+        HDS[History Data Service<br/>PgBulkInsert]
+    end
+    
+    subgraph "AI Layer"
+        OL[Ollama LLM<br/>Llama 3.1 8B<br/>News Sentiment]
+    end
+    
+    subgraph "Python Bridge - FastAPI"
+        SJ[Shioaji SDK<br/>Real-time Market Data]
+    end
+    
+    subgraph "Data Layer"
+        DB[(PostgreSQL<br/>TimescaleDB<br/>Time-Series)]
+    end
+    
+    subgraph "External"
+        MKT[Taiwan Stock Market<br/>Sinopac API]
+    end
+    
+    TG --> TE
+    TE --> OL
+    TE --> SJ
+    TE --> DB
+    BS --> HDS
+    HDS --> DB
+    SJ --> MKT
+    API --> TE
+    API --> BS
 ```
 
 **Key Components:**
@@ -64,7 +72,8 @@
 
 ---
 
-## 
+## 🚀 Quickstart
+
 ### Prerequisites
 - Java 21+ (via jenv)
 - Python 3.12+
@@ -113,18 +122,20 @@ For sub-second startup and reduced memory footprint:
 
 ---
 
-## 
+## 📱 Telegram Commands
+
 Control the trading bot via Telegram. See [Telegram Commands Documentation](docs/usage/telegram-commands.md) for full reference.
 
 **Quick Reference:**
 - `/status` - View positions and P&L
 - `/pause` / `/resume` - Control trading
- `/confirm_live` - Switch to live mode
+- `/golive` → `/confirm_live` - Switch to live mode
 - `/help` - List all commands
 
 ---
 
-## 
+## 🧪 Testing
+
 ```bash
 # Unit tests only (fast)
 ./run-tests.sh --unit YOUR_JASYPT_PASSWORD
@@ -143,7 +154,8 @@ Control the trading bot via Telegram. See [Telegram Commands Documentation](docs
 
 ---
 
-## 
+## 📊 Version History
+
 **Current Version:** `0.79.0` (from [VERSION](VERSION) file)
 
 This project follows [Semantic Versioning](https://semver.org/):
@@ -160,20 +172,22 @@ This project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
-## 
+## 📚 Documentation
+
 - **[Telegram Commands](docs/usage/telegram-commands.md)** - Bot command reference
 - **[Contributing Guidelines](.github/copilot-instructions.md)** - Development standards
 - **[Test Suite](run-tests.sh)** - Testing framework
 
 ---
 
- License## 
+## ⚖️ License
 
 [MIT License](LICENSE) - Use at your own risk. Not financial advice.
 
 ---
 
-## 
+## 🛡️ Risk Disclaimer
+
 This software is for **educational purposes only**. Trading involves substantial risk of loss. Past performance does not guarantee future results. Always test in simulation mode before deploying capital.
 
 **Conservative by Design:**
