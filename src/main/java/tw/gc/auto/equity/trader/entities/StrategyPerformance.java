@@ -9,12 +9,27 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * Strategy Performance Metrics
+ * StrategyPerformance Entity - Performance metrics for strategy evaluation.
  * 
- * Tracks performance metrics for each strategy across different modes:
- * - BACKTEST: Historical simulation
- * - SHADOW: Parallel live simulation
- * - MAIN: Active trading (simulation or live)
+ * <h3>Trading Lifecycle Role:</h3>
+ * <ul>
+ *   <li><b>Backtesting</b>: BACKTEST mode stores historical simulation results</li>
+ *   <li><b>Shadow Mode</b>: SHADOW mode tracks parallel live simulation metrics</li>
+ *   <li><b>Main Trading</b>: MAIN mode captures active strategy performance</li>
+ *   <li><b>Auto-Selection</b>: Data source for {@link AutoStrategySelector} decisions</li>
+ *   <li><b>Drawdown Monitor</b>: MDD tracking for emergency strategy switching</li>
+ * </ul>
+ * 
+ * <h3>Key Metrics:</h3>
+ * <ul>
+ *   <li>Sharpe Ratio: Risk-adjusted return (target > 1.0)</li>
+ *   <li>Max Drawdown: Largest peak-to-trough decline (target < 20%)</li>
+ *   <li>Win Rate: Percentage of profitable trades (target > 50%)</li>
+ *   <li>Profit Factor: Gross profit / Gross loss (target > 1.5)</li>
+ * </ul>
+ * 
+ * @see AutoStrategySelector for strategy selection logic
+ * @see DrawdownMonitorService for MDD-based switching
  */
 @Entity
 @Table(name = "strategy_performance", indexes = {

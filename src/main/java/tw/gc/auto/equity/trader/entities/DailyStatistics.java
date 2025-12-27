@@ -10,9 +10,23 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * DailyStatistics entity for storing end-of-day trading statistics.
- * Calculated by Java application at market close (13:30 Taiwan time).
- * Used for performance analysis, insights generation, and chart data.
+ * DailyStatistics Entity - End-of-day aggregate statistics for performance tracking.
+ * 
+ * <h3>Trading Lifecycle Role:</h3>
+ * <ul>
+ *   <li><b>EOD Aggregation</b>: Calculated at market close (13:30 Taiwan) + 30min buffer</li>
+ *   <li><b>Price Statistics</b>: OHLC, daily range, price change metrics</li>
+ *   <li><b>Trading Performance</b>: P&L, win rate, max drawdown, profit factor</li>
+ *   <li><b>Risk Metrics</b>: Sharpe, Sortino, Calmar ratios for risk-adjusted returns</li>
+ *   <li><b>AI Insights</b>: LLM-generated analysis stored for Telegram reports</li>
+ * </ul>
+ * 
+ * <h3>Asset Type:</h3>
+ * The {@code assetType} column defaults to {@code STOCK}. Supports future expansion
+ * to track STOCK and FUTURE statistics separately.
+ * 
+ * @see ReportingService for daily/weekly report generation
+ * @see EndOfDayStatisticsService for calculation logic
  */
 @Entity
 @Table(name = "daily_statistics", indexes = {

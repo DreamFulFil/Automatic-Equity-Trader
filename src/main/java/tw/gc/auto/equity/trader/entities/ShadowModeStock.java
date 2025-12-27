@@ -10,7 +10,10 @@ import java.time.LocalDateTime;
 
 /**
  * Shadow Mode Stock Configuration
- * Tracks multiple stocks with their assigned strategies for shadow mode monitoring.
+ * 
+ * Tracks multiple stock-strategy combinations for shadow mode monitoring. The system maintains
+ * up to 10 candidates dynamically selected from backtesting results via daily forward-testing.
+ * Selection is data-driven based on recent performance metrics (Sharpe ratio, return %, win rate).
  */
 @Entity
 @Table(name = "shadow_mode_stocks")
@@ -36,8 +39,20 @@ public class ShadowModeStock {
     @Column(name = "expected_return_percentage")
     private Double expectedReturnPercentage;
 
+    @Column(name = "sharpe_ratio")
+    private Double sharpeRatio;
+
+    @Column(name = "win_rate_pct")
+    private Double winRatePct;
+
+    @Column(name = "max_drawdown_pct")
+    private Double maxDrawdownPct;
+
     @Column(name = "rank_position")
     private Integer rankPosition;
+
+    @Column(name = "selection_score")
+    private Double selectionScore;
 
     @Column(name = "enabled")
     @Builder.Default
