@@ -10,6 +10,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
+import tw.gc.mtxfbot.entities.Signal;
+import tw.gc.mtxfbot.entities.Signal.SignalDirection;
+import tw.gc.mtxfbot.entities.Trade;
+import tw.gc.mtxfbot.services.DataLoggingService;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -56,6 +60,7 @@ public class TradingEngine {
     private final RiskManagementService riskManagementService;
     private final StockSettingsService stockSettingsService;
     private final RiskSettingsService riskSettingsService;
+    private final DataLoggingService dataLoggingService;
     
     // Trading mode: "stock" or "futures"
     private String tradingMode;
@@ -378,6 +383,21 @@ public class TradingEngine {
         double confidence = signal.path("confidence").asDouble(0.0);
         double currentPrice = signal.path("current_price").asDouble(0.0);
         
+        // Log the signal
+        Signal signalEntity = Signal.builder()
+                .timestamp(LocalDateTime.now(TAIPEI_ZONE))
+                .direction("LONG".equals(direction) ? Signal.SignalDirection.LONG : 
+                          "SHORT".equals(direction) ? Signal.SignalDirection.SHORT : 
+                          Signal.SignalDirection.HOLD)
+                .confidence(confidence)
+                .currentPrice(currentPrice)
+                .exitSignal(false)
+                .symbol("stock".equals(tradingMode) ? "2454.TW" : "MTXF")
+                .marketData(signalJson)
+                .newsVeto(cachedNewsVeto.get())
+                .build();
+        dataLoggingService.logSignal(signalEntity);
+        
         if (confidence < 0.65) {
             log.debug("📉 Low confidence: {}", confidence);
             return;
@@ -432,6 +452,23 @@ public class TradingEngine {
             : -500 * Math.abs(pos); // Futures: -500 TWD per contract
         boolean stopLoss = unrealizedPnL < stopLossThreshold;
         boolean exitSignal = signal.path("exit_signal").asBoolean(false);
+        
+        // Log exit signal evaluation
+        if (exitSignal) {
+            Signal exitSig = Signal.builder()
+                .timestamp(LocalDateTime.now(TAIPEI_ZONE))
+                .direction(SignalDirection.HOLD) // Exit signals are HOLD direction
+                .confidence(signal.path("confidence").asDouble(0.0))
+                .currentPrice(currentPrice)
+                .exitSignal(true)
+                .marketData(signal.toString())
+                .symbol("stock".equals(tradingMode) ? "2454.TW" : "MTXF")
+                .reason("Exit signal evaluation")
+                .newsVeto(signal.path("news_veto").asBoolean(false))
+                .newsScore(signal.path("news_score").asDouble(0.0))
+                .build();
+            dataLoggingService.logSignal(exitSig);
+        }
         
         if (stopLoss) {
             log.warn("🛑 Stop-loss hit: {} TWD (threshold: {})", unrealizedPnL, stopLossThreshold);
@@ -488,6 +525,19 @@ public class TradingEngine {
                 telegramService.sendMessage(String.format(
                         "✅ ORDER FILLED\\n%s %d %s @ %.0f\\nPosition: %d", 
                         action, quantity, instrument, price, currentPosition.get()));
+                
+                // Log the trade
+                Trade trade = Trade.builder()
+                        .timestamp(LocalDateTime.now(TAIPEI_ZONE))
+                        .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
+                        .quantity(quantity)
+                        .entryPrice(price)
+                        .symbol(instrument)
+                        .reason(isExit ? "Position exit" : "Signal execution")
+                        .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
+                        .status(Trade.TradeStatus.OPEN)
+                        .build();
+                dataLoggingService.logTrade(trade);
                 
                 return; // Success - exit retry loop
                 

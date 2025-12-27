@@ -257,6 +257,7 @@ class SystemIntegrationTest {
         
         String dryRunResponse = restTemplate.postForObject(
                 bridgeUrl + "/order/dry-run", testOrder, String.class);
+        assertNotNull(dryRunResponse);
         assertTrue(dryRunResponse.contains("validated"));
         
         // Step 3: Get trading signal
@@ -278,6 +279,7 @@ class SystemIntegrationTest {
             
             String orderResponse = restTemplate.postForObject(
                     bridgeUrl + "/order/dry-run", order, String.class);
+            assertNotNull(orderResponse);
             assertTrue(orderResponse.contains("validated"));
         }
         

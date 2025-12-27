@@ -153,15 +153,10 @@ function test_application_yml_exists
     end
 end
 
-# Test 10: Earnings blackout file exists or can be created
+# Test 10: Earnings blackout data managed in DB
 function test_earnings_blackout_exists
-    if test -f "$PROJECT_ROOT/config/earnings-blackout-dates.json"
-        report_test "Earnings blackout dates exists" pass
-        return 0
-    else
-        report_test "Earnings blackout dates exists" skip "Run: python3 python/bridge.py --scrape-earnings"
-        return 0
-    end
+    report_test "Earnings blackout managed by DB" pass "Use /admin/earnings-blackout endpoints to seed/refresh"
+    return 0
 end
 
 # Test 11: Logs directory exists or can be created

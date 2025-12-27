@@ -179,65 +179,52 @@ class TestFullTradingSession:
 
 @pytest.mark.e2e
 class TestEarningsBlackout:
-    """Test earnings blackout day behavior"""
-    
-    def test_blackout_dates_file_exists(self):
-        """Verify blackout dates file exists"""
-        blackout_file = "config/earnings-blackout-dates.json"
-        
-        if not os.path.exists(blackout_file):
-            pytest.skip("Blackout file not created yet (run: python3 python/bridge.py --scrape-earnings)")
-        
-        assert os.path.exists(blackout_file)
-    
-    def test_blackout_dates_valid_json(self):
-        """Verify blackout dates file is valid JSON"""
-        blackout_file = "config/earnings-blackout-dates.json"
-        
-        if not os.path.exists(blackout_file):
-            pytest.skip("Blackout file not created yet")
-        
-        with open(blackout_file) as f:
-            data = json.load(f)
-        
-        assert "dates" in data
-        assert isinstance(data["dates"], list)
-        assert "last_updated" in data
-        assert "tickers_checked" in data
-    
-    def test_blackout_date_format(self):
-        """Verify dates are in ISO format (YYYY-MM-DD)"""
-        blackout_file = "config/earnings-blackout-dates.json"
-        
-        if not os.path.exists(blackout_file):
-            pytest.skip("Blackout file not created yet")
-        
-        with open(blackout_file) as f:
-            data = json.load(f)
-        
-        for date_str in data.get("dates", []):
-            # Should be YYYY-MM-DD format
-            assert len(date_str) == 10, f"Date should be 10 chars: {date_str}"
-            assert date_str[4] == '-' and date_str[7] == '-', f"Invalid format: {date_str}"
-            
-            # Should be parseable
-            from datetime import date
-            parts = date_str.split('-')
-            assert len(parts) == 3
-            date(int(parts[0]), int(parts[1]), int(parts[2]))  # Will raise if invalid
-    
-    def test_blackout_dates_are_future(self):
-        """Verify dates are in the future (or today)"""
-        blackout_file = "config/earnings-blackout-dates.json"
-        
-        if not os.path.exists(blackout_file):
-            pytest.skip("Blackout file not created yet")
-        
-        with open(blackout_file) as f:
-            data = json.load(f)
-        
-        from datetime import date
-        today = date.today().isoformat()
+    """Test earnings blackout day behavior via admin endpoints"""
+
+    @property
+    def admin_token(self):
+        return os.environ.get("ADMIN_TOKEN")
+
+    def _status(self):
+        if not self.admin_token:
+            pytest.skip("Admin token not configured")
+        r = requests.get(
+            f"{JAVA_URL}/admin/earnings-blackout/status",
+            headers={"X-Admin-Token": self.admin_token},
+            timeout=5,
+        )
+        if r.status_code == 401:
+            pytest.skip("Admin token rejected")
+        return r
+
+    def test_blackout_status_endpoint_available(self):
+        r = self._status()
+        assert r.status_code == 200
+        data = r.json()
+        assert "stale" in data
+        assert "datesCount" in data
+
+    def test_blackout_seed_accepts_payload(self):
+        if not self.admin_token:
+            pytest.skip("Admin token not configured")
+        payload = {
+            "dates": ["2099-01-01"],
+            "tickers_checked": ["TSM", "2317.TW"],
+            "last_updated": "2099-01-01T00:00:00Z",
+            "source": "pytest",
+            "ttl_days": 7,
+        }
+        r = requests.post(
+            f"{JAVA_URL}/admin/earnings-blackout/seed",
+            headers={"X-Admin-Token": self.admin_token},
+            json=payload,
+            timeout=5,
+        )
+        if r.status_code == 401:
+            pytest.skip("Admin token rejected")
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("status") in {"seeded", "ignored"}
         
         for date_str in data.get("dates", []):
             assert date_str >= today, f"Date {date_str} is in the past"

@@ -15,8 +15,7 @@ public class TradingProperties {
     // Note: Stock and Risk settings are now stored in database
     // Use StockSettingsService and RiskSettingsService instead
 
-    // Note: Earnings blackout dates are now loaded from config/earnings-blackout-dates.json
-    // See TradingEngine.loadEarningsBlackoutDates()
+    // Note: Earnings blackout dates are managed by EarningsBlackoutService and stored in DB
     @Data
     public static class Window {
         private String start = "11:30";

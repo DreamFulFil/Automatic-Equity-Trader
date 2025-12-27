@@ -1,31 +1,42 @@
 package tw.gc.mtxfbot;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import tw.gc.mtxfbot.entities.EarningsBlackoutMeta;
+import tw.gc.mtxfbot.services.EarningsBlackoutService;
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class RiskManagementServiceTest {
 
-    private ObjectMapper objectMapper;
+    @Mock
+    private EarningsBlackoutService earningsBlackoutService;
+
     private RiskManagementService riskManagementService;
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
-        riskManagementService = new RiskManagementService(objectMapper);
+        riskManagementService = new RiskManagementService(earningsBlackoutService);
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Collections.emptySet());
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.empty());
+        when(earningsBlackoutService.isLatestStale()).thenReturn(true);
     }
 
     // ==================== P&L tracking tests ====================
@@ -130,9 +141,27 @@ class RiskManagementServiceTest {
     }
 
     @Test
-    void loadEarningsBlackoutDates_whenFileNotExists_shouldNotThrow() {
-        // Should handle missing file gracefully
-        assertDoesNotThrow(() -> riskManagementService.loadEarningsBlackoutDates());
+    void isEarningsBlackout_whenDatePresent_shouldReturnTrue() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Set.of(today));
+
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(OffsetDateTime.now(ZoneId.of("Asia/Taipei")))
+            .tickersChecked(new LinkedHashSet<>(Arrays.asList("TSM", "2317.TW")))
+                .source("test")
+                .build();
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.of(meta));
+        when(earningsBlackoutService.isDataStale(meta)).thenReturn(false);
+        when(earningsBlackoutService.isLatestStale()).thenReturn(false);
+
+        assertTrue(riskManagementService.isEarningsBlackout());
+        assertEquals("TSM, 2317.TW", riskManagementService.getEarningsBlackoutStock());
+    }
+
+    @Test
+    void isEarningsBlackoutDataStale_shouldDelegateToService() {
+        when(earningsBlackoutService.isLatestStale()).thenReturn(true);
+        assertTrue(riskManagementService.isEarningsBlackoutDataStale());
     }
 
     // ==================== Weekly P&L persistence tests ====================

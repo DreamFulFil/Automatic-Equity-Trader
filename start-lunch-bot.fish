@@ -221,17 +221,6 @@ echo "✅ Java app built"
 set BOT_DIR_ABS (pwd)
 mkdir -p $BOT_DIR_ABS/logs
 
-# Step 5.6: Ensure earnings blackout dates exist
-if not test -f "config/earnings-blackout-dates.json"
-    echo "📅 Scraping initial earnings blackout dates..."
-    cd python
-    # Use venv Python directly
-    venv/bin/python bridge.py --scrape-earnings
-    cd ..
-else
-    echo -e "$GREEN📅 Earnings blackout dates loaded$NC"
-end
-
 # Remove any existing stop-file from previous runs
 set STOP_FILE "$BOT_DIR_ABS/logs/supervisor.stop"
 rm -f $STOP_FILE

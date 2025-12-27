@@ -1,6 +1,13 @@
 package tw.gc.mtxfbot;
 
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.mtxfbot.entities.BotSettings;
+import tw.gc.mtxfbot.entities.Trade.TradingMode;
+import tw.gc.mtxfbot.repositories.BotSettingsRepository;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
