@@ -1,26 +1,25 @@
 package tw.gc.auto.equity.trader.controllers;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.web.servlet.MockMvc;
-import tw.gc.auto.equity.trader.entities.MarketData;
-import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
-import tw.gc.auto.equity.trader.services.BacktestService;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.services.BacktestService;
 
 @WebMvcTest(BacktestController.class)
 class BacktestControllerTest {
@@ -28,19 +27,19 @@ class BacktestControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private BacktestService backtestService;
 
-    @MockBean
+    @MockitoBean
     private MarketDataRepository marketDataRepository;
     
-    @MockBean
+    @MockitoBean
     private tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository mappingRepository;
     
-    @MockBean
+    @MockitoBean
     private tw.gc.auto.equity.trader.services.TaiwanStockNameService stockNameService;
     
-    @MockBean
+    @MockitoBean
     private tw.gc.auto.equity.trader.services.AutoStrategySelector autoStrategySelector;
 
     @Test

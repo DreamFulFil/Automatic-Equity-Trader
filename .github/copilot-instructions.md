@@ -142,7 +142,7 @@ Commit type?
 * **Integration Testing:** Required for interactions with external components. Mocks are permitted if the external interaction is resource-heavy.
 * **Framework Independence:** Integration tests should be Spring-independent where possible. Avoid `@SpringBootTest`; prioritize **Mockito** for faster, decoupled execution.
 * **Web Layer Testing:** For Java Controllers, prefer **Slice Testing** using `MockMvc`. The agent may exercise discretion to choose the most appropriate testing strategy based on complexity.
-* **Deprecation Warning:** Explicitly forbid the use of `@MockBean`. Note that it is deprecated and slated for removal; use standard Mockito annotations instead.
+* **Deprecation Warning:** Explicitly forbid the use of `@MockitoBean`. Note that it is deprecated and slated for removal; use `@MockitoBean` instead.
 
 **Claude Model Restriction:**
 * If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.

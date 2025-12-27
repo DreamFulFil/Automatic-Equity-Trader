@@ -4,9 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 import tw.gc.auto.equity.trader.services.TradingEngineService;
@@ -27,13 +27,13 @@ class ShutdownControllerTest {
     @Autowired
     private ShutdownController shutdownController;
 
-    @MockBean
+    @MockitoBean
     private TradingEngineService tradingEngine;
 
-    @MockBean
+    @MockitoBean
     private ShioajiSettingsService shioajiSettingsService;
 
-    @MockBean
+    @MockitoBean
     private ApplicationContext applicationContext;
     
     @BeforeEach
