@@ -114,6 +114,11 @@ fi
 JASYPT_PASSWORD="$1"
 export JASYPT_PASSWORD
 
+# Ensure JAVA_HOME is available for Maven
+if [ -z "$JAVA_HOME" ]; then
+  export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || true)
+fi
+
 cd "$SCRIPT_DIR"
 
 # Counters
