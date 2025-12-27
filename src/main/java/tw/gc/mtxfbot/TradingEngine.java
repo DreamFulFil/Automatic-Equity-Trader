@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -24,6 +26,7 @@ public class TradingEngine {
     private final ObjectMapper objectMapper;
     private final TelegramService telegramService;
     private final TradingProperties tradingProperties;
+    private final ApplicationContext applicationContext;
     
     private final AtomicInteger currentPosition = new AtomicInteger(0);
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
@@ -202,6 +205,21 @@ public class TradingEngine {
         log.info("⏰ 13:00 Auto-flatten triggered");
         flattenPosition("End of trading window");
         sendDailySummary();
+        
+        // Gracefully shutdown the application after trading window ends
+        log.info("🛑 Trading window ended - shutting down application");
+        telegramService.sendMessage("🛑 Trading window ended - Bot shutting down");
+        
+        // Use a separate thread to allow this method to complete before shutdown
+        new Thread(() -> {
+            try {
+                Thread.sleep(2000); // Give time for Telegram message to be sent
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            int exitCode = SpringApplication.exit(applicationContext, () -> 0);
+            System.exit(exitCode);
+        }).start();
     }
     
     private void sendDailySummary() {
