@@ -53,8 +53,8 @@ api.quote.subscribe(
 # Latest market data
 latest_tick = {"price": 0, "volume": 0, "timestamp": None}
 
-@api.quote.on_tick_fop_v1()
-def tick_callback(exchange, tick):
+@api.quote.on_quote
+def handle_tick(exchange: sj.constant.Exchange, tick):
     latest_tick["price"] = tick.close
     latest_tick["volume"] = tick.volume
     latest_tick["timestamp"] = tick.datetime

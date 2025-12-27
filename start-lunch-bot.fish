@@ -89,14 +89,21 @@ set PYTHON_PID $last_pid
 echo -e "$GREEN✅ Python bridge started (PID: $PYTHON_PID)$NC"
 cd ..
 
-# Wait for bridge to be ready
-echo "⏳ Waiting for Python bridge..."
-for i in (seq 1 30)
-    if curl -s http://localhost:8888/health > /dev/null 2>&1
-        echo -e "$GREEN✅ Python bridge ready$NC"
+# Wait for bridge to be ready (more reliable)
+echo "Waiting for Python bridge..."
+set -l attempts 0
+while test $attempts -lt 30
+    if curl -f -s http://localhost:8888/health > /dev/null 2>&1
+        echo -e "$GREENPython bridge ready$NC"
         break
     end
+    set attempts (math $attempts + 1)
     sleep 1
+end
+
+# Final check — if still not ready, show error but continue
+if test $attempts -eq 30
+    echo -e "$REDWarning: Python bridge not ready after 30s, starting Java anyway...$NC"
 end
 
 # Step 8: Start Java trading engine
