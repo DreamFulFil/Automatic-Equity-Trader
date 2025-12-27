@@ -25,30 +25,30 @@
 
 ```mermaid
 graph TB
-    subgraph "User Interface"
+    subgraph UI["User Interface"]
         TG[Telegram Bot<br/>Commands & Alerts]
     end
     
-    subgraph "Java Core - Spring Boot 3.5.8"
+    subgraph JAVA["Java Core (Spring Boot 3.5.8)"]
         TE[Trading Engine<br/>Strategy Selector<br/>Position Manager<br/>Risk Manager]
         BS[Backtest Service<br/>Historical Analysis]
         API[REST Controllers<br/>Admin APIs]
         HDS[History Data Service<br/>PgBulkInsert]
     end
     
-    subgraph "AI Layer"
+    subgraph AI["AI Layer"]
         OL[Ollama LLM<br/>Llama 3.1 8B<br/>News Sentiment]
     end
     
-    subgraph "Python Bridge - FastAPI"
+    subgraph PY["Python Bridge (FastAPI)"]
         SJ[Shioaji SDK<br/>Real-time Market Data]
     end
     
-    subgraph "Data Layer"
+    subgraph DATA["Data Layer"]
         DB[(PostgreSQL<br/>TimescaleDB<br/>Time-Series)]
     end
     
-    subgraph "External"
+    subgraph EXT["External"]
         MKT[Taiwan Stock Market<br/>Sinopac API]
     end
     
