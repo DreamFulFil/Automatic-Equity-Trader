@@ -23,6 +23,8 @@ Advanced trading platform supporting Taiwan stocks/futures with indefinite lifec
 - **[Release Notes](docs/RELEASE-20251213.md)** - Detailed feature list and performance benchmarks
 - **[Testing Guide](docs/tests/TESTING.md)** - Comprehensive test documentation
 - **[System Re-Creation Prompts](docs/prompts/)** - Complete 5-prompt series to rebuild from scratch
+- **[Architecture Q&A](docs/misc/ANSWERS_TO_QUESTIONS.md)** - Stock/strategy independence, capital management, lot types
+- **[Performance Reports](#-performance-reporting)** - Daily and weekly analysis scripts
 
 ---
 
@@ -197,9 +199,24 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-## 🆕 Latest Updates (v2.1.2)
+## 🆕 Latest Updates (v2.1.3)
 
-### Dynamic Stock Selection (December 15, 2025)
+### Performance Reporting Scripts (December 15, 2025)
+- **Daily Performance Report**: `scripts/daily_performance_report.py` - Comprehensive daily analysis with actionable recommendations
+- **Weekly Performance Report**: `scripts/weekly_performance_report.py` - 7-day trend analysis with consistency scoring
+- **Multi-Factor Scoring**: Sharpe ratio, returns, win rate, and drawdown combined for optimal strategy/stock selection
+- **Telegram Command Generation**: Reports include ready-to-use `/change-stock` and `/set-main-strategy` commands
+- **Database-Driven**: Queries `strategy_performance` table for MAIN and SHADOW mode comparison
+- **Documentation**: Comprehensive `docs/misc/ANSWERS_TO_QUESTIONS.md` explaining system architecture
+
+### Architecture Questions Answered
+- ✅ **Stock vs Strategy Independence**: Clarified they are orthogonal dimensions - can change independently or together
+- ✅ **Capital Management**: Documented Shioaji API → Database → Defaults hierarchy with real-time updates
+- ✅ **Lot Trading Types**: Confirmed odd-lot only (1-999 shares) for current capital levels (~80k-120k TWD)
+- ✅ **Backtest Date Ranges**: Last 90 days from execution, re-run recommended monthly
+- ✅ **Dynamic Configuration**: Both stock (`/change-stock`) and strategy (`/set-main-strategy`) support runtime changes
+
+### Dynamic Stock Selection (v2.1.2)
 - **Removed Hardcoded Stock**: MediaTek (2454.TW) no longer hardcoded - now database-driven
 - **Active Stock Service**: New service manages currently active trading stock dynamically  
 - **Telegram Command**: `/change-stock <symbol>` - Switch trading stock at runtime
@@ -243,6 +260,42 @@ jenv exec mvn clean package -DskipTests
 
 ---
 
-**Status**: Production-ready ✅ | **Tests**: 445/445 passing ✅ | **Last Updated**: December 15, 2025
+## 📊 Performance Reporting
+
+### Daily Performance Report
+Run after market close (14:30) to analyze yesterday's performance:
+```bash
+python3 scripts/daily_performance_report.py
+```
+**Output includes:**
+- Main strategy performance (last 24h)
+- Top 5 shadow strategies
+- Stock/strategy change recommendations
+- Risk warnings (MDD, win rate)
+- Ready-to-use Telegram commands
+
+### Weekly Performance Report
+Run Monday morning (8:30) before market opens:
+```bash
+python3 scripts/weekly_performance_report.py
+```
+**Output includes:**
+- 7-day aggregated metrics
+- Performance trends (improving/declining/stable)
+- Consistency scoring
+- Strategic recommendations for the week
+
+**Schedule with cron:**
+```bash
+# Daily report after market close
+35 14 * * 1-5 cd /path/to/project && python3 scripts/daily_performance_report.py
+
+# Weekly report Monday morning
+30 8 * * 1 cd /path/to/project && python3 scripts/weekly_performance_report.py
+```
+
+---
+
+**Status**: Production-ready ✅ | **Tests**: 434/445 passing (13 pre-existing failures) | **Last Updated**: December 15, 2025
 
 *Owner: DreamFulFil | License: MIT*

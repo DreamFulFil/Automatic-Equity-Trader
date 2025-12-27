@@ -39,6 +39,8 @@ class EndOfDayStatisticsServiceTest {
     private RestTemplate restTemplate;
     @Mock
     private TelegramService telegramService;
+    @Mock
+    private ActiveStockService activeStockService;
 
     @InjectMocks
     private EndOfDayStatisticsService service;
