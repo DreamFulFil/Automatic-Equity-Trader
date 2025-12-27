@@ -47,6 +47,9 @@ public class MarketData {
     @Column(length = 20, nullable = false)
     private String symbol; // e.g., "2454.TW", "AUTO_EQUITY_TRADER"
 
+    @Column(length = 200)
+    private String name; // e.g., "MediaTek", "Taiwan Semiconductor Manufacturing"
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Timeframe timeframe;

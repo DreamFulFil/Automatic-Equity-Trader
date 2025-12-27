@@ -6,7 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
+import tw.gc.auto.equity.trader.entities.BacktestResult;
+import tw.gc.auto.equity.trader.entities.StockSettings;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
+import tw.gc.auto.equity.trader.repositories.BacktestResultRepository;
+import tw.gc.auto.equity.trader.repositories.StockSettingsRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +23,8 @@ public class AutoStrategySelector {
     private static final double MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING = 2_000_000.0;
 
     private final StrategyStockMappingRepository mappingRepository;
+    private final BacktestResultRepository backtestResultRepository;
+    private final StockSettingsRepository stockSettingsRepository;
     private final ActiveStrategyService activeStrategyService;
     private final ActiveStockService activeStockService;
     private final ShadowModeStockService shadowModeStockService;
@@ -205,29 +211,80 @@ public class AutoStrategySelector {
     }
     
     private Optional<StrategyStockMapping> findBestStrategyStockCombo() {
-        List<StrategyStockMapping> all = mappingRepository.findAll();
+        // Read directly from backtest_results table
+        List<BacktestResult> allResults = backtestResultRepository.findAll();
         
-        // Get current capital to check compliance
-        double currentCapital = complianceService.fetchCurrentCapital();
-        boolean canTradeIntradayOddLot = currentCapital >= MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING;
-        
-        if (!canTradeIntradayOddLot) {
-            log.info("📊 Capital ({} TWD) < 2,000,000 TWD. Excluding intraday/odd-lot strategies.", 
-                String.format("%.0f", currentCapital));
+        if (allResults.isEmpty()) {
+            log.warn("⚠️ No backtest results found in backtest_results table");
+            return Optional.empty();
         }
         
-        return all.stream()
-            .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
-            .filter(m -> !isIntradayStrategy(m.getStrategyName()))
-            .filter(m -> m.getTotalReturnPct() > 5.0)
-            .filter(m -> m.getSharpeRatio() > 1.0)
-            .filter(m -> m.getWinRatePct() != null && m.getWinRatePct() > 50.0)
-            .filter(m -> m.getMaxDrawdownPct() != null && m.getMaxDrawdownPct() > -20.0)
+        // Get stock settings to determine round-lot stocks
+        StockSettings settings = stockSettingsRepository.findFirstByOrderByIdDesc()
+            .orElse(StockSettings.builder().shareIncrement(27).build());
+        // Round-lot: shareIncrement must be divisible by 1000 (no remainder)
+        boolean isRoundLot = (settings.getShareIncrement() % 1000) == 0;
+        
+        log.info("📊 Stock trading mode: {} (share_increment={})", 
+            isRoundLot ? "Round-lot (CAN day-trade)" : "Odd-lot (CANNOT day-trade)", settings.getShareIncrement());
+        
+        // Filter and rank backtest results
+        return allResults.stream()
+            .filter(r -> r.getTotalReturnPct() != null && r.getSharpeRatio() != null)
+            .filter(r -> r.getTotalTrades() != null && r.getTotalTrades() > 10) // Sufficient sample size
+            .filter(r -> !shouldFilterStrategy(r.getStrategyName(), isRoundLot)) // Filter intraday for round-lot
+            .filter(r -> r.getTotalReturnPct() > 5.0)
+            .filter(r -> r.getSharpeRatio() > 1.0)
+            .filter(r -> r.getWinRatePct() != null && r.getWinRatePct() > 50.0)
+            .filter(r -> r.getMaxDrawdownPct() != null && r.getMaxDrawdownPct() > -20.0)
             .max((a, b) -> {
-                double scoreA = calculateScore(a);
-                double scoreB = calculateScore(b);
+                double scoreA = calculateScoreFromBacktest(a);
+                double scoreB = calculateScoreFromBacktest(b);
                 return Double.compare(scoreA, scoreB);
-            });
+            })
+            .map(this::convertToMapping); // Convert BacktestResult to StrategyStockMapping for compatibility
+    }
+    
+    /**
+     * Convert BacktestResult to StrategyStockMapping for backward compatibility
+     */
+    private StrategyStockMapping convertToMapping(BacktestResult result) {
+        return StrategyStockMapping.builder()
+            .symbol(result.getSymbol())
+            .stockName(result.getStockName())
+            .strategyName(result.getStrategyName())
+            .totalReturnPct(result.getTotalReturnPct())
+            .sharpeRatio(result.getSharpeRatio())
+            .winRatePct(result.getWinRatePct())
+            .maxDrawdownPct(result.getMaxDrawdownPct())
+            .build();
+    }
+    
+    /**
+     * Calculate score from BacktestResult
+     */
+    private double calculateScoreFromBacktest(BacktestResult r) {
+        double returnScore = r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0;
+        double sharpeScore = r.getSharpeRatio() != null ? r.getSharpeRatio() : 0;
+        double winRateScore = r.getWinRatePct() != null ? r.getWinRatePct() : 0;
+        double ddScore = r.getMaxDrawdownPct() != null ? Math.abs(r.getMaxDrawdownPct()) : 1.0;
+        
+        if (ddScore < 0.01) ddScore = 0.01;
+        return (returnScore * sharpeScore * winRateScore) / ddScore;
+    }
+    
+    /**
+     * Determine if strategy should be filtered based on trading mode.
+     * In Taiwan: ONLY ROUND LOTS (shareIncrement % 1000 == 0) CAN do intraday/day-trading.
+     * Odd lots (shareIncrement % 1000 != 0) CANNOT do intraday/day-trading.
+     */
+    private boolean shouldFilterStrategy(String strategyName, boolean isRoundLot) {
+        if (isRoundLot) {
+            return false; // Round-lot mode: can trade ALL strategies including intraday
+        }
+        
+        // Odd-lot mode: FILTER OUT intraday strategies (not allowed)
+        return isIntradayStrategy(strategyName);
     }
     
     private double calculateScore(StrategyStockMapping m) {
@@ -266,13 +323,21 @@ public class AutoStrategySelector {
     public void selectShadowModeStrategies() {
         log.info("🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies...");
         
-        // Group all mappings by symbol and find best strategy per stock
-        // EXCLUDE intraday strategies - Taiwan stocks don't support odd lot day trading
-        List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
-            .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
-            .filter(m -> !isIntradayStrategy(m.getStrategyName())) // Exclude intraday/day trading strategies
-            .filter(m -> m.getTotalReturnPct() > 3.0) // At least 3% return
-            .filter(m -> m.getSharpeRatio() > 0.8)
+        // Get stock settings to determine round-lot mode
+        StockSettings settings = stockSettingsRepository.findFirstByOrderByIdDesc()
+            .orElse(StockSettings.builder().shareIncrement(27).build());
+        // Round-lot: shareIncrement must be divisible by 1000 (no remainder)
+        boolean isRoundLot = (settings.getShareIncrement() % 1000) == 0;
+        
+        // Read from backtest_results and convert to mappings
+        List<BacktestResult> allResults = backtestResultRepository.findAll();
+        List<StrategyStockMapping> allMappings = allResults.stream()
+            .filter(r -> r.getTotalReturnPct() != null && r.getSharpeRatio() != null)
+            .filter(r -> r.getTotalTrades() != null && r.getTotalTrades() > 10)
+            .filter(r -> !shouldFilterStrategy(r.getStrategyName(), isRoundLot)) // Filter based on trading mode
+            .filter(r -> r.getTotalReturnPct() > 3.0)
+            .filter(r -> r.getSharpeRatio() > 0.8)
+            .map(this::convertToMapping)
             .toList();
         
         // Group by symbol and pick best strategy for each stock

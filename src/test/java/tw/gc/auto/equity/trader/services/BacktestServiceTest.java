@@ -31,15 +31,30 @@ class BacktestServiceTest {
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class);
         HistoryDataService mockHistoryService = 
             org.mockito.Mockito.mock(HistoryDataService.class);
+        // Provide a stock name from history so mapping receives a name
+        org.mockito.Mockito.when(mockHistoryService.getStockNameFromHistory(org.mockito.ArgumentMatchers.anyString()))
+            .thenReturn("Taiwan Semiconductor");
         mockSystemStatusService = org.mockito.Mockito.mock(SystemStatusService.class);
         DataSource mockDataSource = org.mockito.Mockito.mock(DataSource.class);
         JdbcTemplate mockJdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
         when(mockSystemStatusService.startBacktest()).thenReturn(true);
         
+        // Mock StrategyStockMappingService to ensure Backtest persists mappings
+        StrategyStockMappingService mockMappingService = org.mockito.Mockito.mock(StrategyStockMappingService.class);
+        
         backtestService = new BacktestService(
             mockRepo, mockMarketDataRepo, mockHistoryService, mockSystemStatusService,
-            mockDataSource, mockJdbcTemplate
+            mockDataSource, mockJdbcTemplate, mockMappingService
         );
+        
+        // Expose mapping service for verification via a field on test instance (reflection)
+        try {
+            java.lang.reflect.Field mappingField = BacktestService.class.getDeclaredField("strategyStockMappingService");
+            mappingField.setAccessible(true);
+            mappingField.set(backtestService, mockMappingService);
+        } catch (Exception ignored) { }
+
+        // Initialize strategies used by tests
         strategies = new ArrayList<>();
         strategies.add(new RSIStrategy(14, 70, 30));
 
@@ -58,6 +73,57 @@ class BacktestServiceTest {
                     .volume(1000000L)
                     .build());
         }
+    }
+
+    @Test
+    void testBacktest_PopulatesStrategyStockMapping() {
+        // Prepare strategies and historical data (same as setUp logic)
+        strategies = new ArrayList<>();
+        strategies.add(new RSIStrategy(14, 70, 30));
+
+        historicalData = new ArrayList<>();
+        double[] prices = {100.0, 102.0, 101.0, 105.0, 108.0, 107.0, 110.0, 112.0, 109.0, 115.0};
+        
+        for (int i = 0; i < prices.length; i++) {
+            historicalData.add(MarketData.builder()
+                    .symbol("2330.TW")
+                    .timestamp(LocalDateTime.now().minusDays(prices.length - i))
+                    .open(prices[i] - 0.5)
+                    .high(prices[i] + 1.0)
+                    .low(prices[i] - 1.0)
+                    .close(prices[i])
+                    .volume(1000000L)
+                    .build());
+        }
+
+        // Given - spy mapping service
+        StrategyStockMappingService spyMappingService = org.mockito.Mockito.mock(StrategyStockMappingService.class);
+        try {
+            java.lang.reflect.Field mappingField = BacktestService.class.getDeclaredField("strategyStockMappingService");
+            mappingField.setAccessible(true);
+            mappingField.set(backtestService, spyMappingService);
+        } catch (Exception ignored) { }
+
+        // When
+        double initialCapital = 80000.0;
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
+                strategies, historicalData, initialCapital
+        );
+
+        // Then - ensure updateMapping was called at least once for the symbol
+        org.mockito.Mockito.verify(spyMappingService, org.mockito.Mockito.atLeastOnce()).updateMapping(
+            org.mockito.ArgumentMatchers.eq("2330.TW"),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
     }
 
     @Test
@@ -216,6 +282,43 @@ class BacktestServiceTest {
         for (int i = 0; i < 10; i++) {
             System.out.println((i + 1) + ". " + fallbackStocks.get(i));
         }
+    }
+
+    @Test
+    void testJdbcBatchInsert_IncludesStockName() throws Exception {
+        // Prepare a BacktestResult with stockName set
+        tw.gc.auto.equity.trader.entities.BacktestResult r = tw.gc.auto.equity.trader.entities.BacktestResult.builder()
+            .backtestRunId("BT-TEST")
+            .symbol("2330.TW")
+            .stockName("Taiwan Semiconductor")
+            .strategyName("RSI Test")
+            .initialCapital(1000.0)
+            .finalEquity(1100.0)
+            .totalReturnPct(10.0)
+            .build();
+        List<tw.gc.auto.equity.trader.entities.BacktestResult> list = List.of(r);
+
+        // Instead of stubbing via mock, we will verify the SQL used by calling the private method via reflection
+        java.lang.reflect.Method method = BacktestService.class.getDeclaredMethod("jdbcBatchInsertBacktestResults", List.class);
+        method.setAccessible(true);
+
+        // Invoke method and assert it returns size
+        // For this test we can't easily intercept PreparedStatementSetter, but we can verify that the SQL contains 'stock_name'
+        java.lang.reflect.Field jdbcField = BacktestService.class.getDeclaredField("jdbcTemplate");
+        jdbcField.setAccessible(true);
+        org.springframework.jdbc.core.JdbcTemplate realJdbc = (org.springframework.jdbc.core.JdbcTemplate) jdbcField.get(backtestService);
+
+        // Stub batchUpdate on the mock jdbcTemplate to return a successful batch result (int[][])
+        org.mockito.Mockito.doReturn(new int[][]{ new int[]{1} }).when(realJdbc).batchUpdate(anyString(), anyList(), anyInt(), any());
+
+        int inserted = (Integer) method.invoke(backtestService, list);
+        assertEquals(1, inserted);
+
+        // Capture the SQL used
+        org.mockito.ArgumentCaptor<String> sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(realJdbc).batchUpdate(sqlCaptor.capture(), eq(list), eq(1), any());
+        String usedSql = sqlCaptor.getValue();
+        assertTrue(usedSql.contains("stock_name"), "SQL should include stock_name column");
     }
     
     @Test

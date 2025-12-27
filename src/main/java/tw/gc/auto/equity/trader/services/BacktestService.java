@@ -74,19 +74,22 @@ public class BacktestService {
     private final JdbcTemplate jdbcTemplate;
     
     private volatile PgBulkInsert<BacktestResult> backtestResultBulkInsert;
+    private final StrategyStockMappingService strategyStockMappingService;
     
     public BacktestService(BacktestResultRepository backtestResultRepository,
                           MarketDataRepository marketDataRepository,
                           HistoryDataService historyDataService,
                           SystemStatusService systemStatusService,
                           DataSource dataSource,
-                          JdbcTemplate jdbcTemplate) {
+                          JdbcTemplate jdbcTemplate,
+                          StrategyStockMappingService strategyStockMappingService) {
         this.backtestResultRepository = backtestResultRepository;
         this.marketDataRepository = marketDataRepository;
         this.historyDataService = historyDataService;
         this.systemStatusService = systemStatusService;
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
+        this.strategyStockMappingService = strategyStockMappingService;
     }
     
     /**
@@ -181,9 +184,13 @@ public class BacktestService {
     private void persistBacktestResult(String backtestRunId, String symbol, String strategyName,
                                       InMemoryBacktestResult result, LocalDateTime periodStart,
                                       LocalDateTime periodEnd, int dataPoints) {
+        // Get stock name from historical data (already in database from download)
+        String stockName = historyDataService.getStockNameFromHistory(symbol);
+        
         BacktestResult entity = BacktestResult.builder()
             .backtestRunId(backtestRunId)
             .symbol(symbol)
+            .stockName(stockName)
             .strategyName(strategyName)
             .initialCapital(result.getInitialCapital())
             .finalEquity(result.getFinalEquity())
@@ -200,6 +207,26 @@ public class BacktestService {
             .build();
         
         backtestResultRepository.save(entity);
+
+        // Also update the canonical strategy-stock mapping table so downstream
+        // automation (auto-selection / shadow-mode) can use persisted mappings.
+        try {
+            strategyStockMappingService.updateMapping(
+                entity.getSymbol(),
+                entity.getStockName(),
+                entity.getStrategyName(),
+                entity.getSharpeRatio(),
+                entity.getTotalReturnPct(),
+                entity.getWinRatePct(),
+                entity.getMaxDrawdownPct(),
+                entity.getTotalTrades(),
+                entity.getAvgProfitPerTrade(),
+                periodStart,
+                periodEnd
+            );
+        } catch (Exception e) {
+            log.debug("Could not update strategy_stock_mapping for {}:{} - {}", entity.getSymbol(), entity.getStrategyName(), e.getMessage());
+        }
     }
     
     private void processSignal(IStrategy strategy, Portfolio p, MarketData data, TradeSignal signal, InMemoryBacktestResult result) {
@@ -874,9 +901,13 @@ public class BacktestService {
     private BacktestResult buildBacktestResultEntity(String backtestRunId, String symbol,
             String strategyName, InMemoryBacktestResult result,
             LocalDateTime periodStart, LocalDateTime periodEnd, int dataPoints) {
+        // Get stock name from historical data (already in database from download)
+        String stockName = historyDataService.getStockNameFromHistory(symbol);
+        
         return BacktestResult.builder()
             .backtestRunId(backtestRunId)
             .symbol(symbol)
+            .stockName(stockName)
             .strategyName(strategyName)
             .initialCapital(result.getInitialCapital())
             .finalEquity(result.getFinalEquity())
@@ -979,31 +1010,32 @@ public class BacktestService {
     private int jdbcBatchInsertBacktestResults(List<BacktestResult> results) {
         String sql = """
             INSERT INTO backtest_results (
-                backtest_run_id, symbol, strategy_name, initial_capital, final_equity,
+                backtest_run_id, symbol, stock_name, strategy_name, initial_capital, final_equity,
                 total_return_pct, sharpe_ratio, max_drawdown_pct, total_trades, winning_trades,
                 win_rate_pct, avg_profit_per_trade, backtest_period_start, backtest_period_end,
                 data_points, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         
         try {
             jdbcTemplate.batchUpdate(sql, results, results.size(), (ps, r) -> {
                 ps.setString(1, r.getBacktestRunId());
                 ps.setString(2, r.getSymbol());
-                ps.setString(3, r.getStrategyName());
-                ps.setDouble(4, r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
-                ps.setDouble(5, r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
-                ps.setDouble(6, r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
-                ps.setDouble(7, r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
-                ps.setDouble(8, r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
-                ps.setInt(9, r.getTotalTrades() != null ? r.getTotalTrades() : 0);
-                ps.setInt(10, r.getWinningTrades() != null ? r.getWinningTrades() : 0);
-                ps.setDouble(11, r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
-                ps.setDouble(12, r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
-                ps.setObject(13, r.getBacktestPeriodStart());
-                ps.setObject(14, r.getBacktestPeriodEnd());
-                ps.setInt(15, r.getDataPoints() != null ? r.getDataPoints() : 0);
-                ps.setObject(16, r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
+                ps.setString(3, r.getStockName());
+                ps.setString(4, r.getStrategyName());
+                ps.setDouble(5, r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
+                ps.setDouble(6, r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
+                ps.setDouble(7, r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
+                ps.setDouble(8, r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
+                ps.setDouble(9, r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
+                ps.setInt(10, r.getTotalTrades() != null ? r.getTotalTrades() : 0);
+                ps.setInt(11, r.getWinningTrades() != null ? r.getWinningTrades() : 0);
+                ps.setDouble(12, r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
+                ps.setDouble(13, r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+                ps.setObject(14, r.getBacktestPeriodStart());
+                ps.setObject(15, r.getBacktestPeriodEnd());
+                ps.setInt(16, r.getDataPoints() != null ? r.getDataPoints() : 0);
+                ps.setObject(17, r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
             });
             return results.size();
         } catch (Exception e) {
@@ -1020,6 +1052,7 @@ public class BacktestService {
             super("public", "backtest_results");
             mapText("backtest_run_id", BacktestResult::getBacktestRunId);
             mapText("symbol", BacktestResult::getSymbol);
+            mapText("stock_name", BacktestResult::getStockName);
             mapText("strategy_name", BacktestResult::getStrategyName);
             mapDouble("initial_capital", r -> r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
             mapDouble("final_equity", r -> r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);

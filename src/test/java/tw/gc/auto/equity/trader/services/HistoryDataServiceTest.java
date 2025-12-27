@@ -50,6 +50,9 @@ class HistoryDataServiceTest {
     
     @Mock
     private BacktestService backtestService;
+
+    @Mock
+    private TaiwanStockNameService taiwanStockNameService;
     
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
@@ -74,7 +77,8 @@ class HistoryDataServiceTest {
             jdbcTemplate,
             transactionManager,
             systemStatusService,
-            backtestService
+            backtestService,
+            taiwanStockNameService
         );
     }
 
@@ -229,7 +233,49 @@ class HistoryDataServiceTest {
         verify(marketDataRepository, times(1)).truncateTable();
         verify(strategyStockMappingRepository, times(1)).truncateTable();
     }
-    
+    @Test
+    void getStockNameFromHistory_prefersBar_thenMarketData_thenNull() {
+        String symbol = "2330.TW";
+        Bar barWithName = new Bar();
+        barWithName.setSymbol(symbol);
+        barWithName.setTimeframe("1day");
+        barWithName.setName("TSMC");
+
+        when(barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day"))
+            .thenReturn(java.util.Optional.of(barWithName));
+
+        String name = historyDataService.getStockNameFromHistory(symbol);
+        assertThat(name).isEqualTo("TSMC");
+
+        // If bar has no name, market data should be checked
+        Bar barNoName = new Bar();
+        barNoName.setSymbol(symbol);
+        barNoName.setTimeframe("1day");
+        barNoName.setName(null);
+
+        MarketData mdWithName = MarketData.builder()
+            .symbol(symbol)
+            .timeframe(MarketData.Timeframe.DAY_1)
+            .name("TSMC via MD")
+            .build();
+
+        when(barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day"))
+            .thenReturn(java.util.Optional.of(barNoName));
+        when(marketDataRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1))
+            .thenReturn(java.util.Optional.of(mdWithName));
+
+        String name2 = historyDataService.getStockNameFromHistory(symbol);
+        assertThat(name2).isEqualTo("TSMC via MD");
+
+        // If neither has name, result should be null
+        when(barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day"))
+            .thenReturn(java.util.Optional.empty());
+        when(marketDataRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1))
+            .thenReturn(java.util.Optional.empty());
+
+        String name3 = historyDataService.getStockNameFromHistory(symbol);
+        assertThat(name3).isNull();
+    }    
     @Test
     void downloadResult_queueCapacityConfiguration() {
         // Verify the service is properly configured
@@ -270,6 +316,31 @@ class HistoryDataServiceTest {
         // Then - should have results for all symbols (even if download failed due to mock)
         assertThat(results).hasSize(3);
         assertThat(results.keySet()).containsExactlyInAnyOrder("2330.TW", "2454.TW", "2317.TW");
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldFillFromTaiwanService() {
+        // Given
+        String symbol = "2454.TW";
+        Bar b1 = new Bar(); b1.setSymbol(symbol); b1.setTimeframe("1day"); b1.setName(null);
+        Bar b2 = new Bar(); b2.setSymbol(symbol); b2.setTimeframe("1day"); b2.setName("");
+        Bar b3 = new Bar(); b3.setSymbol(symbol); b3.setTimeframe("1day"); b3.setName("MediaTek Existing");
+        List<Bar> bars = List.of(b1, b2, b3);
+
+        MarketData m1 = MarketData.builder().symbol(symbol).timeframe(MarketData.Timeframe.DAY_1).name(null).build();
+        List<MarketData> mds = List.of(m1);
+
+        when(taiwanStockNameService.hasStockName(symbol)).thenReturn(true);
+        when(taiwanStockNameService.getStockName(symbol)).thenReturn("MediaTek");
+
+        // When
+        historyDataService.fillMissingNamesIfMissing(bars, mds, symbol);
+
+        // Then
+        assertThat(b1.getName()).isEqualTo("MediaTek");
+        assertThat(b2.getName()).isEqualTo("MediaTek");
+        assertThat(b3.getName()).isEqualTo("MediaTek Existing");
+        assertThat(m1.getName()).isEqualTo("MediaTek");
     }
     
     @Test
@@ -340,7 +411,7 @@ class HistoryDataServiceTest {
         
         // When
         HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint(
-            "2330.TW", now, 580.0, 590.0, 575.0, 585.0, 10000000L
+            "2330.TW", "TSMC", now, 580.0, 590.0, 575.0, 585.0, 10000000L
         );
         
         // Then

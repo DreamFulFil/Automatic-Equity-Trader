@@ -43,6 +43,8 @@ public interface BarRepository extends JpaRepository<Bar, Long> {
     
     boolean existsBySymbolAndTimestampAndTimeframe(String symbol, LocalDateTime timestamp, String timeframe);
     
+    List<Bar> findBySymbolOrderByTimestampDesc(String symbol);
+    
     /**
      * Truncate all bar data for clean 10-year backtest ingestion
      */
