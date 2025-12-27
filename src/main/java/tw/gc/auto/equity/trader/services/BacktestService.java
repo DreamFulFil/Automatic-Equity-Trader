@@ -593,7 +593,6 @@ public class BacktestService {
      * @param initialCapital Starting capital for backtest
      * @return Map of stock symbol to backtest results
      */
-    @Transactional
     public Map<String, Map<String, InMemoryBacktestResult>> runParallelizedBacktest(
             List<IStrategy> strategies, double initialCapital) {
         
