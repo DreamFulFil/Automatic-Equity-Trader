@@ -80,11 +80,21 @@ jenv exec mvn test
 ## ✨ Key Features
 
 ### Trading Capabilities
-✅ **17 Concurrent Strategies** - DCA, MA Crossover, Bollinger Bands, RSI, MACD, Stochastic, ATR Channel, Pivot Point, VWAP, TWAP, Momentum, Arbitrage, News/Sentiment, Rebalancing, DRIP, Tax-Loss Harvesting  
-✅ **Multi-Market Support** - Taiwan stocks (TSE), Taiwan futures (TAIFEX) with TradingModeEnum (TW_STOCK, TW_FUTURE, TW_STOCK_AND_FUTURE)  
+✅ **50+ Concurrent Strategies** - Comprehensive library including:
+   - **Trend Following**: MA Crossover (4 variants), MACD, Parabolic SAR, Ichimoku Cloud, Supertrend, ADX
+   - **Mean Reversion**: Bollinger Bands, RSI (2 variants), Williams %R, CCI, Envelope Channel
+   - **Momentum**: Stochastic, Momentum Trading, Price ROC, Vortex Indicator, Aroon Oscillator
+   - **Volatility**: ATR Channel, Keltner Channel, Donchian Channel
+   - **Volume-Based**: Volume Weighted, VWAP, TWAP, Chaikin Money Flow, Force Index, A/D Line
+   - **Pattern Recognition**: Price Action, Pivot Points, Fibonacci Retracement, ZigZag Reversal
+   - **Advanced**: Triple EMA, Hull MA, Kaufman Adaptive MA, Linear Regression, Elder Ray
+   - **Long-Term**: DCA, DRIP, Rebalancing, Tax-Loss Harvesting
+   - **AI-Powered**: News Sentiment Analysis
+✅ **Multi-Market Support** - Taiwan stocks (TSE), Taiwan futures (TAIFEX)  
 ✅ **Real-Time Market Data** - Tick-level streaming quotes and Level 2 order book depth  
-✅ **Smart Order Execution** - TWAP, VWAP execution strategies with strategy-level tracking  
-✅ **Shadow Mode** - Run multiple strategies in parallel simulation for performance comparison
+✅ **Smart Execution** - TWAP, VWAP algorithms with strategy-level tracking  
+✅ **Shadow Mode** - Run all 50 strategies in parallel simulation for performance comparison
+✅ **Comprehensive Backtesting** - Test strategies against 18 major Taiwan stocks with detailed analytics
 
 ### AI Integration
 ✅ **LLM-Powered Analysis** - Ollama Llama 3.1 8B for news sentiment, signal enhancement, risk assessment  
