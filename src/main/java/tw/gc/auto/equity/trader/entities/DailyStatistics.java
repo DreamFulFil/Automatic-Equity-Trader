@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 /**
  * DailyStatistics entity for storing end-of-day trading statistics.
- * Calculated by Java application at market close (13:00 Taiwan time).
+ * Calculated by Java application at market close (13:30 Taiwan time).
  * Used for performance analysis, insights generation, and chart data.
  */
 @Entity

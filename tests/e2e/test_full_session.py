@@ -6,7 +6,7 @@ These tests simulate a complete trading day:
 1. 11:15 - Bot starts (cron trigger)
 2. 11:30 - Trading window opens
 3. Signal check → Entry
-4. 45-min exit OR 13:00 auto-flatten
+4. 45-min exit OR 13:30 auto-flatten
 5. Telegram daily summary
 
 Run: BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest tests/e2e/test_full_session.py -v -m e2e

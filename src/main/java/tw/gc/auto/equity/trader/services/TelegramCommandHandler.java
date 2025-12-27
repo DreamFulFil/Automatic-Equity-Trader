@@ -169,7 +169,7 @@ public class TelegramCommandHandler {
     private void handlePauseCommand() {
         tradingStateService.setTradingPaused(true);
         log.info("⏸️ Trading paused by user command");
-        telegramService.sendMessage("⏸️ Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:00");
+        telegramService.sendMessage("⏸️ Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:30");
     }
     
     private void handleResumeCommand() {
