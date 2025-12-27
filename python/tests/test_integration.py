@@ -137,12 +137,14 @@ class TestBridgeEndpoints:
 
 @pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
 @pytest.mark.skipif(not ollama_available(), reason="Ollama not available")
+@pytest.mark.skipif(not bridge_available(), reason="Python bridge not available")
+@pytest.mark.skipif(not ollama_available(), reason="Ollama not available or slow")
 class TestOllamaIntegration:
     """Tests for Ollama integration via Python bridge"""
     
     def test_news_endpoint_returns_veto_decision(self):
         """GET /signal/news should return news analysis"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
         
         assert r.status_code == 200
         data = r.json()
@@ -156,7 +158,7 @@ class TestOllamaIntegration:
     
     def test_news_endpoint_handles_empty_headlines(self):
         """News endpoint should work even with no headlines"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
         
         assert r.status_code == 200
         data = r.json()
@@ -240,7 +242,7 @@ class TestJavaPythonInteraction:
         
         # Step 3: News veto check (skip if Ollama not available)
         if ollama_available():
-            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
+            news_r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)
             assert news_r.status_code == 200
 
 
@@ -338,7 +340,7 @@ class TestAccountEndpoints:
     
     def test_earnings_scrape_endpoint(self):
         """Should successfully scrape earnings dates"""
-        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=30)  # Allow more time for scraping
+        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=15)
         
         assert r.status_code == 200
         data = r.json()

@@ -1,5 +1,6 @@
 package tw.gc.auto.equity.trader.controllers;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -22,6 +23,9 @@ class ShutdownControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+    
+    @Autowired
+    private ShutdownController shutdownController;
 
     @MockBean
     private TradingEngineService tradingEngine;
@@ -31,6 +35,12 @@ class ShutdownControllerTest {
 
     @MockBean
     private ApplicationContext applicationContext;
+    
+    @BeforeEach
+    void setUp() {
+        // Disable System.exit during tests
+        shutdownController.setExitEnabled(false);
+    }
 
     @Test
     void triggerShutdown_shouldReturnMessage() throws Exception {
