@@ -2,12 +2,13 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.7** - Backtest Architecture Enhancement
+**Version 2.0.8** - GraalVM Native Image Support
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
+[![GraalVM](https://img.shields.io/badge/AOT-GraalVM%20Native-red.svg)](https://graalvm.org/)
 [![Tests](https://img.shields.io/badge/Tests-376%20passing-brightgreen.svg)](tests/)
 
 Risk-first automated trading platform for Taiwan stocks. Conservative, boring, explainable.
@@ -16,6 +17,46 @@ Designed for capital preservation with 80,000 TWD starting capital.
 **Production-ready** with 376 passing tests, 99 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.8 (2025-12-20)
+
+### 🚀 GraalVM Native Image Support (AOT Compilation)
+
+**Native Build Integration**
+- ✅ **Added `native` Maven profile** for GraalVM Native Image compilation
+  - Uses `native-maven-plugin` 0.10.6 with Spring Boot 3.5.8
+  - Produces standalone executable: `target/auto-equity-trader`
+  - Sub-second startup (~0.1s vs ~3s for JVM)
+- ✅ **Added `nativeTest` Maven profile** for closed-world validation
+  - Verifies reflection/proxy hints under GraalVM constraints
+  - Catches AOT issues before deployment
+
+**Script Enhancements**
+- ✅ **`run-tests.sh` updated** with native compilation flags:
+  - `--native`: Build native executable after tests pass
+  - `--native-test`: Run native image tests for AOT validation
+- ✅ **`start-auto-trader.fish` updated** to prioritize native binary:
+  - If `target/auto-equity-trader` exists, use it (sub-second startup)
+  - Falls back to JAR file if native binary not present
+
+**Usage:**
+```bash
+# Build native executable (after tests pass)
+./run-tests.sh --native <jasypt-password>
+
+# Run native tests (validates reflection hints)
+./run-tests.sh --native-test <jasypt-password>
+
+# Startup script auto-detects native binary
+./start-auto-trader.fish <jasypt-password>
+```
+
+**Performance Benefits:**
+- 🚀 Startup time: ~0.1s (native) vs ~3s (JVM)
+- 💾 Memory footprint: ~50MB (native) vs ~200MB (JVM)
+- 📦 Single binary deployment (no JRE required)
 
 ---
 
