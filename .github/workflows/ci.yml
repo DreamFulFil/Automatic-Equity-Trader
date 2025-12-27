@@ -95,10 +95,19 @@ jobs:
         env:
           OLLAMA_HOST: "http://127.0.0.1:11434"
 
-      - name: Run full test suite
+      - name: Start Python bridge and Run full test suite
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           chmod +x run-tests.sh
+          # start bridge in background
+          python/venv/bin/python python/bridge.py --port 8888 --no-reload > /tmp/mtxf-bridge.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sS "http://127.0.0.1:8888/health" >/dev/null 2>&1; then
+              echo "Python bridge is up"
+              break
+            fi
+            sleep 1
+          done
           SKIP_JAVA=1 ./run-tests.sh "$JASYPT_PASSWORD"
         env:
           JASYPT_PASSWORD: ${{ secrets.JASYPT_PASSWORD }}
