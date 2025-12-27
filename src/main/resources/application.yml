@@ -24,19 +24,9 @@ trading:
     start: "11:30"
     end: "13:00"
   
-  # Stock mode settings (for 80k capital at NT$1,445/share TSMC)
-  stock:
-    initial-shares: 55        # Base: 55 shares (≈79k NTD at NT$1,445/share)
-    share-increment: 27       # +27 shares for every additional 20k equity
-  
-  # Risk limits - NO PROFIT CAPS, unlimited upside
-  risk:
-    max-position: 4           # Auto-scaling: 1-4 contracts based on equity + 30d profit
-    daily-loss-limit: 4500    # Emergency shutdown at -4500 TWD daily loss
-    weekly-loss-limit: 15000  # Pause trading if weekly loss exceeds -15000 TWD
-    max-hold-minutes: 45      # Force-flatten positions older than 45 min
-    # NO daily-profit-cap - let winners run!
-    # NO monthly-profit-cap - unlimited upside!
+  # Stock and Risk settings are now stored in database
+  # See StockSettings and RiskSettings entities
+  # Default values are set by StockSettingsService and RiskSettingsService
   
   # Earnings blackout dates are now auto-scraped from Yahoo Finance
   # Stored in: config/earnings-blackout-dates.json

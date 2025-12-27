@@ -12,6 +12,8 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
+import tw.gc.mtxfbot.entities.StockSettings;
+import tw.gc.mtxfbot.entities.RiskSettings;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -29,6 +31,8 @@ class TradingEngineProductionTest {
     @Mock private TelegramService telegramService;
     @Mock private ContractScalingService contractScalingService;
     @Mock private RiskManagementService riskManagementService;
+    @Mock private StockSettingsService stockSettingsService;
+    @Mock private RiskSettingsService riskSettingsService;
     @Mock private ApplicationContext applicationContext;
     
     private TradingEngine tradingEngine;
@@ -41,14 +45,32 @@ class TradingEngineProductionTest {
         tradingProperties = new TradingProperties();
         tradingProperties.getWindow().setStart("11:30");
         tradingProperties.getWindow().setEnd("13:00");
-        tradingProperties.getRisk().setDailyLossLimit(4500);
-        tradingProperties.getRisk().setWeeklyLossLimit(15000);
-        tradingProperties.getRisk().setMaxHoldMinutes(45);
         tradingProperties.getBridge().setUrl("http://localhost:8888");
+        
+        // Mock stock settings
+        StockSettings stockSettings = StockSettings.builder()
+                .initialShares(55)
+                .shareIncrement(27)
+                .build();
+        when(stockSettingsService.getSettings()).thenReturn(stockSettings);
+        when(stockSettingsService.getBaseStockQuantity(anyDouble())).thenReturn(55);
+
+        // Mock risk settings
+        RiskSettings riskSettings = RiskSettings.builder()
+                .maxPosition(1)
+                .dailyLossLimit(4500)
+                .weeklyLossLimit(15000)
+                .maxHoldMinutes(45)
+                .build();
+        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
+        when(riskSettingsService.getDailyLossLimit()).thenReturn(4500);
+        when(riskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
+        when(riskSettingsService.getMaxHoldMinutes()).thenReturn(45);
         
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
     }
 
@@ -179,7 +201,8 @@ class TradingEngineProductionTest {
         // Re-create engine to pick up system property
         tradingEngine = new TradingEngine(
             restTemplate, objectMapper, telegramService, tradingProperties,
-            applicationContext, contractScalingService, riskManagementService
+            applicationContext, contractScalingService, riskManagementService,
+            stockSettingsService, riskSettingsService
         );
         
         when(contractScalingService.getMaxContracts()).thenReturn(3);

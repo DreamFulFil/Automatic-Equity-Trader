@@ -11,6 +11,8 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.config.TradingProperties;
+import tw.gc.mtxfbot.entities.StockSettings;
+import tw.gc.mtxfbot.entities.RiskSettings;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -42,12 +44,6 @@ class TradingEngineTest {
     private TradingProperties.Window window;
 
     @Mock
-    private TradingProperties.Stock stock;
-
-    @Mock
-    private TradingProperties.Risk risk;
-
-    @Mock
     private TradingProperties.Bridge bridge;
 
     @Mock
@@ -59,22 +55,20 @@ class TradingEngineTest {
     @Mock
     private RiskManagementService riskManagementService;
 
+    @Mock
+    private StockSettingsService stockSettingsService;
+
+    @Mock
+    private RiskSettingsService riskSettingsService;
+
     private TradingEngine tradingEngine;
 
     @BeforeEach
     void setUp() {
         when(tradingProperties.getWindow()).thenReturn(window);
-        when(tradingProperties.getStock()).thenReturn(stock);
-        when(tradingProperties.getRisk()).thenReturn(risk);
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(window.getStart()).thenReturn("11:30");
         when(window.getEnd()).thenReturn("13:00");
-        when(stock.getInitialShares()).thenReturn(55);
-        when(stock.getShareIncrement()).thenReturn(27);
-        when(risk.getMaxPosition()).thenReturn(1);
-        when(risk.getDailyLossLimit()).thenReturn(4500);
-        when(risk.getWeeklyLossLimit()).thenReturn(15000);
-        when(risk.getMaxHoldMinutes()).thenReturn(45);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         
         when(contractScalingService.getMaxContracts()).thenReturn(1);
@@ -86,6 +80,26 @@ class TradingEngineTest {
         when(riskManagementService.isWeeklyLimitHit()).thenReturn(false);
         when(riskManagementService.isEarningsBlackout()).thenReturn(false);
 
+        // Mock stock settings
+        StockSettings stockSettings = StockSettings.builder()
+                .initialShares(55)
+                .shareIncrement(27)
+                .build();
+        when(stockSettingsService.getSettings()).thenReturn(stockSettings);
+        when(stockSettingsService.getBaseStockQuantity(anyDouble())).thenReturn(55);
+
+        // Mock risk settings
+        RiskSettings riskSettings = RiskSettings.builder()
+                .maxPosition(1)
+                .dailyLossLimit(4500)
+                .weeklyLossLimit(15000)
+                .maxHoldMinutes(45)
+                .build();
+        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
+        when(riskSettingsService.getDailyLossLimit()).thenReturn(4500);
+        when(riskSettingsService.getWeeklyLossLimit()).thenReturn(15000);
+        when(riskSettingsService.getMaxHoldMinutes()).thenReturn(45);
+
         tradingEngine = new TradingEngine(
                 restTemplate,
                 objectMapper,
@@ -93,7 +107,9 @@ class TradingEngineTest {
                 tradingProperties,
                 applicationContext,
                 contractScalingService,
-                riskManagementService
+                riskManagementService,
+                stockSettingsService,
+                riskSettingsService
         );
     }
 

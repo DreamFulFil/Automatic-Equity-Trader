@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Dual-Mode Lunch-Break Trading Engine (December 2025 Production Version)
  * 
  * Supports two trading modes via -Dtrading.mode system property:
- * - "stock" (default): Trades 2330.TW odd lots (55 shares base, +27 per 20k equity)
+ * - "stock" (default): Trades 2454.TW odd lots (70 shares base, +27 per 20k equity)
  * - "futures": Trades MTXF with full scaling (1→2→3→4 contracts)
  * 
  * Core trading orchestrator responsible for:
@@ -54,6 +54,8 @@ public class TradingEngine {
     private final ApplicationContext applicationContext;
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
+    private final StockSettingsService stockSettingsService;
+    private final RiskSettingsService riskSettingsService;
     
     // Trading mode: "stock" or "futures"
     private String tradingMode;
@@ -77,18 +79,18 @@ public class TradingEngine {
         tradingMode = System.getProperty("trading.mode", "stock");
         log.info("🚀 Lunch Investor Bot initializing (December 2025 Production)...");
         log.info("📈 Trading Mode: {} ({})", tradingMode.toUpperCase(), 
-            "stock".equals(tradingMode) ? "2330.TW odd lots" : "MTXF futures");
+            "stock".equals(tradingMode) ? "2454.TW odd lots" : "MTXF futures");
         
         registerTelegramCommands();
         
         String modeDescription = "stock".equals(tradingMode) 
-            ? "Mode: STOCK (2330.TW odd lots)" 
+            ? "Mode: STOCK (2454.TW odd lots)" 
             : "Mode: FUTURES (MTXF)";
         
         String scalingInfo = "stock".equals(tradingMode)
             ? String.format("Base shares: %d (+%d per 20k equity)", 
-                tradingProperties.getStock().getInitialShares(),
-                tradingProperties.getStock().getShareIncrement())
+                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShareIncrement())
             : String.format("Max contracts: %d (auto-scaling)", contractScalingService.getMaxContracts());
         
         String startupMessage = String.format(
@@ -104,9 +106,9 @@ public class TradingEngine {
             tradingProperties.getWindow().getStart(),
             tradingProperties.getWindow().getEnd(),
             scalingInfo,
-            tradingProperties.getRisk().getDailyLossLimit(),
-            tradingProperties.getRisk().getWeeklyLossLimit(),
-            tradingProperties.getRisk().getMaxHoldMinutes(),
+            riskSettingsService.getSettings().getDailyLossLimit(),
+            riskSettingsService.getSettings().getWeeklyLossLimit(),
+            riskSettingsService.getSettings().getMaxHoldMinutes(),
             riskManagementService.getWeeklyPnL(),
             riskManagementService.isWeeklyLimitHit() ? "\n🚨 WEEKLY LIMIT HIT - Paused until Monday" : "",
             riskManagementService.isEarningsBlackout() ? String.format("\n📅 EARNINGS BLACKOUT (%s) - No trading today", 
@@ -130,24 +132,12 @@ public class TradingEngine {
     }
     
     /**
-     * Get base stock quantity for stock mode (2330.TW odd lots)
-     * Base: 55 shares (≈79k NTD at NT$1,445/share, perfect for 80k capital)
+     * Get base stock quantity for stock mode (2454.TW odd lots)
+     * Base: 70 shares (≈77k NTD at NT$1,100/share, perfect for 80k capital)
      * Auto-scale: +27 shares for every additional 20k equity above 80k base
      */
     int getBaseStockQuantity() {
-        double equity = contractScalingService.getLastEquity();
-        if (equity <= 0) equity = 80000; // Default if not yet fetched
-        int baseShares = tradingProperties.getStock().getInitialShares();
-        int increment = tradingProperties.getStock().getShareIncrement();
-        int baseCapital = 80000; // Base capital for 55 shares
-        int incrementCapital = 20000; // +27 shares per 20k equity
-        
-        // Calculate additional shares based on equity above base
-        int additionalShares = 0;
-        if (equity > baseCapital) {
-            additionalShares = (int) ((equity - baseCapital) / incrementCapital) * increment;
-        }
-        return baseShares + additionalShares;
+        return stockSettingsService.getBaseStockQuantity(contractScalingService.getLastEquity());
     }
     
     /**
@@ -213,10 +203,10 @@ public class TradingEngine {
             );
         
         String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK (2330.TW)\nShares: %d (base %d +%d/20k)", 
+            ? String.format("Mode: STOCK (2454.TW)\nShares: %d (base %d +%d/20k)", 
                 getBaseStockQuantity(),
-                tradingProperties.getStock().getInitialShares(),
-                tradingProperties.getStock().getShareIncrement())
+                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShareIncrement())
             : String.format("Mode: FUTURES (MTXF)\nContracts: %d", contractScalingService.getMaxContracts());
         
         String message = String.format(
@@ -325,7 +315,7 @@ public class TradingEngine {
         if (entryTime == null) return;
         
         long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
-        int maxHold = tradingProperties.getRisk().getMaxHoldMinutes();
+        int maxHold = riskSettingsService.getMaxHoldMinutes();
         
         if (minutesHeld >= maxHold) {
             log.warn("⏰ 45-MINUTE HARD EXIT: Position held {} minutes", minutesHeld);
@@ -365,7 +355,7 @@ public class TradingEngine {
     }
     
     void checkRiskLimits() { // package-private for testing
-        if (riskManagementService.isDailyLimitExceeded(tradingProperties.getRisk().getDailyLossLimit())) {
+        if (riskManagementService.isDailyLimitExceeded(riskSettingsService.getDailyLossLimit())) {
             log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(
                     "🚨 EMERGENCY SHUTDOWN\\nDaily loss: %.0f TWD\\nFlattening all positions!", 
@@ -480,7 +470,7 @@ public class TradingEngine {
                 orderMap.put("price", price);
                 orderMap.put("is_exit", isExit); // Signal to bridge to start cooldown
                 
-                String instrument = "stock".equals(tradingMode) ? "2330.TW" : "MTXF";
+                String instrument = "stock".equals(tradingMode) ? "2454.TW" : "MTXF";
                 log.info("📤 Sending {} order (attempt {}, exit={}): {}", instrument, attempt, isExit, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
@@ -537,7 +527,7 @@ public class TradingEngine {
             
             double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
             double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
-            riskManagementService.recordPnL(pnl, tradingProperties.getRisk().getWeeklyLossLimit());
+            riskManagementService.recordPnL(pnl, riskSettingsService.getWeeklyLossLimit());
             
             currentPosition.set(0);
             positionEntryTime.set(null);
@@ -588,8 +578,8 @@ public class TradingEngine {
         String modeInfo = "stock".equals(tradingMode) 
             ? String.format("Mode: STOCK\\nShares: %d (base %d +%d/20k)",
                 getBaseStockQuantity(),
-                tradingProperties.getStock().getInitialShares(),
-                tradingProperties.getStock().getShareIncrement())
+                stockSettingsService.getSettings().getInitialShares(),
+                stockSettingsService.getSettings().getShareIncrement())
             : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
         
         telegramService.sendMessage(String.format(
