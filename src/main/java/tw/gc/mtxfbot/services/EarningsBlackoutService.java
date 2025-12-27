@@ -14,6 +14,7 @@ import tw.gc.mtxfbot.config.EarningsProperties;
 import tw.gc.mtxfbot.entities.EarningsBlackoutDate;
 import tw.gc.mtxfbot.entities.EarningsBlackoutMeta;
 import tw.gc.mtxfbot.repositories.EarningsBlackoutMetaRepository;
+import tw.gc.mtxfbot.AppConstants;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EarningsBlackoutService {
 
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     private static final int DEFAULT_TTL_DAYS = 7;
     private static final String LEGACY_JSON_PATH = "config/earnings-blackout-dates.json";
     private static final Duration[] BACKOFFS = new Duration[]{
@@ -86,7 +87,7 @@ public class EarningsBlackoutService {
     private final AtomicBoolean refreshFailureAlertSent = new AtomicBoolean(false);
     private final ReentrantLock refreshLock = new ReentrantLock();
 
-    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Taipei")
+    @Scheduled(cron = "0 0 9 * * *", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void scheduledRefresh() {
         if (!earningsProperties.getRefresh().isEnabled()) {
             return;
@@ -388,6 +389,11 @@ public class EarningsBlackoutService {
         Optional<EarningsBlackoutMeta> seeded = seedFromLegacyFileIfPresent();
         if (seeded.isPresent()) {
             return seeded;
+        }
+        // Only bootstrap if refresh is enabled
+        if (!earningsProperties.getRefresh().isEnabled()) {
+            log.debug("Earnings refresh disabled, skipping bootstrap");
+            return Optional.empty();
         }
         return refreshAndPersist("bootstrap");
     }

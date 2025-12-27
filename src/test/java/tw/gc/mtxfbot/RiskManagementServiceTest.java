@@ -142,11 +142,11 @@ class RiskManagementServiceTest {
 
     @Test
     void isEarningsBlackout_whenDatePresent_shouldReturnTrue() {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        LocalDate today = LocalDate.now(AppConstants.TAIPEI_ZONE);
         when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Set.of(today));
 
         EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
-                .lastUpdated(OffsetDateTime.now(ZoneId.of("Asia/Taipei")))
+                .lastUpdated(OffsetDateTime.now(AppConstants.TAIPEI_ZONE))
             .tickersChecked(new LinkedHashSet<>(Arrays.asList("TSM", "2317.TW")))
                 .source("test")
                 .build();

@@ -45,6 +45,39 @@ You are a highly capable and autonomous agent, and you can definitely solve this
 9. Iterate until the root cause is fixed and all tests pass.
 10. Reflect and validate comprehensively. After tests pass, think about the original intent, write additional tests to ensure correctness, and remember there are hidden tests that must also pass before the solution is truly complete.
 
+## 🧪 TESTING REQUIREMENTS
+
+### ⚠️ CRITICAL: Always check all unit and integration tests pass before you commit
+
+### ⚠️ CRITICAL: Always protect newly added code with unit test and integration test if possible
+
+### Running Tests
+```bash
+# Setup Java environment
+jenv local 21.0
+
+# How to run mvn
+"jenv exec mvn test",for example
+```
+
+### Test Coverage Requirements
+- All Java files with non-getter/setter methods must have unit tests
+- All Python functions must have unit tests
+- All Java-Python interactions must have integration tests
+- All Ollama interactions must have integration tests
+- **NEW CODE MUST HAVE TESTS** - No exceptions
+
+---
+
+## Shell Tools (Use Instead of Traditional Commands)
+| Task | Use | Avoid |
+|------|-----|-------|
+| Find files | `fd` | `find`, `ls -R` |
+| Search text | `rg` (ripgrep) | `grep`, `ag` |
+| Code structure | `ast-grep` | `grep`, `sed` |
+| JSON | `jq` | `python -m json.tool` |
+
+
 Refer to the detailed sections below for more information on each step.
 
 ## 1. Fetch Provided URLs

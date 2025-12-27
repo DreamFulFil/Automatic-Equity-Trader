@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RiskManagementService {
     
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     private static final String WEEKLY_PNL_FILE = "logs/weekly-pnl.txt";
     
     @NonNull

@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.mtxfbot.TelegramService;
+import tw.gc.mtxfbot.AppConstants;
 import tw.gc.mtxfbot.config.EarningsProperties;
 import tw.gc.mtxfbot.entities.EarningsBlackoutDate;
 import tw.gc.mtxfbot.entities.EarningsBlackoutMeta;
@@ -73,14 +74,14 @@ class EarningsBlackoutServiceIntegrationTest {
         refresh.setEnabled(true);
         when(earningsProperties.getRefresh()).thenReturn(refresh);
 
-        LocalDate futureDate = LocalDate.now(ZoneId.of("Asia/Taipei")).plusDays(1);
+        LocalDate futureDate = LocalDate.now(AppConstants.TAIPEI_ZONE).plusDays(1);
         doReturn(Map.of("TSM", List.of(futureDate))).when(earningsBlackoutService).fetchEarningsForTickers(anySet());
 
         EarningsBlackoutDate dateEntity = EarningsBlackoutDate.builder().blackoutDate(futureDate).build();
         EarningsBlackoutMeta mockMeta = EarningsBlackoutMeta.builder()
                 .id(1L)
                 .dates(Set.of(dateEntity))
-                .lastUpdated(OffsetDateTime.now(ZoneId.of("Asia/Taipei")))
+                .lastUpdated(OffsetDateTime.now(AppConstants.TAIPEI_ZONE))
                 .build();
         when(metaRepository.save(any())).thenReturn(mockMeta);
         when(metaRepository.count()).thenReturn(1L);
@@ -100,12 +101,12 @@ class EarningsBlackoutServiceIntegrationTest {
         refresh.setEnabled(true);
         when(earningsProperties.getRefresh()).thenReturn(refresh);
 
-        LocalDate futureDate = LocalDate.now(ZoneId.of("Asia/Taipei")).plusDays(2);
+        LocalDate futureDate = LocalDate.now(AppConstants.TAIPEI_ZONE).plusDays(2);
         EarningsBlackoutDate dateEntity = EarningsBlackoutDate.builder().blackoutDate(futureDate).build();
         EarningsBlackoutMeta first = EarningsBlackoutMeta.builder()
                 .id(1L)
                 .dates(Set.of(dateEntity))
-                .lastUpdated(OffsetDateTime.now(ZoneId.of("Asia/Taipei")))
+                .lastUpdated(OffsetDateTime.now(AppConstants.TAIPEI_ZONE))
                 .build();
         when(metaRepository.save(any())).thenReturn(first);
         when(metaRepository.count()).thenReturn(1L);
@@ -128,7 +129,7 @@ class EarningsBlackoutServiceIntegrationTest {
         refresh.setEnabled(true);
         when(earningsProperties.getRefresh()).thenReturn(refresh);
 
-        LocalDate futureDate = LocalDate.now(ZoneId.of("Asia/Taipei")).plusDays(3);
+        LocalDate futureDate = LocalDate.now(AppConstants.TAIPEI_ZONE).plusDays(3);
         EarningsBlackoutDate dateEntity = EarningsBlackoutDate.builder().blackoutDate(futureDate).build();
         EarningsBlackoutMeta mockMeta = EarningsBlackoutMeta.builder()
                 .dates(Set.of(dateEntity))
@@ -147,11 +148,11 @@ class EarningsBlackoutServiceIntegrationTest {
 
     @Test
     void staleData_disablesBlackoutEnforcement() throws Exception {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        LocalDate today = LocalDate.now(AppConstants.TAIPEI_ZONE);
         EarningsBlackoutDate dateEntity = EarningsBlackoutDate.builder().blackoutDate(today).build();
         EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
                 .dates(Set.of(dateEntity))
-                .lastUpdated(OffsetDateTime.now(ZoneId.of("Asia/Taipei")).minusDays(31)) // Make it stale
+                .lastUpdated(OffsetDateTime.now(AppConstants.TAIPEI_ZONE).minusDays(31)) // Make it stale
                 .ttlDays(30)
                 .build();
 

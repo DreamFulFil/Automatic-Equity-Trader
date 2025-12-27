@@ -1057,14 +1057,6 @@ def scrape_earnings_dates(jasypt_password: str = None):
     
     print(f"📅 Scraping earnings dates for {len(TICKERS)} stocks (using yfinance)...")
     
-    # Send Telegram start notification if password provided
-    if jasypt_password:
-        send_telegram_message(
-            f"📅 <b>Earnings Scraper Started</b>\n"
-            f"Checking {len(TICKERS)} Taiwan stocks for earnings dates...",
-            jasypt_password
-        )
-    
     earnings_dates = set()
     today = datetime.now().date()
     one_year_later = today + timedelta(days=365)
@@ -1126,16 +1118,6 @@ def scrape_earnings_dates(jasypt_password: str = None):
     
     print(f"\n✅ Saved {len(future_dates)} blackout dates to {output_file}")
     print(f"   Next dates: {future_dates[:5]}...")
-    
-    # Send Telegram completion notification if password provided
-    if jasypt_password:
-        next_dates_str = ", ".join(future_dates[:3]) if future_dates else "None"
-        send_telegram_message(
-            f"✅ <b>Earnings Scraper Completed</b>\n"
-            f"Found {len(future_dates)} blackout dates\n"
-            f"Next: {next_dates_str}",
-            jasypt_password
-        )
     
     return future_dates
 

@@ -154,7 +154,7 @@ class TradingEngineProductionTest {
         // Given: Position exists for 46 minutes
         tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
         tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
-        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(46));
+        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(AppConstants.TAIPEI_ZONE).minusMinutes(46));
         
         // Mock signal for current price
         String signalJson = """
@@ -217,7 +217,7 @@ class TradingEngineProductionTest {
         // Position exists
         tradingEngine.setPositionForTest(tradingEngine.getActiveSymbol(), 2);
         tradingEngine.entryPriceFor(tradingEngine.getActiveSymbol()).set(22500.0);
-        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(15));
+        tradingEngine.entryTimeFor(tradingEngine.getActiveSymbol()).set(LocalDateTime.now(AppConstants.TAIPEI_ZONE).minusMinutes(15));
         
         // When: handleStatusCommand is called
         tradingEngine.handleStatusCommand();
