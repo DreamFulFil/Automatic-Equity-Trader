@@ -20,7 +20,7 @@ public class ActiveStockService {
     private final JdbcTemplate jdbcTemplate;
     
     private static final String DEFAULT_STOCK = "2454.TW"; // MediaTek as fallback
-    private static final String CONFIG_KEY = "CURRENT_ACTIVE_STOCK";
+    private static final String CONFIG_KEY = "current_active_stock";
     
     /**
      * Get the currently active stock symbol

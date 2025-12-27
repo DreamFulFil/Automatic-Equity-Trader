@@ -55,8 +55,8 @@ class BacktestControllerTest {
         when(marketDataRepository.findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(any(), any(), any(), any()))
                 .thenReturn(List.of(data));
 
-        Map<String, BacktestService.BacktestResult> results = new HashMap<>();
-        results.put("TestStrategy", new BacktestService.BacktestResult("TestStrategy", 80000.0));
+        Map<String, BacktestService.InMemoryBacktestResult> results = new HashMap<>();
+        results.put("TestStrategy", new BacktestService.InMemoryBacktestResult("TestStrategy", 80000.0));
         when(backtestService.runBacktest(any(), any(), anyDouble())).thenReturn(results);
 
         // Execute

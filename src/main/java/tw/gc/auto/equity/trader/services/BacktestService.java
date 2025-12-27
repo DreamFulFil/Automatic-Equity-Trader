@@ -1,14 +1,21 @@
 package tw.gc.auto.equity.trader.services;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tw.gc.auto.equity.trader.entities.BacktestResult;
 import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.repositories.BacktestResultRepository;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
@@ -16,15 +23,41 @@ import tw.gc.auto.equity.trader.strategy.TradeSignal;
 /**
  * Backtest Service
  * Runs strategies against historical data and tracks performance.
+ * All results are persisted to database for auditability.
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class BacktestService {
-
-    public Map<String, BacktestResult> runBacktest(List<IStrategy> strategies, List<MarketData> history, double initialCapital) {
-        log.info("🚀 Starting Backtest with {} strategies on {} data points...", strategies.size(), history.size());
+    
+    private final BacktestResultRepository backtestResultRepository;
+    
+    /**
+     * Run backtest and persist results to database
+     */
+    @Transactional
+    public Map<String, InMemoryBacktestResult> runBacktest(List<IStrategy> strategies, List<MarketData> history, double initialCapital) {
+        return runBacktest(strategies, history, initialCapital, null);
+    }
+    
+    /**
+     * Run backtest with custom run ID and persist results
+     */
+    @Transactional
+    public Map<String, InMemoryBacktestResult> runBacktest(List<IStrategy> strategies, List<MarketData> history, double initialCapital, String backtestRunId) {
+        if (backtestRunId == null) {
+            backtestRunId = generateBacktestRunId();
+        }
         
-        Map<String, BacktestResult> results = new HashMap<>();
+        log.info("🚀 Starting Backtest [{}] with {} strategies on {} data points...", 
+            backtestRunId, strategies.size(), history.size());
+        
+        Map<String, InMemoryBacktestResult> results = new HashMap<>();
+        String symbol = history.isEmpty() ? "UNKNOWN" : history.get(0).getSymbol();
+        LocalDateTime periodStart = history.isEmpty() ? LocalDateTime.now() : 
+            history.get(0).getTimestamp().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDateTime periodEnd = history.isEmpty() ? LocalDateTime.now() : 
+            history.get(history.size() - 1).getTimestamp().atZone(ZoneId.systemDefault()).toLocalDateTime();
         
         // Initialize portfolios
         Map<String, Portfolio> portfolios = new HashMap<>();
@@ -32,8 +65,6 @@ public class BacktestService {
             strategy.reset(); // Reset state
             
             Map<String, Integer> pos = new HashMap<>();
-            // Assuming single symbol backtest for now
-            String symbol = history.isEmpty() ? "UNKNOWN" : history.get(0).getSymbol();
             pos.put(symbol, 0);
             
             Portfolio p = Portfolio.builder()
@@ -45,14 +76,14 @@ public class BacktestService {
                 .build();
             
             portfolios.put(strategy.getName(), p);
-            results.put(strategy.getName(), new BacktestResult(strategy.getName(), initialCapital));
+            results.put(strategy.getName(), new InMemoryBacktestResult(strategy.getName(), initialCapital));
         }
         
         // Run Simulation Loop
         for (MarketData data : history) {
             for (IStrategy strategy : strategies) {
                 Portfolio p = portfolios.get(strategy.getName());
-                BacktestResult result = results.get(strategy.getName());
+                InMemoryBacktestResult result = results.get(strategy.getName());
                 
                 try {
                     TradeSignal signal = strategy.execute(p, data);
@@ -66,22 +97,55 @@ public class BacktestService {
             }
         }
         
-        // Close open positions at end
+        // Close open positions at end and persist results
         if (!history.isEmpty()) {
             MarketData lastData = history.get(history.size() - 1);
             for (IStrategy strategy : strategies) {
                 Portfolio p = portfolios.get(strategy.getName());
-                BacktestResult result = results.get(strategy.getName());
+                InMemoryBacktestResult result = results.get(strategy.getName());
                 closeAllPositions(p, lastData, result);
                 result.setFinalEquity(p.getEquity());
                 result.calculateMetrics();
+                
+                // Persist to database
+                persistBacktestResult(backtestRunId, symbol, strategy.getName(), result, 
+                    periodStart, periodEnd, history.size());
             }
         }
         
+        log.info("✅ Backtest [{}] completed. {} results persisted.", backtestRunId, results.size());
         return results;
     }
     
-    private void processSignal(IStrategy strategy, Portfolio p, MarketData data, TradeSignal signal, BacktestResult result) {
+    private String generateBacktestRunId() {
+        return "BT-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+    }
+    
+    private void persistBacktestResult(String backtestRunId, String symbol, String strategyName,
+                                      InMemoryBacktestResult result, LocalDateTime periodStart,
+                                      LocalDateTime periodEnd, int dataPoints) {
+        BacktestResult entity = BacktestResult.builder()
+            .backtestRunId(backtestRunId)
+            .symbol(symbol)
+            .strategyName(strategyName)
+            .initialCapital(result.getInitialCapital())
+            .finalEquity(result.getFinalEquity())
+            .totalReturnPct(result.getTotalReturnPercentage())
+            .sharpeRatio(result.getSharpeRatio())
+            .maxDrawdownPct(result.getMaxDrawdownPercentage())
+            .totalTrades(result.getTotalTrades())
+            .winningTrades(result.getWinningTrades())
+            .winRatePct(result.getWinRate())
+            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            .backtestPeriodStart(periodStart)
+            .backtestPeriodEnd(periodEnd)
+            .dataPoints(dataPoints)
+            .build();
+        
+        backtestResultRepository.save(entity);
+    }
+    
+    private void processSignal(IStrategy strategy, Portfolio p, MarketData data, TradeSignal signal, InMemoryBacktestResult result) {
         String symbol = data.getSymbol();
         int currentPos = p.getPosition(symbol);
         double price = data.getClose();
@@ -125,7 +189,7 @@ public class BacktestService {
         }
     }
     
-    private void closeAllPositions(Portfolio p, MarketData data, BacktestResult result) {
+    private void closeAllPositions(Portfolio p, MarketData data, InMemoryBacktestResult result) {
         String symbol = data.getSymbol();
         int currentPos = p.getPosition(symbol);
         double price = data.getClose();
@@ -150,7 +214,7 @@ public class BacktestService {
     }
     
     @lombok.Data
-    public static class BacktestResult {
+    public static class InMemoryBacktestResult {
         private final String strategyName;
         private final double initialCapital;
         private double finalEquity;

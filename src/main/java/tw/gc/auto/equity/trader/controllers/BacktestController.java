@@ -36,7 +36,7 @@ public class BacktestController {
     // ========================================================================
     
     @GetMapping("/run")
-    public Map<String, BacktestService.BacktestResult> runBacktest(
+    public Map<String, BacktestService.InMemoryBacktestResult> runBacktest(
             @RequestParam(defaultValue = "2454.TW") String symbol,
             @RequestParam(defaultValue = "1m") String timeframe,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
@@ -114,7 +114,7 @@ public class BacktestController {
         strategies.add(new LinearRegressionStrategy());
 
         // 3. Run Backtest
-        Map<String, BacktestService.BacktestResult> results = backtestService.runBacktest(strategies, history, capital);
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(strategies, history, capital);
         
         // 4. Save results to database
         saveBacktestResults(symbol, results, capital);
@@ -122,10 +122,10 @@ public class BacktestController {
         return results;
     }
     
-    private void saveBacktestResults(String symbol, Map<String, BacktestService.BacktestResult> results, double capital) {
-        for (Map.Entry<String, BacktestService.BacktestResult> entry : results.entrySet()) {
+    private void saveBacktestResults(String symbol, Map<String, BacktestService.InMemoryBacktestResult> results, double capital) {
+        for (Map.Entry<String, BacktestService.InMemoryBacktestResult> entry : results.entrySet()) {
             String strategyName = entry.getKey();
-            BacktestService.BacktestResult result = entry.getValue();
+            BacktestService.InMemoryBacktestResult result = entry.getValue();
             
             try {
                 // Check if mapping already exists
