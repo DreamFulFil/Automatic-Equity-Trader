@@ -414,8 +414,14 @@ class ShioajiWrapper:
             print(f"❌ Failed to get account info: {e}")
             return {"equity": 0, "available_margin": 0, "status": "error", "error": str(e)}
 
-    def fetch_ohlcv(self, stock_code: str, days: int) -> list:
+    def fetch_ohlcv(self, stock_code: str, start_date=None, end_date=None, days: int = None) -> list:
         """Fetch OHLCV bars for a Taiwan stock using Shioaji KBars API.
+
+        Args:
+            stock_code: Stock code (e.g., "2330")
+            start_date: Start datetime (if provided, takes precedence over days)
+            end_date: End datetime (if provided, takes precedence over days)
+            days: Number of days back from today (legacy, used if start_date/end_date not provided)
 
         This method is defensive: it attempts to connect, supports multiple
         call signatures for K-bars across shioaji versions, and always returns
@@ -446,9 +452,16 @@ class ShioajiWrapper:
                     print(f"⚠️ Contract for {stock_code} not found in Shioaji (TSE/OTC)")
                     return []
 
-            # Calculate date range
-            end = datetime.now()
-            start = end - timedelta(days=days)
+            # Calculate date range: prefer explicit start_date/end_date over days
+            if start_date and end_date:
+                start = start_date
+                end = end_date
+            elif days:
+                end = datetime.now()
+                start = end - timedelta(days=days)
+            else:
+                print(f"⚠️ Must provide either (start_date, end_date) or days parameter")
+                return []
             
             # Call kbars API with date strings
             kbars = None
