@@ -63,20 +63,52 @@ Create the Release via curl
 - Replace `<owner>` and `<repo>` in the URL with the repository owner/name (e.g., `DreamFulFil/Automatic-Equity-Trader`).
 - Use the `GITHUB_TOKEN` environment variable with at least `repo` scope.
 
+> 💡 Tip: If you run these commands from the fish shell, avoid brace-syntax for vars (fish treats `${VAR}` differently). Use `$GITHUB_TOKEN` (no braces) in fish or run the commands in bash (e.g., `bash -lc "..."`).
+
 ```bash
 # Capture release API output into logs with a timestamp
 mkdir -p logs
 LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
 LOGFILE="logs/release-${LOG_TS}.log"
 
+# Create a new release
 curl -L -X POST \
   -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   https://api.github.com/repos/<owner>/<repo>/releases \
   -d "{\"tag_name\": \"v${NEW_VERSION}\", \"target_commitish\": \"main\", \"name\": \"v${NEW_VERSION}\", \"body\": ${BODY_ESCAPED}, \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }" 2>&1 | tee "$LOGFILE"
 ```
 
+Updating an existing release (edit release body)
+- To update the release body for an existing release, first fetch the release metadata (to obtain the `id`) and then PATCH the release using the `id`.
+
+```bash
+# Example: fetch release metadata by tag and extract release id
+RELEASE_TAG="v${NEW_VERSION}"
+RELEASE_JSON=$(curl -sS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/<owner>/<repo>/releases/tags/${RELEASE_TAG}")
+RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
+
+# Build the updated body (must follow project format)
+UPDATED_BODY="# Release ${RELEASE_TAG}\n\n## Summary\n- ${COMMIT_MSG}\n\n## Changes\n- Auto-populated strategy_stock_mapping from backtest results\n- Added fallback name resolution in HistoryDataService\n- Added unit tests and operational checks\n"
+
+# Escape the body for JSON safely
+UPDATED_BODY_ESCAPED=$(echo "$UPDATED_BODY" | jq -Rs .)
+
+# PATCH the release body and save output to logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-update-${LOG_TS}-${RELEASE_TAG}.log"
+curl -sS -X PATCH \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  https://api.github.com/repos/<owner>/<repo>/releases/${RELEASE_ID} \
+  -d "{\"body\": ${UPDATED_BODY_ESCAPED}}" 2>&1 | tee "$LOGFILE"
+
+# Validate: successful PATCH returns HTTP 200 and the response contains the updated body
+```
+
+Notes & Rules (important)
 Notes & Rules (important)
 - Only create a release for **minor bumps** (types: `feat`, `perf`, `refactor`) as defined in `.github/instructions/commit.instructions.md`.
 - The release **body must** be in the required format and include at least 3 bullet points in the `## Changes` section.
@@ -101,7 +133,7 @@ Automating the steps (optional)
 
 Example release helper (sketch)
 ```bash
-# scripts/create-release.sh
+# scripts/create-release.sh (recommended)
 set -e
 NEW_VERSION=$(cat VERSION)
 COMMIT_HEADER=$(git log -1 --pretty=%B | head -n1)
@@ -109,8 +141,57 @@ if ! echo "$COMMIT_HEADER" | rg -q "^(feat|perf|refactor)(\(|:).*"; then
   echo "No release necessary for commit: $COMMIT_HEADER"
   exit 0
 fi
-# ... build BODY as above ...
-# call curl
+# Build the BODY following the required format
+COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/^[^:]*: //')
+FILES_CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD)
+JAVA_FILES=$(git diff --name-only HEAD~1 HEAD | rg -c "\\.java$" || echo 0)
+PY_FILES=$(git diff --name-only HEAD~1 HEAD | rg -c "\\.py$" || echo 0)
+BODY="# Release v${NEW_VERSION}\n\n## Summary\n- ${COMMIT_MSG}\n\n## Changes\n- Updated ${JAVA_FILES} Java files\n- Modified configuration\n- Enhanced tests\n"
+BODY_ESCAPED=$(echo "$BODY" | jq -Rs .)
+
+# Create release via curl (see section above for caveats about shells)
+mkdir -p logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-${LOG_TS}.log"
+
+curl -L -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  https://api.github.com/repos/<owner>/<repo>/releases \
+  -d "{\"tag_name\": \"v${NEW_VERSION}\", \"target_commitish\": \"main\", \"name\": \"v${NEW_VERSION}\", \"body\": ${BODY_ESCAPED}, \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }" 2>&1 | tee "$LOGFILE"
+
+# scripts/operational/update-release-body.sh (convenience helper)
+# Usage: REPO_OWNER=<owner> REPO_NAME=<repo> RELEASE_TAG=vX.Y.Z GITHUB_TOKEN=<token> ./scripts/operational/update-release-body.sh
+set -e
+REPO_OWNER=${REPO_OWNER:-DreamFulFil}
+REPO_NAME=${REPO_NAME:-Automatic-Equity-Trader}
+RELEASE_TAG=${RELEASE_TAG:-v${NEW_VERSION}}
+
+# Fetch release id for the tag
+RELEASE_JSON=$(curl -sS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${RELEASE_TAG}")
+RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
+if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+  echo "Could not find release id for tag ${RELEASE_TAG}. Aborting."
+  exit 1
+fi
+
+# Build UPDATED_BODY following required format
+UPDATED_BODY="# Release ${RELEASE_TAG}\n\n## Summary\n- ${COMMIT_MSG}\n\n## Changes\n- Short bullet one\n- Short bullet two\n- Short bullet three\n"
+UPDATED_BODY_ESCAPED=$(echo "$UPDATED_BODY" | jq -Rs .)
+
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-update-${LOG_TS}-${RELEASE_TAG}.log"
+
+# PATCH the release body
+curl -sS -X PATCH \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID} \
+  -d "{\"body\": ${UPDATED_BODY_ESCAPED}}" 2>&1 | tee "$LOGFILE"
+
+# Validate the operation: check HTTP code and saved log for success or failure
 ```
 
 End of instructions
