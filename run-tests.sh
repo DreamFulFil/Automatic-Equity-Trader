@@ -2,35 +2,84 @@
 ###############################################################################
 # Automatic-Equity-Trader - Complete Test Suite Runner
 #
-# Usage: ./run-tests.sh <jasypt-password>
+# Usage: ./run-tests.sh [--unit|--integration|--full] <jasypt-password>
 #
-# Runs comprehensive test suite:
-#   1. Java Unit Tests
-#   2. Python Unit Tests
-#   3. Full System Startup (Java + Python + Ollama)
-#   4. Java Integration Tests
-#   5. Python Integration Tests
-#   6. E2E Tests
-#   7. Graceful Shutdown
+# Execution Tiers:
+#   --unit        : Fast unit tests only (no containers/external services)
+#   --integration : Unit + Integration tests (mocked & container-based)
+#   --full        : Unit + Integration + E2E (default)
+#
+# Features:
+#   - ANSI color-coded status (Green=PASS, Red=FAIL, Yellow=RUNNING)
+#   - Real-time progress bar with percentage tracking
+#   - Tiered execution for development workflow optimization
 ###############################################################################
 
 set -e
 
+# ANSI Color Codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
+
+# Progress bar characters
+PROGRESS_FILLED='█'
+PROGRESS_EMPTY='░'
+PROGRESS_WIDTH=40
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -z "$1" ]; then
+###############################################################################
+# Parse Arguments
+###############################################################################
+TEST_TIER="full"
+JASYPT_PASSWORD=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --unit)
+            TEST_TIER="unit"
+            shift
+            ;;
+        --integration)
+            TEST_TIER="integration"
+            shift
+            ;;
+        --full)
+            TEST_TIER="full"
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: ./run-tests.sh [--unit|--integration|--full] <jasypt-password>"
+            echo ""
+            echo "Execution Tiers:"
+            echo "  --unit        Fast unit tests only (no containers/external services)"
+            echo "  --integration Unit + Integration tests (mocked & container-based)"
+            echo "  --full        Unit + Integration + E2E (default)"
+            echo ""
+            exit 0
+            ;;
+        *)
+            if [ -z "$JASYPT_PASSWORD" ]; then
+                JASYPT_PASSWORD="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$JASYPT_PASSWORD" ]; then
     echo -e "${RED}Error: Missing Jasypt password${NC}"
-    echo "Usage: ./run-tests.sh <jasypt-password>"
+    echo "Usage: ./run-tests.sh [--unit|--integration|--full] <jasypt-password>"
     exit 1
 fi
 
-JASYPT_PASSWORD="$1"
 export JASYPT_PASSWORD
 
 # Setup Java/Maven
@@ -58,12 +107,109 @@ OLLAMA_PID=""
 BRIDGE_PID=""
 BOT_PID=""
 
+# Test counts for progress tracking
+TOTAL_PHASES=0
+COMPLETED_PHASES=0
+CURRENT_PHASE=""
+
+###############################################################################
+# Progress Bar Functions
+###############################################################################
+
+draw_progress_bar() {
+    local current=$1
+    local total=$2
+    local phase_name=$3
+    local status=$4  # RUNNING, PASSED, FAILED
+    
+    if [ $total -eq 0 ]; then
+        local percent=0
+    else
+        local percent=$((current * 100 / total))
+    fi
+    
+    local filled=$((current * PROGRESS_WIDTH / total))
+    local empty=$((PROGRESS_WIDTH - filled))
+    
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="$PROGRESS_FILLED"; done
+    for ((i=0; i<empty; i++)); do bar+="$PROGRESS_EMPTY"; done
+    
+    local status_color=""
+    local status_icon=""
+    case $status in
+        RUNNING)
+            status_color="$YELLOW"
+            status_icon="⏳"
+            ;;
+        PASSED)
+            status_color="$GREEN"
+            status_icon="✅"
+            ;;
+        FAILED)
+            status_color="$RED"
+            status_icon="❌"
+            ;;
+    esac
+    
+    printf "\r${CYAN}[${bar}]${NC} ${BOLD}%3d%%${NC} ${status_color}${status_icon} %s${NC}    " "$percent" "$phase_name"
+}
+
+print_phase_header() {
+    local phase_num=$1
+    local phase_name=$2
+    local total=$3
+    
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}📝 Phase ${phase_num}/${total}: ${phase_name}${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+print_phase_result() {
+    local result=$1
+    local summary=$2
+    local duration=$3
+    
+    if [ "$result" = "PASSED" ]; then
+        echo -e "${GREEN}✅ PASSED${NC} - ${summary}"
+    else
+        echo -e "${RED}❌ FAILED${NC} - ${summary}"
+    fi
+    echo -e "${DIM}⏱️  Duration: ${duration}s${NC}"
+}
+
+set_phase_count() {
+    case $TEST_TIER in
+        unit)
+            TOTAL_PHASES=2  # Java Unit + Python Unit
+            ;;
+        integration)
+            TOTAL_PHASES=4  # Unit tests + Integration tests
+            ;;
+        full)
+            TOTAL_PHASES=6  # Unit + Integration + E2E + System startup
+            ;;
+    esac
+}
+
+###############################################################################
+# Header Display
+###############################################################################
+
+set_phase_count
+
+# Convert test tier to uppercase for display
+TEST_TIER_UPPER=$(echo "$TEST_TIER" | tr '[:lower:]' '[:upper:]')
+
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║         Automatic-Equity-Trader - Complete Test Suite         ║${NC}"
+echo -e "${BLUE}║         Automatic-Equity-Trader - Test Suite Runner           ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "Project: ${SCRIPT_DIR}"
-echo -e "Started: $(date '+%Y-%m-%d %H:%M:%S')"
+echo -e "${BOLD}Project:${NC}    ${SCRIPT_DIR}"
+echo -e "${BOLD}Started:${NC}    $(date '+%Y-%m-%d %H:%M:%S')"
+echo -e "${BOLD}Test Tier:${NC}  ${MAGENTA}${TEST_TIER_UPPER}${NC}"
+echo -e "${BOLD}Phases:${NC}     ${TOTAL_PHASES}"
 echo ""
 
 ###############################################################################
@@ -226,9 +372,9 @@ trap shutdown_gracefully EXIT
 # Phase 1: Java Unit Tests
 ###############################################################################
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}📝 Phase 1: Java Unit Tests${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+COMPLETED_PHASES=0
+print_phase_header 1 "Java Unit Tests" $TOTAL_PHASES
+draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "RUNNING"
 
 JAVA_UNIT_START=$(date +%s)
 JAVA_UNIT_OUTPUT=$($MVN_CMD test -DexcludedGroups=integration -Dspring.profiles.active=ci 2>&1) || true
@@ -237,27 +383,26 @@ JAVA_UNIT_DURATION=$((JAVA_UNIT_END - JAVA_UNIT_START))
 JAVA_UNIT_SUMMARY=$(echo "$JAVA_UNIT_OUTPUT" | grep -E "Tests run:" | tail -1)
 
 if echo "$JAVA_UNIT_OUTPUT" | grep -q "BUILD SUCCESS"; then
-    echo -e "${GREEN}✅ Java unit tests passed${NC}"
     JAVA_UNIT_RESULT="PASSED"
+    COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "PASSED"
 else
-    echo -e "${RED}❌ Java unit tests failed${NC}"
     JAVA_UNIT_RESULT="FAILED"
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "FAILED"
 fi
+echo ""
 if [ "$JAVA_UNIT_RESULT" = "FAILED" ]; then
     echo "Java unit test output:"
     echo "$JAVA_UNIT_OUTPUT"
 fi
-echo "   $JAVA_UNIT_SUMMARY"
-echo -e "${YELLOW}⏱️  Java unit tests took ${JAVA_UNIT_DURATION}s${NC}"
-echo ""
+print_phase_result "$JAVA_UNIT_RESULT" "$JAVA_UNIT_SUMMARY" "$JAVA_UNIT_DURATION"
 
 ###############################################################################
 # Phase 2: Python Unit Tests
 ###############################################################################
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🐍 Phase 2: Python Unit Tests${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+print_phase_header 2 "Python Unit Tests" $TOTAL_PHASES
+draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Unit Tests" "RUNNING"
 
 # Ensure venv is ready and uses python3.12
 PYTHON_BIN="python3.12"
@@ -300,131 +445,186 @@ PYTHON_UNIT_OUTPUT=$(JASYPT_PASSWORD="$JASYPT_PASSWORD" python/venv/bin/pytest \
     python/tests/test_contract.py \
     python/tests/test_shioaji_simulation.py \
     python/tests/test_shioaji_api.py \
+    python/tests/test_edge_cases.py \
     -v 2>&1) || true
 PYTHON_UNIT_END=$(date +%s)
 PYTHON_UNIT_DURATION=$((PYTHON_UNIT_END - PYTHON_UNIT_START))
 PYTHON_UNIT_SUMMARY=$(echo "$PYTHON_UNIT_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
 
 if echo "$PYTHON_UNIT_OUTPUT" | grep -qE "passed"; then
-    echo -e "${GREEN}✅ Python unit tests passed${NC}"
     PYTHON_UNIT_RESULT="PASSED"
+    COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Unit Tests" "PASSED"
 else
-    echo -e "${RED}❌ Python unit tests failed${NC}"
     PYTHON_UNIT_RESULT="FAILED"
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Unit Tests" "FAILED"
 fi
+echo ""
 if [ "$PYTHON_UNIT_RESULT" = "FAILED" ]; then
     echo "Python unit test output:"
     echo "$PYTHON_UNIT_OUTPUT"
 fi
-echo "   $PYTHON_UNIT_SUMMARY"
-echo -e "${YELLOW}⏱️  Python unit tests took ${PYTHON_UNIT_DURATION}s${NC}"
-echo ""
+print_phase_result "$PYTHON_UNIT_RESULT" "$PYTHON_UNIT_SUMMARY" "$PYTHON_UNIT_DURATION"
 
 ###############################################################################
-# Phase 3: Start Full System (with scraper - Telegram messages a-b, skipped in CI)
+# Exit early if --unit tier
+###############################################################################
+if [ "$TEST_TIER" = "unit" ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}📊 Unit Test Tier Complete${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Skip directly to summary
+    JAVA_INT_RESULT="SKIPPED"
+    JAVA_INT_SUMMARY="Skipped (--unit tier)"
+    PYTHON_INT_RESULT="SKIPPED"
+    PYTHON_INT_SUMMARY="Skipped (--unit tier)"
+    E2E_RESULT="SKIPPED"
+    E2E_SUMMARY="Skipped (--unit tier)"
+    
+    # Jump to summary section
+    goto_summary=true
+fi
+
+###############################################################################
+# Phase 3: Start Full System (integration and full tiers only)
 ###############################################################################
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🚀 Phase 3: Starting Full System${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-echo "Earnings blackout data is now managed by EarningsBlackoutService (DB-backed)."
-echo "Use /admin/earnings-blackout/seed to migrate legacy JSON if needed."
-
-start_ollama || exit 1
-start_bridge || exit 1
-start_bot || exit 1
-
-echo ""
-echo -e "${GREEN}✅ Full system running${NC}"
-echo ""
+if [ "$TEST_TIER" != "unit" ]; then
+    print_phase_header 3 "System Startup" $TOTAL_PHASES
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "System Startup" "RUNNING"
+    
+    echo "Earnings blackout data is now managed by EarningsBlackoutService (DB-backed)."
+    echo "Use /admin/earnings-blackout/seed to migrate legacy JSON if needed."
+    
+    start_ollama || exit 1
+    start_bridge || exit 1
+    start_bot || exit 1
+    
+    COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "System Startup" "PASSED"
+    echo ""
+    echo -e "${GREEN}✅ Full system running${NC}"
+fi
 
 ###############################################################################
 # Phase 4: Java Integration Tests
 ###############################################################################
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🔗 Phase 4: Java Integration Tests${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=false -Dspring.profiles.active=ci 2>&1) || true
-JAVA_INT_SUMMARY=$(echo "$JAVA_INT_OUTPUT" | grep -E "Tests run:" | tail -1)
-
-if echo "$JAVA_INT_OUTPUT" | grep -q "BUILD SUCCESS"; then
-    echo -e "${GREEN}✅ Java integration tests passed${NC}"
-    JAVA_INT_RESULT="PASSED"
-else
-    echo -e "${RED}❌ Java integration tests failed${NC}"
-    JAVA_INT_RESULT="FAILED"
+if [ "$TEST_TIER" != "unit" ]; then
+    print_phase_header 4 "Java Integration Tests" $TOTAL_PHASES
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Integration Tests" "RUNNING"
+    
+    JAVA_INT_START=$(date +%s)
+    JAVA_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 $MVN_CMD verify -DskipTests=false -Dspring.profiles.active=ci 2>&1) || true
+    JAVA_INT_END=$(date +%s)
+    JAVA_INT_DURATION=$((JAVA_INT_END - JAVA_INT_START))
+    JAVA_INT_SUMMARY=$(echo "$JAVA_INT_OUTPUT" | grep -E "Tests run:" | tail -1)
+    
+    if echo "$JAVA_INT_OUTPUT" | grep -q "BUILD SUCCESS"; then
+        JAVA_INT_RESULT="PASSED"
+        COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Integration Tests" "PASSED"
+    else
+        JAVA_INT_RESULT="FAILED"
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Integration Tests" "FAILED"
+    fi
+    echo ""
+    if [ "$JAVA_INT_RESULT" = "FAILED" ]; then
+        echo "Java integration test output:"
+        echo "$JAVA_INT_OUTPUT"
+    fi
+    print_phase_result "$JAVA_INT_RESULT" "$JAVA_INT_SUMMARY" "$JAVA_INT_DURATION"
 fi
-if [ "$JAVA_INT_RESULT" = "FAILED" ]; then
-    echo "Java integration test output:"
-    echo "$JAVA_INT_OUTPUT"
+
+###############################################################################
+# Phase 5: Python Integration Tests (integration and full tiers only)
+###############################################################################
+
+if [ "$TEST_TIER" != "unit" ]; then
+    print_phase_header 5 "Python Integration Tests" $TOTAL_PHASES
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Integration Tests" "RUNNING"
+    
+    PYTHON_INT_START=$(date +%s)
+    PYTHON_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
+        python/tests/test_integration.py -v -s 2>&1) || true
+    PYTHON_INT_END=$(date +%s)
+    PYTHON_INT_DURATION=$((PYTHON_INT_END - PYTHON_INT_START))
+    
+    PYTHON_INT_SUMMARY=$(echo "$PYTHON_INT_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
+    
+    if echo "$PYTHON_INT_OUTPUT" | grep -qE "passed"; then
+        PYTHON_INT_RESULT="PASSED"
+        COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Integration Tests" "PASSED"
+    else
+        PYTHON_INT_RESULT="FAILED"
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Python Integration Tests" "FAILED"
+    fi
+    echo ""
+    if [ "$PYTHON_INT_RESULT" = "FAILED" ]; then
+        echo "Python integration test output:"
+        echo "$PYTHON_INT_OUTPUT"
+    fi
+    print_phase_result "$PYTHON_INT_RESULT" "$PYTHON_INT_SUMMARY" "$PYTHON_INT_DURATION"
 fi
-echo "   $JAVA_INT_SUMMARY"
+
+###############################################################################
+# Exit early if --integration tier
+###############################################################################
+if [ "$TEST_TIER" = "integration" ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}📊 Integration Test Tier Complete${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    E2E_RESULT="SKIPPED"
+    E2E_SUMMARY="Skipped (--integration tier)"
+fi
+
+###############################################################################
+# Phase 6: E2E Tests (full tier only)
+###############################################################################
+
+if [ "$TEST_TIER" = "full" ]; then
+    print_phase_header 6 "E2E Tests" $TOTAL_PHASES
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "E2E Tests" "RUNNING"
+    
+    E2E_START=$(date +%s)
+    E2E_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
+        tests/e2e/test_full_session.py -v -s 2>&1) || true
+    E2E_EXIT_CODE=$?
+    E2E_END=$(date +%s)
+    E2E_DURATION=$((E2E_END - E2E_START))
+    
+    E2E_SUMMARY=$(echo "$E2E_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
+    
+    if [ $E2E_EXIT_CODE -eq 0 ] && echo "$E2E_OUTPUT" | grep -qE "passed" && ! echo "$E2E_OUTPUT" | grep -qE "failed|error"; then
+        E2E_RESULT="PASSED"
+        COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "E2E Tests" "PASSED"
+    else
+        E2E_RESULT="FAILED"
+        draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "E2E Tests" "FAILED"
+    fi
+    echo ""
+    if [ "$E2E_RESULT" = "FAILED" ]; then
+        echo "E2E test output:"
+        echo "$E2E_OUTPUT"
+    fi
+    print_phase_result "$E2E_RESULT" "$E2E_SUMMARY" "$E2E_DURATION"
+fi
+
+###############################################################################
+# Summary Table - Enhanced with color-coded results
+###############################################################################
+
 echo ""
-
-###############################################################################
-# Phase 5: Python Integration Tests
-###############################################################################
-
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🔗 Phase 5: Python Integration Tests${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-PYTHON_INT_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-    python/tests/test_integration.py -v -s 2>&1) || true
-
-PYTHON_INT_SUMMARY=$(echo "$PYTHON_INT_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
-
-if echo "$PYTHON_INT_OUTPUT" | grep -qE "passed"; then
-    echo -e "${GREEN}✅ Python integration tests passed${NC}"
-    PYTHON_INT_RESULT="PASSED"
-else
-    echo -e "${RED}❌ Python integration tests failed${NC}"
-    PYTHON_INT_RESULT="FAILED"
-fi
-if [ "$PYTHON_INT_RESULT" = "FAILED" ]; then
-    echo "Python integration test output:"
-    echo "$PYTHON_INT_OUTPUT"
-fi
-echo "   $PYTHON_INT_SUMMARY"
+echo -e "${BOLD}${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}${BLUE}║                    TEST RESULTS SUMMARY                       ║${NC}"
+echo -e "${BOLD}${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-
-###############################################################################
-# Phase 6: E2E Tests
-###############################################################################
-
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🎯 Phase 6: E2E Tests${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-E2E_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-    tests/e2e/test_full_session.py -v -s 2>&1) || true
-E2E_EXIT_CODE=$?
-
-E2E_SUMMARY=$(echo "$E2E_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
-
-if [ $E2E_EXIT_CODE -eq 0 ] && echo "$E2E_OUTPUT" | grep -qE "passed" && ! echo "$E2E_OUTPUT" | grep -qE "failed|error"; then
-    echo -e "${GREEN}✅ E2E tests passed${NC}"
-    E2E_RESULT="PASSED"
-else
-    echo -e "${RED}❌ E2E tests failed${NC}"
-    E2E_RESULT="FAILED"
-fi
-if [ "$E2E_RESULT" = "FAILED" ]; then
-    echo "E2E test output:"
-    echo "$E2E_OUTPUT"
-fi
-echo "   $E2E_SUMMARY"
-echo ""
-
-###############################################################################
-# Phase 7: Graceful Shutdown (triggered by trap, Telegram messages e,f,g skipped in CI)
-###############################################################################
-
-
-# Summary table (ASCII, fixed-width columns) - parse numeric counts for perfect alignment
 
 # Helper: parse JUnit-style summary line like: "Tests run: 240, Failures: 0, Errors: 0, Skipped: 0"
 parse_java_counts() {
@@ -444,53 +644,92 @@ parse_py_counts() {
     passed=$(echo "$s" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
     failed=$(echo "$s" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
     skipped=$(echo "$s" | grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+' || echo "0")
-    # If passed is present, assume total = passed + failed + skipped; otherwise total = failed+skipped
     total=$((passed + failed + skipped))
     echo "$total $failed 0 $skipped"
+}
+
+# Format result with color
+format_result() {
+    local result="$1"
+    case "$result" in
+        PASSED)  echo -e "${GREEN}PASSED${NC}" ;;
+        FAILED)  echo -e "${RED}FAILED${NC}" ;;
+        SKIPPED) echo -e "${DIM}SKIPPED${NC}" ;;
+        *)       echo "$result" ;;
+    esac
 }
 
 # Extract counts for each suite
 read JAVA_UNIT_TESTS JAVA_UNIT_FAILURES JAVA_UNIT_ERRORS JAVA_UNIT_SKIPPED < <(parse_java_counts "$JAVA_UNIT_SUMMARY")
 read PYTHON_UNIT_TESTS PYTHON_UNIT_FAILURES PYTHON_UNIT_ERRORS PYTHON_UNIT_SKIPPED < <(parse_py_counts "$PYTHON_UNIT_SUMMARY")
-read JAVA_INT_TESTS JAVA_INT_FAILURES JAVA_INT_ERRORS JAVA_INT_SKIPPED < <(parse_java_counts "$JAVA_INT_SUMMARY")
-read PYTHON_INT_TESTS PYTHON_INT_FAILURES PYTHON_INT_ERRORS PYTHON_INT_SKIPPED < <(parse_py_counts "$PYTHON_INT_SUMMARY")
-read E2E_TESTS E2E_FAILURES E2E_ERRORS E2E_SKIPPED < <(parse_py_counts "$E2E_SUMMARY")
 
-# Table layout widths
-TS_W=23
-R_W=7
-T_W=9
-F_W=8
-E_W=6
-S_W=7
+if [ "$TEST_TIER" != "unit" ]; then
+    read JAVA_INT_TESTS JAVA_INT_FAILURES JAVA_INT_ERRORS JAVA_INT_SKIPPED < <(parse_java_counts "$JAVA_INT_SUMMARY")
+    read PYTHON_INT_TESTS PYTHON_INT_FAILURES PYTHON_INT_ERRORS PYTHON_INT_SKIPPED < <(parse_py_counts "$PYTHON_INT_SUMMARY")
+else
+    JAVA_INT_TESTS="-"; JAVA_INT_FAILURES="-"; JAVA_INT_ERRORS="-"; JAVA_INT_SKIPPED="-"
+    PYTHON_INT_TESTS="-"; PYTHON_INT_FAILURES="-"; PYTHON_INT_ERRORS="-"; PYTHON_INT_SKIPPED="-"
+fi
 
+if [ "$TEST_TIER" = "full" ]; then
+    read E2E_TESTS E2E_FAILURES E2E_ERRORS E2E_SKIPPED < <(parse_py_counts "$E2E_SUMMARY")
+else
+    E2E_TESTS="-"; E2E_FAILURES="-"; E2E_ERRORS="-"; E2E_SKIPPED="-"
+fi
+
+# Table layout
 sep="+-------------------------+---------+-----------+----------+--------+---------+"
 printf "%s\n" "$sep"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %-$(printf "%s" $T_W)s | %-$(printf "%s" $F_W)s | %-$(printf "%s" $E_W)s | %-$(printf "%s" $S_W)s |\n" "Test Suite" "Result" "Tests run" "Failures" "Errors" "Skipped"
+printf "| %-23s | %-7s | %-9s | %-8s | %-6s | %-7s |\n" "Test Suite" "Result" "Tests run" "Failures" "Errors" "Skipped"
 printf "%s\n" "$sep"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Java Unit Tests" "$JAVA_UNIT_RESULT" "$JAVA_UNIT_TESTS" "$JAVA_UNIT_FAILURES" "$JAVA_UNIT_ERRORS" "$JAVA_UNIT_SKIPPED"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Python Unit Tests" "$PYTHON_UNIT_RESULT" "$PYTHON_UNIT_TESTS" "$PYTHON_UNIT_FAILURES" "$PYTHON_UNIT_ERRORS" "$PYTHON_UNIT_SKIPPED"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Java Integration" "$JAVA_INT_RESULT" "$JAVA_INT_TESTS" "$JAVA_INT_FAILURES" "$JAVA_INT_ERRORS" "$JAVA_INT_SKIPPED"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "Python Integration" "$PYTHON_INT_RESULT" "$PYTHON_INT_TESTS" "$PYTHON_INT_FAILURES" "$PYTHON_INT_ERRORS" "$PYTHON_INT_SKIPPED"
-printf "| %-$(printf "%s" $TS_W)s | %-$(printf "%s" $R_W)s | %$(printf "%s" $T_W)s | %$(printf "%s" $F_W)s | %$(printf "%s" $E_W)s | %$(printf "%s" $S_W)s |\n" "E2E Tests" "$E2E_RESULT" "$E2E_TESTS" "$E2E_FAILURES" "$E2E_ERRORS" "$E2E_SKIPPED"
+printf "| %-23s | %-7s | %9s | %8s | %6s | %7s |\n" "Java Unit Tests" "$JAVA_UNIT_RESULT" "$JAVA_UNIT_TESTS" "$JAVA_UNIT_FAILURES" "$JAVA_UNIT_ERRORS" "$JAVA_UNIT_SKIPPED"
+printf "| %-23s | %-7s | %9s | %8s | %6s | %7s |\n" "Python Unit Tests" "$PYTHON_UNIT_RESULT" "$PYTHON_UNIT_TESTS" "$PYTHON_UNIT_FAILURES" "$PYTHON_UNIT_ERRORS" "$PYTHON_UNIT_SKIPPED"
+printf "| %-23s | %-7s | %9s | %8s | %6s | %7s |\n" "Java Integration" "$JAVA_INT_RESULT" "$JAVA_INT_TESTS" "$JAVA_INT_FAILURES" "$JAVA_INT_ERRORS" "$JAVA_INT_SKIPPED"
+printf "| %-23s | %-7s | %9s | %8s | %6s | %7s |\n" "Python Integration" "$PYTHON_INT_RESULT" "$PYTHON_INT_TESTS" "$PYTHON_INT_FAILURES" "$PYTHON_INT_ERRORS" "$PYTHON_INT_SKIPPED"
+printf "| %-23s | %-7s | %9s | %8s | %6s | %7s |\n" "E2E Tests" "$E2E_RESULT" "$E2E_TESTS" "$E2E_FAILURES" "$E2E_ERRORS" "$E2E_SKIPPED"
 printf "%s\n" "$sep"
 
-# Print durations summary (colored) below the table
-printf "Java unit duration: %s s    Python unit duration: %s s\n" "$JAVA_UNIT_DURATION" "$PYTHON_UNIT_DURATION"
-if [ "$ALL_PASSED" = true ] 2>/dev/null; then
-    echo -e "${GREEN}ALL TESTS PASSED${NC}"
-fi
+# Print durations summary
+echo ""
+echo -e "${DIM}Execution times: Java Unit: ${JAVA_UNIT_DURATION}s | Python Unit: ${PYTHON_UNIT_DURATION}s${NC}"
+echo -e "${DIM}Test Tier: ${TEST_TIER_UPPER}${NC}"
 echo ""
 
+# Determine final result based on tier
 ALL_PASSED=true
-for result in "$JAVA_UNIT_RESULT" "$PYTHON_UNIT_RESULT" "$JAVA_INT_RESULT" "$PYTHON_INT_RESULT" "$E2E_RESULT"; do
-    if [ "$result" != "PASSED" ]; then
-        ALL_PASSED=false
-        break
-    fi
-done
+case $TEST_TIER in
+    unit)
+        for result in "$JAVA_UNIT_RESULT" "$PYTHON_UNIT_RESULT"; do
+            if [ "$result" != "PASSED" ]; then
+                ALL_PASSED=false
+                break
+            fi
+        done
+        ;;
+    integration)
+        for result in "$JAVA_UNIT_RESULT" "$PYTHON_UNIT_RESULT" "$JAVA_INT_RESULT" "$PYTHON_INT_RESULT"; do
+            if [ "$result" != "PASSED" ] && [ "$result" != "SKIPPED" ]; then
+                ALL_PASSED=false
+                break
+            fi
+        done
+        ;;
+    full)
+        for result in "$JAVA_UNIT_RESULT" "$PYTHON_UNIT_RESULT" "$JAVA_INT_RESULT" "$PYTHON_INT_RESULT" "$E2E_RESULT"; do
+            if [ "$result" != "PASSED" ] && [ "$result" != "SKIPPED" ]; then
+                ALL_PASSED=false
+                break
+            fi
+        done
+        ;;
+esac
 
 echo -e "Completed: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+
+# Final progress bar
+draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Complete" "$([ "$ALL_PASSED" = true ] && echo "PASSED" || echo "FAILED")"
+echo ""
 echo ""
 
 if [ "$ALL_PASSED" = true ]; then
