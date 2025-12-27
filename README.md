@@ -2,7 +2,7 @@
 
 # Automatic Equity Trader
 
-**Version 2.0.4** - Test Suite Enhancement
+**Version 2.0.5** - Backtest Architecture Refactoring
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
@@ -16,6 +16,39 @@ Designed for capital preservation with 80,000 TWD starting capital.
 **Production-ready** with 375 passing tests, 100 strategies, AI trade veto, and Taiwan compliance.
 
 📚 **[Complete Documentation](docs/INDEX.md)** | 🚀 **[Quick Start](docs/usage/QUICK_START_CHECKLIST.md)** | 📖 **[Beginner Guide](docs/usage/BEGINNER_GUIDE.md)** | 📝 **[Changelog](CHANGELOG.md)**
+
+---
+
+## ✨ What's New in v2.0.5 (2025-12-20)
+
+### 🔄 Backtest Architecture Refactoring
+
+**Simplified API & Dynamic Stock Selection**
+- ✅ **BacktestController streamlined** to single endpoint: `POST /api/backtest/run`
+  - Removed 5 deprecated endpoints (single-stock, populate-data, run-all, select-strategy, full-pipeline)
+  - All functionality consolidated into parallelized backtest workflow
+- ✅ **TASK 1: Dynamic stock fetching** implemented with web scraping
+  - Fetches top 50 Taiwan stocks from multiple sources (TWSE, Yahoo Finance, TAIEX)
+  - Falls back to curated list when scraping fails (ensures reliability)
+  - Added JSoup dependency for HTML parsing
+
+**Service Layer Cleanup**
+- ✅ **Removed unused BacktestService methods**:
+  - `populateHistoricalDataInternal` (replaced by runParallelizedBacktest)
+  - `runCombinationalBacktestsInternal` (no forward-testing, pure historical)
+  - `getDataStatus` (data automatically managed)
+- ✅ **Verified capital & portfolio handling**: Position sizing uses 95% of available margin
+- ✅ **Test coverage** added for dynamic stock fetching with fallback validation
+
+**Workflow:**
+```
+POST /api/backtest/run (initialCapital=80000)
+  ↓
+1. fetchTop50Stocks() - Dynamic web scraping with fallback
+2. downloadHistoricalData() - 10 years, batched by 365 days (Phaser sync)
+3. runParallelizedBacktest() - Test 100 strategies across 50 stocks
+4. Persist results to database
+```
 
 ---
 
