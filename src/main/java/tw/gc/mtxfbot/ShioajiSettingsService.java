@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class ShioajiSettingsService {
 
     private final ShioajiSettingsRepository shioajiSettingsRepo;

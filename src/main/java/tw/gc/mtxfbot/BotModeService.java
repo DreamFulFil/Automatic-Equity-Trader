@@ -21,6 +21,7 @@ import java.util.Optional;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class BotModeService {
     
     private final BotSettingsRepository settingsRepo;

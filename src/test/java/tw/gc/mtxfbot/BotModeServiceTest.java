@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
  * Unit tests for BotModeService
  */
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class BotModeServiceTest {
     
     @Mock

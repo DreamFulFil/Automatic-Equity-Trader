@@ -2,7 +2,6 @@ package tw.gc.mtxfbot.agents;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import tw.gc.mtxfbot.entities.Trade;
 import tw.gc.mtxfbot.entities.Trade.TradingMode;
 import tw.gc.mtxfbot.entities.Trade.TradeStatus;
 import tw.gc.mtxfbot.repositories.TradeRepository;

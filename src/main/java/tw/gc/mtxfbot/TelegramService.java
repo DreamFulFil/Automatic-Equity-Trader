@@ -13,8 +13,6 @@ import tw.gc.mtxfbot.agents.RiskManagerAgent;
 import tw.gc.mtxfbot.agents.TutorBotAgent;
 import tw.gc.mtxfbot.config.TelegramProperties;
 import tw.gc.mtxfbot.entities.AgentInteraction.InteractionType;
-import tw.gc.mtxfbot.entities.Trade.TradingMode;
-import tw.gc.mtxfbot.StockSettingsService;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -101,6 +99,7 @@ public class TelegramService {
      * Poll for Telegram updates every 5 seconds
      */
     @Scheduled(fixedRate = 5000)
+    @SuppressWarnings("null")
     public void pollUpdates() {
         if (!telegramProperties.isEnabled()) return;
         
@@ -338,6 +337,7 @@ public class TelegramService {
         }
     }
 
+    @SuppressWarnings("null")
     public void sendMessage(String message) {
         if (!telegramProperties.isEnabled()) {
             log.info("[Telegram disabled] {}", message);

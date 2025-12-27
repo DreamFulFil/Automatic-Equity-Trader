@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 @ActiveProfiles("test")
 class EarningsBlackoutServiceIntegrationTest {
 
+    @SuppressWarnings("removal")
     @SpyBean
     private EarningsBlackoutService earningsBlackoutService;
 

@@ -27,6 +27,7 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
+@SuppressWarnings("null")
 class DualModeTest {
 
     @Mock private RestTemplate restTemplate;

@@ -34,6 +34,7 @@ public class ShioajiReconnectWrapper {
      * @return API response
      * @throws Exception if all retry attempts fail
      */
+    @SuppressWarnings("null")
     public <T> T executeWithReconnect(String bridgeUrl, String endpoint, Object requestBody, Class<T> responseType) throws Exception {
         int maxRetries = 5;
         int attempt = 0;
