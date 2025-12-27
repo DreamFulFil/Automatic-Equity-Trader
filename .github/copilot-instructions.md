@@ -42,6 +42,14 @@
 * Read only the sections needed to make changes.
 * Avoid reading entire files unless full context is required.
 
+**Development shell**
+* This project is developed using the `fish` shell on macOS. Examples in repository prompts and scripts should be fish-friendly; where a command uses Bash-only syntax, use the fish equivalent or run via `bash -lc "..."`.
+* Examples:
+  - fish: `set -x GITHUB_TOKEN <token>`
+  - bash: `export GITHUB_TOKEN=<token>`
+
+Note: If you use a different shell, prefer running examples in `bash -lc` to avoid quoting and variable expansion differences.
+
 **Completion workflow (must be followed):**
 
 1. **Mandatory Verification:**
