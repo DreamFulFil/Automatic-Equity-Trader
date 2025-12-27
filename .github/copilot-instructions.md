@@ -13,6 +13,10 @@
 * All code must compile, all existing tests must pass, and all new code must be covered by tests.
 * Never remove tests to make builds pass.
 
+**Java rules:**
+* Always use Lombok `@Data`, `@AllArgsConstructor`, and `@NoArgsConstructor` instead of explicit getters, setters, or self-written constructors.
+* Always check that there are no compile warnings (e.g., unused imports, unused methods, etc.) before committing.
+
 **Tool usage rules (strict):**
 
 * Use real tools when available; never simulate outputs.
