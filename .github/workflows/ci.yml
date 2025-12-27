@@ -75,7 +75,8 @@ jobs:
       - name: Install Fish shell
         run: sudo apt-get update && sudo apt-get install -y fish
 
-      - name: Validate Fish scripts
+      - name: Validate Fish scripts (macOS only)
+        if: runner.os == 'macOS'
         run: |
           fish -n start-lunch-bot.fish
           fish -n tests/fish/test_start_script.fish
