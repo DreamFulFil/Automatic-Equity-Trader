@@ -223,7 +223,7 @@ if command -v jenv > /dev/null
     set MVN_CMD "jenv exec mvn"
 end
 
-if not test -f "target/auto-equity-trader-1.0.0.jar"
+if not test -f "target/auto-equity-trader.jar"
     echo "Building JAR file (using: $MVN_CMD)..."
     eval $MVN_CMD clean package -DskipTests
     if test $status -ne 0
@@ -349,9 +349,9 @@ echo ""
 
 # Use jenv exec for cron reliability, fallback to java otherwise
 if command -v jenv > /dev/null
-    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    jenv exec java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 else
-    java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+    java -Dtrading.mode="$TRADING_MODE" -jar target/auto-equity-trader.jar --jasypt.encryptor.password="$JASYPT_SECRET"
 end
 set JAVA_EXIT_CODE $status
 

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.MarketData;
@@ -233,6 +234,10 @@ public class TradingEngineService {
                 }
             }
             
+        } catch (RestClientException e) {
+            // Bridge connection error - mark as disconnected and skip this cycle
+            tradingStateService.setMarketDataConnected(false);
+            log.debug("Bridge connection lost, will retry: {}", e.getMessage());
         } catch (Exception e) {
             log.error("🚨 Trading loop error", e);
             telegramService.sendMessage("🚨 Trading loop error: " + e.getMessage());

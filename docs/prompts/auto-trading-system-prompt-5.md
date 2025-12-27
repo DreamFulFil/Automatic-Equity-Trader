@@ -300,7 +300,7 @@ ollama list  # Verify model downloaded
 vim src/main/resources/application.yml
 
 # Encrypt sensitive values
-java -cp target/auto-equity-trader-1.0.0.jar \
+java -cp target/auto-equity-trader.jar \
   org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI \
   password=YOUR_SECRET \
   input="YOUR_TELEGRAM_TOKEN" \
@@ -321,7 +321,7 @@ mvn test
 mvn clean package -DskipTests
 
 # Verify JAR
-ls -lh target/auto-equity-trader-1.0.0.jar
+ls -lh target/auto-equity-trader.jar
 ```
 
 #### 7. First Run
@@ -417,7 +417,7 @@ echo "✅ Python bridge running"
 # Start Java trading engine
 echo "☕ Starting Java trading engine (port 16350)..."
 cd "$PROJECT_ROOT"
-java -jar target/auto-equity-trader-1.0.0.jar \
+java -jar target/auto-equity-trader.jar \
   --jasypt.encryptor.password=$JASYPT_PASSWORD \
   >> logs/trading-engine.log 2>&1 &
 
