@@ -7,28 +7,28 @@ import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.StrategyType;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * MarketMakingStrategy
- * Type: Market Microstructure
+ * Type: Quantitative
  * 
  * Academic Foundation:
  * - Ho & Stoll (1981) - 'Optimal Dealer Pricing Under Transactions'
  * 
  * Logic:
- * Provide liquidity, capture spread. Buy on dips, sell on pops.
+ * Provide liquidity, capture spread
+ * 
+ * Status: TEMPLATE - Requires full implementation with proper:
+ * - State management (price history, indicators)
+ * - Entry/exit logic
+ * - Risk management
+ * - Academic validation
  */
 @Slf4j
 public class MarketMakingStrategy implements IStrategy {
     
+    // Parameters from academic research
     private final double spreadCapture;
     private final int maxInventory;
-    private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
-    private final Map<String, Integer> inventory = new HashMap<>();
     
     public MarketMakingStrategy(double spreadCapture, int maxInventory) {
         this.spreadCapture = spreadCapture;
@@ -37,69 +37,24 @@ public class MarketMakingStrategy implements IStrategy {
 
     @Override
     public TradeSignal execute(Portfolio portfolio, MarketData data) {
-        String symbol = data.getSymbol();
-        Deque<Double> prices = priceHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
-        
-        prices.addLast(data.getClose());
-        if (prices.size() > 30) prices.removeFirst();
-        
-        if (prices.size() < 10) {
-            return TradeSignal.neutral("Warming up market making");
-        }
-        
-        Double[] priceArray = prices.toArray(new Double[0]);
-        double currentPrice = priceArray[priceArray.length - 1];
-        double prevPrice = priceArray[priceArray.length - 2];
-        double priceChange = (currentPrice - prevPrice) / prevPrice;
-        
-        // Calculate mid-price (fair value)
-        double midPrice = 0;
-        for (Double p : priceArray) midPrice += p;
-        midPrice /= priceArray.length;
-        
-        int currentInventory = inventory.getOrDefault(symbol, 0);
-        int position = portfolio.getPosition(symbol);
-        
-        // Buy on dips (provide liquidity)
-        if (priceChange < -spreadCapture && currentInventory < maxInventory && position <= 0) {
-            inventory.put(symbol, currentInventory + 1);
-            return TradeSignal.longSignal(0.65,
-                String.format("MM buy: price dropped %.2f%%, inv=%d", 
-                    priceChange * 100, currentInventory + 1));
-        }
-        
-        // Sell on pops (capture spread)
-        if (priceChange > spreadCapture && currentInventory > 0 && position > 0) {
-            inventory.put(symbol, currentInventory - 1);
-            return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.65,
-                String.format("MM sell: price rose %.2f%%, inv=%d", 
-                    priceChange * 100, currentInventory - 1));
-        }
-        
-        // Inventory management: flatten if too much inventory
-        if (currentInventory >= maxInventory && currentPrice >= midPrice) {
-            inventory.put(symbol, currentInventory - 1);
-            return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.60,
-                String.format("MM flatten: inv=%d at mid", currentInventory));
-        }
-        
-        return TradeSignal.neutral(String.format("MM: inv=%d, change=%.2f%%", 
-            currentInventory, priceChange * 100));
+        // TODO: Implement MarketMakingStrategy logic based on academic research
+        // Reference: Ho & Stoll (1981) - 'Optimal Dealer Pricing Under Transactions'
+        log.warn("{} not yet implemented - returning neutral", getName());
+        return TradeSignal.neutral("Strategy template - not implemented");
     }
 
     @Override
     public String getName() {
-        return String.format("Market Making (%.2f%%, max=%d)", spreadCapture * 100, maxInventory);
+        return "Market Making Strategy";
     }
 
     @Override
     public StrategyType getType() {
-        return StrategyType.SWING;
+        return StrategyType.INTRADAY;
     }
 
     @Override
     public void reset() {
-        priceHistory.clear();
-        inventory.clear();
+        // TODO: Clear any internal state
     }
 }

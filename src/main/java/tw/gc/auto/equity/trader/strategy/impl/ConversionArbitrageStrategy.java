@@ -7,29 +7,29 @@ import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.StrategyType;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * ConversionArbitrageStrategy
- * Type: Convertible Arbitrage
+ * Type: Quantitative
  * 
  * Academic Foundation:
  * - Mitchell, Pulvino & Stafford (2002) - 'Limited Arbitrage in Equity Markets'
  * 
  * Logic:
- * Trade price discrepancies using relative valuation proxy.
- * When stock underperforms implied value, go long expecting convergence.
+ * Convertible bond arbitrage
+ * 
+ * Status: TEMPLATE - Requires full implementation with proper:
+ * - State management (price history, indicators)
+ * - Entry/exit logic
+ * - Risk management
+ * - Academic validation
  */
 @Slf4j
 public class ConversionArbitrageStrategy implements IStrategy {
     
+    // Parameters from academic research
     private final String bondSymbol;
     private final String stockSymbol;
     private final double minSpread;
-    private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
     
     public ConversionArbitrageStrategy(String bondSymbol, String stockSymbol, double minSpread) {
         this.bondSymbol = bondSymbol;
@@ -39,71 +39,24 @@ public class ConversionArbitrageStrategy implements IStrategy {
 
     @Override
     public TradeSignal execute(Portfolio portfolio, MarketData data) {
-        String symbol = data.getSymbol();
-        Deque<Double> prices = priceHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
-        
-        prices.addLast(data.getClose());
-        if (prices.size() > 60) {
-            prices.removeFirst();
-        }
-        
-        if (prices.size() < 30) {
-            return TradeSignal.neutral("Warming up conversion arb");
-        }
-        
-        Double[] priceArray = prices.toArray(new Double[0]);
-        double currentPrice = priceArray[priceArray.length - 1];
-        
-        // Calculate implied conversion value (simplified: moving average)
-        double impliedValue = 0;
-        for (Double p : priceArray) impliedValue += p;
-        impliedValue /= priceArray.length;
-        
-        // Spread between current price and implied value
-        double spread = (impliedValue - currentPrice) / impliedValue;
-        
-        // Volatility for confidence adjustment
-        double variance = 0;
-        for (Double p : priceArray) variance += Math.pow(p - impliedValue, 2);
-        double stdDev = Math.sqrt(variance / priceArray.length);
-        double relativeVol = stdDev / impliedValue;
-        
-        int position = portfolio.getPosition(symbol);
-        
-        // Long when stock is undervalued vs implied conversion
-        if (spread > minSpread && position <= 0) {
-            return TradeSignal.longSignal(0.70,
-                String.format("Conversion arb long: spread=%.2f%% (implied=%.2f)", 
-                    spread * 100, impliedValue));
-        }
-        
-        // Exit when spread narrows
-        if (position > 0 && spread < minSpread / 3) {
-            return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.70,
-                String.format("Spread converged: %.2f%%", spread * 100));
-        }
-        
-        // Short when overvalued vs implied
-        if (spread < -minSpread && position >= 0) {
-            return TradeSignal.shortSignal(0.65,
-                String.format("Conversion arb short: spread=%.2f%%", spread * 100));
-        }
-        
-        return TradeSignal.neutral(String.format("Spread: %.2f%%", spread * 100));
+        // TODO: Implement ConversionArbitrageStrategy logic based on academic research
+        // Reference: Mitchell, Pulvino & Stafford (2002) - 'Limited Arbitrage in Equity Markets'
+        log.warn("{} not yet implemented - returning neutral", getName());
+        return TradeSignal.neutral("Strategy template - not implemented");
     }
 
     @Override
     public String getName() {
-        return String.format("Conversion Arbitrage (%.1f%%)", minSpread * 100);
+        return "Conversion Arbitrage Strategy";
     }
 
     @Override
     public StrategyType getType() {
-        return StrategyType.SWING;
+        return StrategyType.INTRADAY;
     }
 
     @Override
     public void reset() {
-        priceHistory.clear();
+        // TODO: Clear any internal state
     }
 }
