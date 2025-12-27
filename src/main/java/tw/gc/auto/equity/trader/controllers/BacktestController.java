@@ -16,7 +16,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.gc.auto.equity.trader.entities.Bar;
 import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
 import tw.gc.auto.equity.trader.repositories.BarRepository;
+import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.services.BacktestService;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.impl.*;
@@ -29,6 +31,7 @@ public class BacktestController {
 
     private final BacktestService backtestService;
     private final BarRepository barRepository;
+    private final StrategyStockMappingRepository mappingRepository;
 
     @GetMapping("/run")
     public Map<String, BacktestService.BacktestResult> runBacktest(
@@ -117,7 +120,44 @@ public class BacktestController {
         strategies.add(new LinearRegressionStrategy());
 
         // 3. Run Backtest
-        return backtestService.runBacktest(strategies, history, capital);
+        Map<String, BacktestService.BacktestResult> results = backtestService.runBacktest(strategies, history, capital);
+        
+        // 4. Save results to database
+        saveBacktestResults(symbol, results, capital);
+        
+        return results;
+    }
+    
+    private void saveBacktestResults(String symbol, Map<String, BacktestService.BacktestResult> results, double capital) {
+        for (Map.Entry<String, BacktestService.BacktestResult> entry : results.entrySet()) {
+            String strategyName = entry.getKey();
+            BacktestService.BacktestResult result = entry.getValue();
+            
+            try {
+                // Check if mapping already exists
+                StrategyStockMapping mapping = mappingRepository
+                    .findBySymbolAndStrategyName(symbol, strategyName)
+                    .orElse(new StrategyStockMapping());
+                
+                // Update mapping
+                mapping.setSymbol(symbol);
+                mapping.setStrategyName(strategyName);
+                mapping.setTotalReturnPct(result.getTotalReturnPercentage());
+                mapping.setSharpeRatio(result.getSharpeRatio());
+                mapping.setWinRatePct(result.getWinRate());
+                mapping.setMaxDrawdownPct(-result.getMaxDrawdownPercentage());
+                mapping.setTotalTrades(result.getTotalTrades());
+                mapping.setUpdatedAt(LocalDateTime.now());
+                
+                mappingRepository.save(mapping);
+                
+                log.debug("Saved backtest result: {} + {} = {}%", symbol, strategyName, 
+                    String.format("%.2f", result.getTotalReturnPercentage()));
+                
+            } catch (Exception e) {
+                log.error("Failed to save backtest result for {} + {}", symbol, strategyName, e);
+            }
+        }
     }
     
     @GetMapping("/strategies")
