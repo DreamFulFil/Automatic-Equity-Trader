@@ -34,3 +34,7 @@ Focus on correctness and completion over explanation. Avoid narrating internal r
 4. `git add .`
 5. `git commit` with a clear, descriptive message.
 6. `git push` to the current branch.
+
+**Claude Model Restriction:**
+* If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files.
+* Only update the main README.MD, and keep it concise and focused on essential changes.
