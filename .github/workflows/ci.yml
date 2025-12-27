@@ -99,6 +99,23 @@ jobs:
           curl -X POST http://127.0.0.1:11434/api/pull -d '{"name": "llama3.1:8b-instruct-q5_K_M"}' &
           echo "Model pull started in background"
 
+      # Wait for Ollama model to be ready
+      - name: Wait for Ollama model
+        run: |
+          echo "Waiting for Ollama model to be downloaded..."
+          for i in {1..120}; do
+            if curl -s http://127.0.0.1:11434/api/tags | jq -e '.models[] | select(.name == "llama3.1:8b-instruct-q5_K_M")' >/dev/null 2>&1; then
+              echo "Model llama3.1:8b-instruct-q5_K_M is ready!"
+              break
+            fi
+            echo "Waiting... ($i/120)"
+            sleep 5
+          done
+          if [ $i -eq 120 ]; then
+            echo "Model download timed out"
+            exit 1
+          fi
+
       # Run all tests via run-tests.sh (SINGLE SOURCE OF TRUTH)
       - name: Run ALL tests (Java + Python + Integration + E2E)
         env:
