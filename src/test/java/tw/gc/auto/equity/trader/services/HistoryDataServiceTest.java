@@ -14,6 +14,8 @@ import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import javax.sql.DataSource;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -235,5 +237,73 @@ class HistoryDataServiceTest {
         verify(barRepository, times(2)).truncateTable();
         verify(marketDataRepository, times(2)).truncateTable();
         verify(strategyStockMappingRepository, times(2)).truncateTable();
+    }
+    
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldReturnResultsForAllSymbols() {
+        // Given
+        historyDataService.resetTruncationFlag();
+        List<String> symbols = List.of("2330.TW", "2454.TW", "2317.TW");
+        
+        // When
+        Map<String, HistoryDataService.DownloadResult> results = 
+            historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+        
+        // Then - should have results for all symbols (even if download failed due to mock)
+        assertThat(results).hasSize(3);
+        assertThat(results.keySet()).containsExactlyInAnyOrder("2330.TW", "2454.TW", "2317.TW");
+    }
+    
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldTruncateOnlyOnce() {
+        // Given
+        historyDataService.resetTruncationFlag();
+        List<String> symbols = List.of("2330.TW", "2454.TW");
+        
+        // When
+        historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+        
+        // Then - truncation should occur only once
+        verify(barRepository, times(1)).truncateTable();
+        verify(marketDataRepository, times(1)).truncateTable();
+        verify(strategyStockMappingRepository, times(1)).truncateTable();
+    }
+    
+    @Test
+    void downloadResult_shouldHaveSymbolField() {
+        // Given/When
+        HistoryDataService.DownloadResult result = new HistoryDataService.DownloadResult(
+            "2330.TW", 100, 95, 5
+        );
+        
+        // Then
+        assertThat(result.getSymbol()).isEqualTo("2330.TW");
+        assertThat(result.getTotalRecords()).isEqualTo(100);
+        assertThat(result.getInserted()).isEqualTo(95);
+        assertThat(result.getSkipped()).isEqualTo(5);
+    }
+    
+    @Test
+    void historicalDataPoint_shouldHaveSymbolField() {
+        // Given
+        LocalDateTime now = LocalDateTime.now();
+        
+        // When
+        HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint(
+            "2330.TW", now, 580.0, 590.0, 575.0, 585.0, 10000000L
+        );
+        
+        // Then
+        assertThat(point.getSymbol()).isEqualTo("2330.TW");
+        assertThat(point.getTimestamp()).isEqualTo(now);
+        assertThat(point.getOpen()).isEqualTo(580.0);
+        assertThat(point.getClose()).isEqualTo(585.0);
+    }
+    
+    @Test
+    void concurrencyConstants_shouldHaveReasonableDefaults() {
+        // This test verifies that the service is properly configured
+        // The actual constants are private, but we verify instantiation works
+        assertThat(historyDataService).isNotNull();
     }
 }

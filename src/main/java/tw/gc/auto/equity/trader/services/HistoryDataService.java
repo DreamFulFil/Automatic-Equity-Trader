@@ -1,7 +1,10 @@
 package tw.gc.auto.equity.trader.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import de.bytefish.pgbulkinsert.PgBulkInsert;
+import de.bytefish.pgbulkinsert.mapping.AbstractMapping;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.PGConnection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,6 +19,8 @@ import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -28,9 +33,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -47,9 +54,18 @@ public class HistoryDataService {
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
     
-    // Single-writer queue configuration - reduced sizes to prevent blocking
+    // Global queue for multi-stock concurrent downloads
+    private static final int GLOBAL_QUEUE_CAPACITY = 10_000;
+    private static final int BULK_INSERT_BATCH_SIZE = 2_000;
+    private static final int MAX_CONCURRENT_DOWNLOADS = 8;
+    private static final int FLUSH_TIMEOUT_MS = 500;
+    
+    // Single-stock queue capacity (legacy compatibility)
     private static final int QUEUE_CAPACITY = 5_000;
-    private static final int BULK_INSERT_BATCH_SIZE = 1_000;
+    
+    // PgBulkInsert mappings (lazy-initialized)
+    private volatile PgBulkInsert<Bar> barBulkInsert;
+    private volatile PgBulkInsert<MarketData> marketDataBulkInsert;
 
     @Value("${python.bridge.url:http://localhost:8888}")
     private String pythonBridgeUrl;
@@ -68,6 +84,290 @@ public class HistoryDataService {
         this.objectMapper = objectMapper;
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
+    }
+    
+    /**
+     * Download historical data for multiple stocks concurrently using Virtual Threads.
+     * Uses a single global writer thread to prevent database connection contention.
+     * 
+     * @param symbols List of stock symbols to download
+     * @param years Number of years of history
+     * @return Map of symbol to download results
+     */
+    public Map<String, DownloadResult> downloadHistoricalDataForMultipleStocks(List<String> symbols, int years) {
+        log.info("🚀 Starting concurrent download for {} stocks, {} years each", symbols.size(), years);
+        
+        truncateTablesIfNeeded();
+        
+        BlockingQueue<HistoricalDataPoint> globalQueue = new ArrayBlockingQueue<>(GLOBAL_QUEUE_CAPACITY);
+        AtomicBoolean allDownloadsComplete = new AtomicBoolean(false);
+        AtomicInteger totalInserted = new AtomicInteger(0);
+        CountDownLatch writerLatch = new CountDownLatch(1);
+        
+        // Start single global writer thread
+        Thread globalWriter = Thread.ofPlatform()
+            .name("GlobalHistoryWriter")
+            .start(() -> {
+                try {
+                    int inserted = runGlobalWriter(globalQueue, allDownloadsComplete);
+                    totalInserted.set(inserted);
+                    log.info("✅ Global writer completed. Total inserted: {}", inserted);
+                } catch (Exception e) {
+                    log.error("❌ Global writer failed: {}", e.getMessage(), e);
+                } finally {
+                    writerLatch.countDown();
+                }
+            });
+        
+        // Semaphore to limit concurrent downloads
+        Semaphore downloadPermits = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
+        Map<String, DownloadResult> results = new HashMap<>();
+        Map<String, AtomicInteger> symbolCounts = new HashMap<>();
+        
+        symbols.forEach(s -> symbolCounts.put(s, new AtomicInteger(0)));
+        
+        // Launch Virtual Threads for each stock download
+        try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<Void>> futures = symbols.stream()
+                .map(symbol -> CompletableFuture.runAsync(() -> {
+                    try {
+                        downloadPermits.acquire();
+                        try {
+                            int downloaded = downloadStockData(symbol, years, globalQueue, symbolCounts.get(symbol));
+                            synchronized (results) {
+                                results.put(symbol, new DownloadResult(symbol, downloaded, 0, 0));
+                            }
+                        } finally {
+                            downloadPermits.release();
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.error("❌ Download interrupted for {}", symbol);
+                    } catch (Exception e) {
+                        log.error("❌ Download failed for {}: {}", symbol, e.getMessage());
+                        synchronized (results) {
+                            results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
+                        }
+                    }
+                }, virtualExecutor))
+                .collect(Collectors.toList());
+            
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        }
+        
+        allDownloadsComplete.set(true);
+        
+        try {
+            if (!writerLatch.await(10, TimeUnit.MINUTES)) {
+                log.warn("⚠️ Global writer timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        // Update results with actual inserted counts
+        int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
+        log.info("✅ Multi-stock download complete. {} stocks, {} downloaded, {} inserted",
+            symbols.size(), totalDownloaded, totalInserted.get());
+        
+        return results;
+    }
+    
+    /**
+     * Download data for a single stock, streaming to global queue.
+     */
+    private int downloadStockData(String symbol, int years, BlockingQueue<HistoricalDataPoint> queue, 
+                                   AtomicInteger counter) {
+        log.info("📥 Starting download for {} ({} years)", symbol, years);
+        
+        LocalDateTime endDate = LocalDateTime.now();
+        int daysPerBatch = 365;
+        int totalDownloaded = 0;
+        
+        for (int batch = 0; batch < years; batch++) {
+            LocalDateTime batchEnd = endDate.minusDays((long) batch * daysPerBatch);
+            LocalDateTime batchStart = batchEnd.minusDays(daysPerBatch);
+            
+            try {
+                List<HistoricalDataPoint> batchData = downloadBatch(symbol, batchStart, batchEnd);
+                
+                for (HistoricalDataPoint point : batchData) {
+                    point.setSymbol(symbol);
+                    queue.put(point);
+                    counter.incrementAndGet();
+                }
+                
+                totalDownloaded += batchData.size();
+                
+                if (batch % 3 == 0) {
+                    log.info("📊 {} batch {}/{}: {} records (queue: {})", 
+                        symbol, batch + 1, years, batchData.size(), queue.size());
+                }
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                log.warn("⚠️ Batch {}/{} failed for {}: {}", batch + 1, years, symbol, e.getMessage());
+            }
+        }
+        
+        log.info("✅ {} download complete: {} records", symbol, totalDownloaded);
+        return totalDownloaded;
+    }
+    
+    /**
+     * Global writer thread that drains from all producers and performs bulk inserts.
+     * Uses PgBulkInsert (COPY protocol) as primary, JdbcTemplate as fallback.
+     */
+    private int runGlobalWriter(BlockingQueue<HistoricalDataPoint> queue, AtomicBoolean complete) {
+        List<Bar> barBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
+        List<MarketData> marketDataBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
+        int totalInserted = 0;
+        long lastFlush = System.currentTimeMillis();
+        
+        while (!complete.get() || !queue.isEmpty()) {
+            try {
+                HistoricalDataPoint point = queue.poll(100, TimeUnit.MILLISECONDS);
+                
+                if (point != null) {
+                    barBatch.add(toBar(point));
+                    marketDataBatch.add(toMarketData(point));
+                }
+                
+                boolean batchFull = barBatch.size() >= BULK_INSERT_BATCH_SIZE;
+                boolean timeoutReached = System.currentTimeMillis() - lastFlush > FLUSH_TIMEOUT_MS;
+                
+                if ((batchFull || (timeoutReached && !barBatch.isEmpty())) && !barBatch.isEmpty()) {
+                    int inserted = flushBatchWithFallback(barBatch, marketDataBatch);
+                    totalInserted += inserted;
+                    
+                    if (totalInserted % 10_000 == 0 || inserted > 1000) {
+                        log.info("📊 Global writer: flushed {} (total: {}, queue: {})", 
+                            inserted, totalInserted, queue.size());
+                    }
+                    
+                    barBatch.clear();
+                    marketDataBatch.clear();
+                    lastFlush = System.currentTimeMillis();
+                }
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        // Final flush
+        if (!barBatch.isEmpty()) {
+            int inserted = flushBatchWithFallback(barBatch, marketDataBatch);
+            totalInserted += inserted;
+            log.info("📊 Global writer: final flush {} (total: {})", inserted, totalInserted);
+        }
+        
+        return totalInserted;
+    }
+    
+    private Bar toBar(HistoricalDataPoint point) {
+        return Bar.builder()
+            .timestamp(point.getTimestamp())
+            .symbol(point.getSymbol())
+            .market("TSE")
+            .timeframe("1day")
+            .open(point.getOpen())
+            .high(point.getHigh())
+            .low(point.getLow())
+            .close(point.getClose())
+            .volume(point.getVolume())
+            .isComplete(true)
+            .build();
+    }
+    
+    private MarketData toMarketData(HistoricalDataPoint point) {
+        return MarketData.builder()
+            .timestamp(point.getTimestamp())
+            .symbol(point.getSymbol())
+            .timeframe(MarketData.Timeframe.DAY_1)
+            .open(point.getOpen())
+            .high(point.getHigh())
+            .low(point.getLow())
+            .close(point.getClose())
+            .volume(point.getVolume())
+            .build();
+    }
+    
+    /**
+     * Flush batch using PgBulkInsert (COPY protocol) with JdbcTemplate fallback.
+     */
+    private int flushBatchWithFallback(List<Bar> bars, List<MarketData> marketDataList) {
+        try {
+            return pgBulkInsert(bars, marketDataList);
+        } catch (Exception e) {
+            log.warn("⚠️ PgBulkInsert failed, falling back to JdbcTemplate: {}", e.getMessage());
+            return jdbcBatchInsert(bars, marketDataList);
+        }
+    }
+    
+    /**
+     * High-performance PostgreSQL COPY protocol insert using PgBulkInsert.
+     */
+    private int pgBulkInsert(List<Bar> bars, List<MarketData> marketDataList) throws SQLException {
+        initBulkInsertMappings();
+        
+        try (Connection conn = dataSource.getConnection()) {
+            PGConnection pgConn = conn.unwrap(PGConnection.class);
+            
+            barBulkInsert.saveAll(pgConn, bars.stream());
+            marketDataBulkInsert.saveAll(pgConn, marketDataList.stream());
+            
+            return bars.size();
+        }
+    }
+    
+    private synchronized void initBulkInsertMappings() {
+        if (barBulkInsert == null) {
+            barBulkInsert = new PgBulkInsert<>(new BarBulkInsertMapping());
+        }
+        if (marketDataBulkInsert == null) {
+            marketDataBulkInsert = new PgBulkInsert<>(new MarketDataBulkInsertMapping());
+        }
+    }
+    
+    /**
+     * PgBulkInsert mapping for Bar entity.
+     */
+    private static class BarBulkInsertMapping extends AbstractMapping<Bar> {
+        public BarBulkInsertMapping() {
+            super("public", "bar");
+            mapTimeStamp("timestamp", Bar::getTimestamp);
+            mapText("symbol", Bar::getSymbol);
+            mapText("market", Bar::getMarket);
+            mapText("timeframe", Bar::getTimeframe);
+            mapDouble("open", Bar::getOpen);
+            mapDouble("high", Bar::getHigh);
+            mapDouble("low", Bar::getLow);
+            mapDouble("close", Bar::getClose);
+            mapLong("volume", Bar::getVolume);
+            mapBoolean("is_complete", Bar::isComplete);
+        }
+    }
+    
+    /**
+     * PgBulkInsert mapping for MarketData entity.
+     */
+    private static class MarketDataBulkInsertMapping extends AbstractMapping<MarketData> {
+        public MarketDataBulkInsertMapping() {
+            super("public", "market_data");
+            mapTimeStamp("timestamp", MarketData::getTimestamp);
+            mapText("symbol", MarketData::getSymbol);
+            mapText("timeframe", md -> md.getTimeframe().name());
+            mapDouble("open_price", MarketData::getOpen);
+            mapDouble("high_price", MarketData::getHigh);
+            mapDouble("low_price", MarketData::getLow);
+            mapDouble("close_price", MarketData::getClose);
+            mapLong("volume", MarketData::getVolume);
+            mapText("asset_type", md -> md.getAssetType() != null ? md.getAssetType().name() : "STOCK");
+        }
     }
 
     /**
@@ -264,11 +564,10 @@ public class HistoryDataService {
     }
     
     /**
-     * Flush batch using JdbcTemplate batch insert.
-     * PgBulkInsert disabled due to connection blocking issues.
+     * Flush batch using PgBulkInsert with JdbcTemplate fallback.
      */
     private int flushBatch(List<Bar> bars, List<MarketData> marketDataList) {
-        return jdbcBatchInsert(bars, marketDataList);
+        return flushBatchWithFallback(bars, marketDataList);
     }
     
     /**
@@ -395,7 +694,8 @@ public class HistoryDataService {
     @lombok.Data
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
-    private static class HistoricalDataPoint {
+    public static class HistoricalDataPoint {
+        private String symbol;
         private LocalDateTime timestamp;
         private double open;
         private double high;
