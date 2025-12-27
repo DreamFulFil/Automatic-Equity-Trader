@@ -32,6 +32,11 @@
 | Process JSON | `jq` | `python -m json.tool` |
 | Process YAML/XML | `yq` | Manual parsing |
 
+## Python Virtual Environment Usage
+* Always run all Python commands (including scripts, tests, and package installs) using the Python virtual environment located at `python/venv`.
+* Activate the venv with `source python/venv/bin/activate` before running any Python-related command.
+* If running Python scripts or modules, use the full venv path (e.g., `python/venv/bin/python script.py`).
+
 **File reading discipline:**
 
 * Read only the sections needed to make changes.
