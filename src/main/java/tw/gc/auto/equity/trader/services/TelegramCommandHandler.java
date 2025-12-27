@@ -154,6 +154,11 @@ public class TelegramCommandHandler {
         telegramService.registerCustomCommand("/observer", args -> {
             handleObserverCommand(args);
         });
+        
+        // Register /risk command for risk settings configuration
+        telegramService.registerCustomCommand("/risk", args -> {
+            handleRiskCommand(args);
+        });
     }
     
     /**
@@ -702,6 +707,38 @@ public class TelegramCommandHandler {
             log.info("🔭 Passive mode enabled via /observer command");
         } else {
             telegramService.sendMessage("❌ Invalid argument. Use: /observer on OR /observer off");
+        }
+    }
+    
+    /**
+     * Handle /risk command for risk settings configuration
+     */
+    private void handleRiskCommand(String args) {
+        if (args == null || args.trim().isEmpty()) {
+            telegramService.sendMessage(riskSettingsService.getAllRiskSettingsFormatted());
+            return;
+        }
+        
+        if ("help".equalsIgnoreCase(args.trim())) {
+            telegramService.sendMessage(riskSettingsService.getRiskSettingsHelp());
+            return;
+        }
+        
+        String[] parts = args.trim().split("\\s+", 2);
+        if (parts.length < 2) {
+            telegramService.sendMessage("❌ Usage: /risk <key> <value>\n\nUse /risk help for all available keys");
+            return;
+        }
+        
+        String key = parts[0].toLowerCase();
+        String value = parts[1].trim();
+        
+        String error = riskSettingsService.updateRiskSetting(key, value);
+        if (error != null) {
+            telegramService.sendMessage(error);
+        } else {
+            telegramService.sendMessage(String.format("✅ Risk setting updated\n%s = %s", key, value));
+            log.info("🔧 Risk setting updated via Telegram: {} = {}", key, value);
         }
     }
 }
