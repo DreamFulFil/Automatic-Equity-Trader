@@ -131,9 +131,38 @@ public class TradingEngine {
             String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
             log.info("✅ Python bridge connected: {}", response);
             marketDataConnected = true;
+            
+            // Pre-market health check: test order endpoint with dry-run
+            runPreMarketHealthCheck();
         } catch (Exception e) {
             log.error("❌ Failed to connect to Python bridge", e);
             telegramService.sendMessage("⚠️ Python bridge connection failed!");
+        }
+    }
+    
+    /**
+     * Pre-market health check: validates the full order flow without executing
+     */
+    private void runPreMarketHealthCheck() {
+        try {
+            java.util.Map<String, Object> testOrder = new java.util.HashMap<>();
+            testOrder.put("action", "BUY");
+            testOrder.put("quantity", 1);
+            testOrder.put("price", 20000.0);
+            
+            String result = restTemplate.postForObject(
+                    getBridgeUrl() + "/order/dry-run", testOrder, String.class);
+            
+            if (result != null && result.contains("validated")) {
+                log.info("✅ Pre-market health check PASSED: order endpoint working");
+            } else {
+                log.warn("⚠️ Pre-market health check: unexpected response: {}", result);
+                telegramService.sendMessage("⚠️ Pre-market health check: order endpoint returned unexpected response");
+            }
+        } catch (Exception e) {
+            log.error("❌ Pre-market health check FAILED: order endpoint broken", e);
+            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\nOrder endpoint error: " + e.getMessage() + 
+                    "\n⚠️ Orders may fail during trading session!");
         }
     }
     

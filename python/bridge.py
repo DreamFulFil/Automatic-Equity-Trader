@@ -458,6 +458,28 @@ def place_order(order: OrderRequest):
     """Execute order via Shioaji with auto-reconnect"""
     return shioaji.place_order(order.action, order.quantity, order.price)
 
+@app.post("/order/dry-run")
+def place_order_dry_run(order: OrderRequest):
+    """Validate order request without executing - for pre-market health checks"""
+    if order.action not in ("BUY", "SELL"):
+        return JSONResponse(status_code=400, content={"error": f"Invalid action: {order.action}"})
+    if order.quantity <= 0:
+        return JSONResponse(status_code=400, content={"error": f"Invalid quantity: {order.quantity}"})
+    if order.price <= 0:
+        return JSONResponse(status_code=400, content={"error": f"Invalid price: {order.price}"})
+    
+    return {
+        "status": "validated",
+        "dry_run": True,
+        "order": {
+            "action": order.action,
+            "quantity": order.quantity,
+            "price": order.price
+        },
+        "message": "Order would be accepted (dry-run mode)",
+        "timestamp": datetime.now().isoformat()
+    }
+
 # ============================================================================
 # EARNINGS BLACKOUT SCRAPER
 # ============================================================================

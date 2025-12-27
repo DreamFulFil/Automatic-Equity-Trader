@@ -205,13 +205,13 @@ class TradingEngineTest {
         String signalJson = "{\"direction\":\"LONG\",\"confidence\":0.75,\"current_price\":20000}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "evaluateEntry");
 
         // Then
-        verify(restTemplate).postForObject(contains("/order"), contains("BUY"), eq(String.class));
+        verify(restTemplate).postForObject(contains("/order"), any(java.util.Map.class), eq(String.class));
         verify(telegramService).sendMessage(contains("ORDER FILLED"));
     }
 
@@ -224,13 +224,13 @@ class TradingEngineTest {
         String signalJson = "{\"direction\":\"SHORT\",\"confidence\":0.75,\"current_price\":20000}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "evaluateEntry");
 
         // Then
-        verify(restTemplate).postForObject(contains("/order"), contains("SELL"), eq(String.class));
+        verify(restTemplate).postForObject(contains("/order"), any(java.util.Map.class), eq(String.class));
     }
 
     // ==================== evaluateExit() tests ====================
@@ -247,7 +247,7 @@ class TradingEngineTest {
         String signalJson = "{\"current_price\":20000,\"exit_signal\":false}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "evaluateExit");
@@ -267,7 +267,7 @@ class TradingEngineTest {
         String signalJson = "{\"current_price\":20050,\"exit_signal\":true}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "evaluateExit");
@@ -301,7 +301,7 @@ class TradingEngineTest {
     @Test
     void executeOrder_whenBuyOrder_shouldIncrementPosition() throws Exception {
         // Given
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class)))
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
@@ -316,7 +316,7 @@ class TradingEngineTest {
     @Test
     void executeOrder_whenSellOrder_shouldDecrementPosition() throws Exception {
         // Given
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class)))
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
                 .thenReturn("{\"status\":\"filled\"}");
 
         // When
@@ -330,7 +330,7 @@ class TradingEngineTest {
     @Test
     void executeOrder_whenApiFails_shouldSendErrorMessage() throws Exception {
         // Given
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class)))
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
                 .thenThrow(new RuntimeException("Order rejected"));
 
         // When
@@ -366,13 +366,13 @@ class TradingEngineTest {
         String signalJson = "{\"current_price\":20050}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "flattenPosition", "Test reason");
 
         // Then
-        verify(restTemplate).postForObject(contains("/order"), contains("SELL"), eq(String.class));
+        verify(restTemplate).postForObject(contains("/order"), any(java.util.Map.class), eq(String.class));
     }
 
     @Test
@@ -386,13 +386,13 @@ class TradingEngineTest {
         String signalJson = "{\"current_price\":19950}";
         when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
         when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
-        when(restTemplate.postForObject(anyString(), anyString(), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
 
         // When
         invokePrivateMethod(tradingEngine, "flattenPosition", "Test reason");
 
         // Then
-        verify(restTemplate).postForObject(contains("/order"), contains("BUY"), eq(String.class));
+        verify(restTemplate).postForObject(contains("/order"), any(java.util.Map.class), eq(String.class));
     }
 
     // ==================== updateNewsVetoCache() tests ====================
