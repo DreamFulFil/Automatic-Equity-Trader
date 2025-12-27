@@ -205,4 +205,32 @@ class BacktestServiceTest {
             System.out.println((i + 1) + ". " + fallbackStocks.get(i));
         }
     }
+    
+    @Test
+    void testGetAllStrategies_shouldReturn99Strategies() {
+        // When
+        List<IStrategy> strategies = backtestService.getAllStrategies();
+        
+        // Then
+        assertNotNull(strategies, "Strategies list should not be null");
+        assertEquals(99, strategies.size(), "Should return exactly 99 strategies");
+        
+        // Verify all strategies have names
+        for (IStrategy strategy : strategies) {
+            assertNotNull(strategy.getName(), "Strategy name should not be null");
+            assertFalse(strategy.getName().isEmpty(), "Strategy name should not be empty");
+        }
+        
+        // Verify no duplicates by name
+        long uniqueCount = strategies.stream()
+            .map(IStrategy::getName)
+            .distinct()
+            .count();
+        assertEquals(99, uniqueCount, "All 99 strategies should have unique names");
+        
+        System.out.println("\n=== All 99 Strategies ===");
+        for (int i = 0; i < strategies.size(); i++) {
+            System.out.println((i + 1) + ". " + strategies.get(i).getName());
+        }
+    }
 }
