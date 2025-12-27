@@ -33,7 +33,9 @@ Source of truth for the Automatic Equity Trader system.
 ## Reference
 
 - [TESTING.md](reference/TESTING.md) — Testing guide
+- [INTEGRATIONS_LIMITATIONS.md](reference/INTEGRATIONS_LIMITATIONS.md) — External integrations issues, fixes, and name-fallback behavior 🔧
 - [DATA_OPERATIONS_API.md](reference/DATA_OPERATIONS_API.md) — Data operations API
+- [STRATEGY_STOCK_MAPPING.md](reference/STRATEGY_STOCK_MAPPING.md) — Strategy/stock mapping auto-population (backtest → mapping)
 
 ## Archive
 
