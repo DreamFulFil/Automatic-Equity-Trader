@@ -1,45 +1,8 @@
-# CI configuration - uses PostgreSQL database
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/lunchbot
-    username: lunchbotuser
-    password: testpassword123
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: false
-
-server:
-  port: 0
-
+# CI Profile - Disable Telegram to prevent spam during automated testing
 telegram:
   enabled: false
-  bot-token: "test-token"
-  chat-id: "test-chat"
 
-trading:
-  window:
-    start: "11:30"
-    end: "13:00"
-  bridge:
-    url: "http://localhost:8888"
-    timeout-ms: 3000
-
-shioaji:
-  api-key: "test-api-key"
-  secret-key: "test-secret-key"
-  ca-path: "Sinopac.pfx"
-  ca-password: "test-password"
-  person-id: "test-person-id"
-  simulation: true
-
-ollama:
-  url: "http://localhost:11434"
-  model: "mistral:7b-instruct-v0.2-q5_K_M"
-
+# Keep other settings same as default but disable notifications
 logging:
   level:
-    root: WARN
-    '[tw.gc.mtxfbot]': INFO
+    '[tw.gc.mtxfbot]': WARN  # Reduce log noise in CI

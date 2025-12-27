@@ -136,8 +136,17 @@ start_bot() {
     $MVN_CMD clean package -DskipTests -q
     
     cd "$SCRIPT_DIR"
+    
+    # Use CI profile to disable Telegram when in CI
+    if [ "$CI" = "true" ]; then
+        SPRING_PROFILE="--spring.profiles.active=ci"
+        echo "Starting bot with CI profile (Telegram disabled)"
+    else
+        SPRING_PROFILE=""
+    fi
+    
     JASYPT_PASSWORD="$JASYPT_PASSWORD" $JAVA_CMD -jar target/mtxf-bot-*.jar \
-        --jasypt.encryptor.password="$JASYPT_PASSWORD" > /tmp/bot.log 2>&1 &
+        --jasypt.encryptor.password="$JASYPT_PASSWORD" $SPRING_PROFILE > /tmp/bot.log 2>&1 &
     BOT_PID=$!
     
     sleep 5
