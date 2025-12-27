@@ -743,6 +743,7 @@ Commands: /pause /resume /close
    - Scrapes Yahoo Finance for 13 Taiwan mega-caps (TSM, 2330.TW, 2454.TW, 2317.TW, UMC, etc.)
    - Saves next 365 days of earnings dates to `config/earnings-blackout-dates.json`
    - Graceful: if scrape fails → keeps old dates, never crashes
+   - **No credentials required**: Uses lazy initialization so `--scrape-earnings` mode runs independently without `JASYPT_PASSWORD`
 
 2. **11:15 bot startup**:
    - Loads `config/earnings-blackout-dates.json`
@@ -751,11 +752,15 @@ Commands: /pause /resume /close
 
 #### Crontab Setup (Two Entries)
 
+**⚠️ Important**: The earnings scraper (`--scrape-earnings`) runs without Shioaji credentials. It uses lazy initialization, so the 09:00 cron job doesn't need `JASYPT_PASSWORD`.
+
 ```cron
 # Scrape earnings blackout dates daily at 09:00 (Mon-Fri)
-0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/mtxf-bot && /path/to/venv/bin/python3 python/bridge.py --scrape-earnings >> /tmp/earnings-scrape.log 2>&1
+# Note: No JASYPT_PASSWORD needed - scraper mode skips Shioaji initialization
+0 9 * * 1-5 cd /Users/gc/Downloads/work/stock/mtxf-bot && /Users/gc/Downloads/work/stock/mtxf-bot/python/venv/bin/python3 /Users/gc/Downloads/work/stock/mtxf-bot/python/bridge.py --scrape-earnings >> /tmp/earnings-scrape.log 2>&1
 
 # MTXF Lunch Bot - Runs weekdays at 11:15 AM
+# Note: JASYPT_PASSWORD passed as argument for Shioaji credentials decryption
 15 11 * * 1-5 /opt/homebrew/bin/fish -c 'cd /Users/gc/Downloads/work/stock/mtxf-bot && ./start-lunch-bot.fish dreamfulfil >> /tmp/mtxf-bot-cron.log 2>&1'
 ```
 
