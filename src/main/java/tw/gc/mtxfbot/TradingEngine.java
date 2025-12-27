@@ -210,6 +210,9 @@ public class TradingEngine {
         log.info("🛑 Trading window ended - shutting down application");
         telegramService.sendMessage("🛑 Trading window ended - Bot shutting down");
         
+        // Notify Python bridge to shutdown
+        shutdownPythonBridge();
+        
         // Use a separate thread to allow this method to complete before shutdown
         new Thread(() -> {
             try {
@@ -220,6 +223,16 @@ public class TradingEngine {
             int exitCode = SpringApplication.exit(applicationContext, () -> 0);
             System.exit(exitCode);
         }).start();
+    }
+    
+    private void shutdownPythonBridge() {
+        try {
+            log.info("🐍 Requesting Python bridge shutdown...");
+            restTemplate.postForObject(getBridgeUrl() + "/shutdown", "", String.class);
+            log.info("✅ Python bridge shutdown requested");
+        } catch (Exception e) {
+            log.warn("⚠️ Could not notify Python bridge to shutdown: {}", e.getMessage());
+        }
     }
     
     private void sendDailySummary() {
@@ -247,6 +260,7 @@ public class TradingEngine {
     public void shutdown() {
         log.info("🛑 Shutting down - flattening positions");
         flattenPosition("System shutdown");
+        shutdownPythonBridge();
         telegramService.sendMessage("🛑 Bot stopped");
     }
 }

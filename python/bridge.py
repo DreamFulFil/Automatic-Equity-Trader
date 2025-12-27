@@ -179,6 +179,25 @@ Score: 0.0=very bearish, 0.5=neutral, 1.0=very bullish"""
 def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
 
+@app.post("/shutdown")
+def shutdown():
+    """Graceful shutdown endpoint - called by Java app before exit"""
+    import threading
+    
+    def do_shutdown():
+        import time
+        time.sleep(1)  # Give time for response to be sent
+        print("🛑 Shutdown requested - cleaning up...")
+        try:
+            api.logout()
+            print("✅ Shioaji logged out")
+        except:
+            pass
+        os._exit(0)
+    
+    threading.Thread(target=do_shutdown).start()
+    return {"status": "shutting_down", "message": "Python bridge shutting down gracefully"}
+
 @app.get("/signal")
 def get_signal():
     """Generate trading signal with strategy + news veto
