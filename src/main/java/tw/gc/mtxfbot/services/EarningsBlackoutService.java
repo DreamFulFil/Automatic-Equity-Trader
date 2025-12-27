@@ -258,30 +258,24 @@ public class EarningsBlackoutService {
     }
 
     protected Map<String, List<LocalDate>> fetchEarningsForTickers(Set<String> tickers) throws Exception {
+        // Call Python bridge for reliable scraping using yfinance
+        String pythonUrl = "http://localhost:8888/earnings/scrape";
+        String response = restTemplate.getForObject(pythonUrl, String.class);
+        JsonNode root = objectMapper.readTree(response);
+        
         Map<String, List<LocalDate>> tickerToDates = new LinkedHashMap<>();
-        LocalDate today = LocalDate.now(TAIPEI_ZONE);
-        LocalDate horizon = today.plusDays(365);
-
-        for (String ticker : new LinkedHashSet<>(tickers)) {
-            String url = String.format(
-                    "https://query2.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=calendarEvents",
-                    ticker);
-            String response = restTemplate.getForObject(url, String.class);
-            JsonNode root = objectMapper.readTree(response);
-            JsonNode earningsDates = root.path("quoteSummary").path("result").path(0)
-                    .path("calendarEvents").path("earnings").path("earningsDate");
-
-            List<LocalDate> parsedDates = parseEarningsDates(earningsDates, today, horizon);
-            if (!parsedDates.isEmpty()) {
-                tickerToDates.put(ticker, parsedDates);
-            }
-
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        JsonNode datesNode = root.path("dates");
+        if (datesNode.isArray()) {
+            List<LocalDate> allDates = new ArrayList<>();
+            datesNode.forEach(node -> {
+                try {
+                    allDates.add(LocalDate.parse(node.asText()));
+                } catch (Exception ignored) {
+                    // ignore bad entries
+                }
+            });
+            // Group all dates under a single ticker for compatibility
+            tickerToDates.put("aggregated", allDates);
         }
         return tickerToDates;
     }
