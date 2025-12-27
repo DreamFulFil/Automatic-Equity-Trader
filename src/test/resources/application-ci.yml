@@ -23,6 +23,14 @@ trading:
   window:
     start: "11:30"
     end: "13:00"
+  stock:
+    shares: 55
+    share-increment: 27
+  risk:
+    max-position: 4
+    daily-loss-limit: 4500
+    weekly-loss-limit: 15000
+    max-hold-minutes: 45
   bridge:
     url: "http://localhost:8888"
     timeout-ms: 3000
@@ -37,7 +45,7 @@ shioaji:
 
 ollama:
   url: "http://localhost:11434"
-  model: "mistral:7b-instruct-v0.2-q5_K_M"
+  model: "llama3.1:8b-instruct-q5_K_M"
 
 logging:
   level:
