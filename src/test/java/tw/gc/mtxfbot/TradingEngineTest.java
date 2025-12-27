@@ -102,8 +102,8 @@ class TradingEngineTest {
         // When
         tradingEngine.initialize();
 
-        // Then
-        verify(telegramService).sendMessage(contains("MTXF Lunch Bot started"));
+        // Then - startup message now says "Bot started" instead of "MTXF Lunch Bot started"
+        verify(telegramService).sendMessage(contains("Bot started"));
         assertTrue(getFieldValue(tradingEngine, "marketDataConnected", Boolean.class));
     }
 

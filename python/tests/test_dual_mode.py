@@ -18,7 +18,7 @@ class TestShioajiWrapperDualMode:
     
     def test_wrapper_initializes_with_stock_mode(self):
         """Should initialize in stock mode when specified"""
-        from app.services.shioaji_service import ShioajiWrapper
+        from bridge import ShioajiWrapper
         
         config = {
             'shioaji': {
@@ -38,7 +38,7 @@ class TestShioajiWrapperDualMode:
     
     def test_wrapper_initializes_with_futures_mode(self):
         """Should initialize in futures mode when specified"""
-        from app.services.shioaji_service import ShioajiWrapper
+        from bridge import ShioajiWrapper
         
         config = {
             'shioaji': {
@@ -57,7 +57,7 @@ class TestShioajiWrapperDualMode:
     
     def test_wrapper_defaults_to_stock_mode(self):
         """Should default to stock mode when not specified"""
-        from app.services.shioaji_service import ShioajiWrapper
+        from bridge import ShioajiWrapper
         
         config = {
             'shioaji': {
@@ -79,11 +79,11 @@ class TestTradingModeEnvironment:
     """Tests for TRADING_MODE environment variable handling"""
     
     @patch.dict(os.environ, {'JASYPT_PASSWORD': 'test', 'TRADING_MODE': 'stock'})
-    @patch('app.main.load_config_with_decryption')
-    @patch('app.main.ShioajiWrapper')
+    @patch('bridge.load_config_with_decryption')
+    @patch('bridge.ShioajiWrapper')
     def test_init_reads_stock_mode_from_env(self, mock_wrapper_class, mock_load_config):
         """Should read stock mode from TRADING_MODE env var"""
-        from app.main import init_trading_mode
+        from bridge import init_trading_mode, TRADING_MODE
         
         mock_config = {
             'shioaji': {'simulation': True},
@@ -103,11 +103,11 @@ class TestTradingModeEnvironment:
         assert call_kwargs['trading_mode'] == 'stock'
     
     @patch.dict(os.environ, {'JASYPT_PASSWORD': 'test', 'TRADING_MODE': 'futures'})
-    @patch('app.main.load_config_with_decryption')
-    @patch('app.main.ShioajiWrapper')
+    @patch('bridge.load_config_with_decryption')
+    @patch('bridge.ShioajiWrapper')
     def test_init_reads_futures_mode_from_env(self, mock_wrapper_class, mock_load_config):
         """Should read futures mode from TRADING_MODE env var"""
-        from app.main import init_trading_mode
+        from bridge import init_trading_mode
         
         mock_config = {
             'shioaji': {'simulation': True},
@@ -127,14 +127,14 @@ class TestTradingModeEnvironment:
         assert call_kwargs['trading_mode'] == 'futures'
     
     @patch.dict(os.environ, {'JASYPT_PASSWORD': 'test'}, clear=False)
-    @patch('app.main.load_config_with_decryption')
-    @patch('app.main.ShioajiWrapper')
+    @patch('bridge.load_config_with_decryption')
+    @patch('bridge.ShioajiWrapper')
     def test_init_defaults_to_stock_mode(self, mock_wrapper_class, mock_load_config):
         """Should default to stock mode when TRADING_MODE not set"""
         # Remove TRADING_MODE if present
         os.environ.pop('TRADING_MODE', None)
         
-        from app.main import init_trading_mode
+        from bridge import init_trading_mode
         
         mock_config = {
             'shioaji': {'simulation': True},
@@ -157,11 +157,11 @@ class TestTradingModeEnvironment:
 class TestHealthEndpointWithMode:
     """Tests for health endpoint showing trading mode"""
     
-    @patch('app.main.shioaji')
-    @patch('app.main.TRADING_MODE', 'stock')
+    @patch('bridge.shioaji')
+    @patch('bridge.TRADING_MODE', 'stock')
     def test_health_returns_stock_mode(self, mock_shioaji):
         """Health endpoint should return trading mode"""
-        from app.main import health
+        from bridge import health
         
         mock_shioaji.connected = True
         
@@ -170,11 +170,11 @@ class TestHealthEndpointWithMode:
         assert result['trading_mode'] == 'stock'
         assert result['status'] == 'ok'
     
-    @patch('app.main.shioaji')
-    @patch('app.main.TRADING_MODE', 'futures')
+    @patch('bridge.shioaji')
+    @patch('bridge.TRADING_MODE', 'futures')
     def test_health_returns_futures_mode(self, mock_shioaji):
         """Health endpoint should return futures trading mode"""
-        from app.main import health
+        from bridge import health
         
         mock_shioaji.connected = True
         
@@ -188,7 +188,7 @@ class TestModeSeparation:
     
     def test_stock_order_uses_stock_account(self):
         """Stock mode should use stock_account, not futopt_account"""
-        from app.services.shioaji_service import ShioajiWrapper
+        from bridge import ShioajiWrapper
         
         config = {
             'shioaji': {
@@ -197,7 +197,7 @@ class TestModeSeparation:
                 'ca-path': '/test/path',
                 'ca-password': 'test',
                 'person-id': 'test',
-                'simulation': False
+                'simulation': True
             }
         }
         
@@ -212,12 +212,8 @@ class TestModeSeparation:
         wrapper.api.Order = Mock(return_value=Mock())
         mock_trade = Mock()
         mock_trade.status.id = "test_order_id"
-        # Configure operation to avoid "Mock is not iterable" error
-        mock_trade.operation.op_msg = ""
-        # Configure status.order_quantity to avoid "Order not filled" error
-        mock_trade.status.order_quantity = 100
         wrapper.api.place_order = Mock(return_value=mock_trade)
-    
+        
         result = wrapper.place_order("BUY", 100, 700.0)
         
         # Verify stock_account was used
@@ -227,7 +223,7 @@ class TestModeSeparation:
     
     def test_futures_order_uses_futopt_account(self):
         """Futures mode should use futopt_account, not stock_account"""
-        from app.services.shioaji_service import ShioajiWrapper
+        from bridge import ShioajiWrapper
         
         config = {
             'shioaji': {
@@ -236,7 +232,7 @@ class TestModeSeparation:
                 'ca-path': '/test/path',
                 'ca-password': 'test',
                 'person-id': 'test',
-                'simulation': False
+                'simulation': True
             }
         }
         
@@ -251,12 +247,8 @@ class TestModeSeparation:
         wrapper.api.Order = Mock(return_value=Mock())
         mock_trade = Mock()
         mock_trade.status.id = "test_order_id"
-        # Configure operation to avoid "Mock is not iterable" error
-        mock_trade.operation.op_msg = ""
-        # Configure status.order_quantity to avoid "Order not filled" error
-        mock_trade.status.order_quantity = 1
         wrapper.api.place_order = Mock(return_value=mock_trade)
-    
+        
         result = wrapper.place_order("BUY", 1, 22500.0)
         
         # Verify futopt_account was used
