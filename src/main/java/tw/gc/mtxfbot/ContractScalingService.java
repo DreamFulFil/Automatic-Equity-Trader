@@ -65,8 +65,6 @@ public class ContractScalingService {
      * Both conditions must be met to scale up.
      */
     public int calculateContractSize(double equity, double profit30d) {
-        if (equity >= 5_000_000 && profit30d >= 2_000_000) return 6;
-        if (equity >= 2_000_000 && profit30d >= 800_000) return 5;
         if (equity >= 1_000_000 && profit30d >= 400_000) return 4;
         if (equity >= 500_000 && profit30d >= 180_000) return 3;
         if (equity >= 250_000 && profit30d >= 80_000) return 2;
