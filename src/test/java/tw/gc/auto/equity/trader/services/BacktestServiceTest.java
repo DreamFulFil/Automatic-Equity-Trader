@@ -137,4 +137,72 @@ class BacktestServiceTest {
         assertEquals(3, result.getWinningTrades());
         assertEquals(60.0, result.getWinRate(), 0.01);
     }
+
+    @Test
+    void testFetchTop50Stocks_DynamicFetching() throws Exception {
+        // Use reflection to test private method
+        java.lang.reflect.Method fetchMethod = BacktestService.class.getDeclaredMethod("fetchTop50Stocks");
+        fetchMethod.setAccessible(true);
+        
+        java.lang.reflect.Method fallbackMethod = BacktestService.class.getDeclaredMethod("getFallbackStockList");
+        fallbackMethod.setAccessible(true);
+        
+        @SuppressWarnings("unchecked")
+        List<String> dynamicStocks = (List<String>) fetchMethod.invoke(backtestService);
+        
+        @SuppressWarnings("unchecked")
+        List<String> fallbackStocks = (List<String>) fallbackMethod.invoke(backtestService);
+        
+        // Verify results
+        assertNotNull(dynamicStocks, "Stock list should not be null");
+        assertEquals(50, dynamicStocks.size(), "Should return exactly 50 stocks");
+        
+        // Verify format (all should end with .TW)
+        for (String stock : dynamicStocks) {
+            assertTrue(stock.endsWith(".TW"), "Stock symbol should end with .TW: " + stock);
+            String code = stock.replace(".TW", "");
+            assertTrue(code.matches("\\d{4}"), "Stock code should be 4 digits: " + code);
+        }
+        
+        // Verify no duplicates
+        long uniqueCount = dynamicStocks.stream().distinct().count();
+        assertEquals(50, uniqueCount, "All 50 stocks should be unique");
+        
+        // CRITICAL: When dynamic fetching fails, ALL 50 stocks should match the fallback list exactly
+        assertEquals(fallbackStocks, dynamicStocks, 
+            "When dynamic fetching fails, all 50 stocks should match fallback list exactly");
+        
+        // Log for verification
+        System.out.println("\n=== Verification: Dynamic vs Fallback ===");
+        System.out.println("Dynamic stocks match fallback: " + dynamicStocks.equals(fallbackStocks));
+        System.out.println("First 10 dynamic stocks:");
+        for (int i = 0; i < 10; i++) {
+            System.out.println((i + 1) + ". " + dynamicStocks.get(i));
+        }
+    }
+
+    @Test
+    void testFetchTop50Stocks_FallbackList() throws Exception {
+        // Test that fallback list is valid
+        java.lang.reflect.Method method = BacktestService.class.getDeclaredMethod("getFallbackStockList");
+        method.setAccessible(true);
+        
+        @SuppressWarnings("unchecked")
+        List<String> fallbackStocks = (List<String>) method.invoke(backtestService);
+        
+        assertNotNull(fallbackStocks, "Fallback stock list should not be null");
+        assertEquals(50, fallbackStocks.size(), "Fallback should return exactly 50 stocks");
+        
+        // Verify format
+        for (String stock : fallbackStocks) {
+            assertTrue(stock.endsWith(".TW"), "Fallback stock should end with .TW: " + stock);
+            String code = stock.replace(".TW", "");
+            assertTrue(code.matches("\\d{4}"), "Fallback stock code should be 4 digits: " + code);
+        }
+        
+        System.out.println("\n=== Fallback list (first 10) ===");
+        for (int i = 0; i < 10; i++) {
+            System.out.println((i + 1) + ". " + fallbackStocks.get(i));
+        }
+    }
 }

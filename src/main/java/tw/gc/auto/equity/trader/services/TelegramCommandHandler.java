@@ -773,55 +773,11 @@ public class TelegramCommandHandler {
     // ========== DATA OPERATIONS COMMANDS ==========
     
     private void handlePopulateDataCommand(String args) {
-        telegramService.sendMessage("📊 Populating historical data... This may take a few minutes.");
-        
-        try {
-            int days = args != null && !args.trim().isEmpty() ? Integer.parseInt(args.trim()) : 730;
-            
-            Map<String, Object> result = backtestService.populateHistoricalDataInternal(days);
-            
-            if ("success".equals(result.get("status")) || "partial".equals(result.get("status"))) {
-                telegramService.sendMessage(String.format(
-                    "✅ Historical Data Populated\n\n" +
-                    "📊 Successful: %d\n" +
-                    "📈 Total Stocks: %d\n" +
-                    "📅 Days: %d",
-                    result.get("successful"),
-                    result.get("total_stocks"),
-                    result.get("days")
-                ));
-            } else {
-                telegramService.sendMessage("❌ Failed to populate data: " + result.get("message"));
-            }
-        } catch (Exception e) {
-            log.error("Failed to populate data via Telegram", e);
-            telegramService.sendMessage("❌ Error: " + e.getMessage());
-        }
+        telegramService.sendMessage("⚠️ This command is deprecated.\nUse /run-backtest instead.");
     }
     
     private void handleRunBacktestsCommand(String args) {
-        telegramService.sendMessage("🧪 Running combinatorial backtests... This will take 10-20 minutes.");
-        
-        try {
-            Map<String, Object> result = backtestService.runCombinationalBacktestsInternal(80000, 730);
-            
-            if ("success".equals(result.get("status")) || "partial".equals(result.get("status"))) {
-                telegramService.sendMessage(String.format(
-                    "✅ Backtests Complete\n\n" +
-                    "📊 Total Combinations: %d\n" +
-                    "✅ Successful: %d\n" +
-                    "❌ Failed: %d",
-                    result.get("total_combinations"),
-                    result.get("successful"),
-                    result.get("failed")
-                ));
-            } else {
-                telegramService.sendMessage("❌ Failed to run backtests: " + result.get("message"));
-            }
-        } catch (Exception e) {
-            log.error("Failed to run backtests via Telegram", e);
-            telegramService.sendMessage("❌ Error: " + e.getMessage());
-        }
+        telegramService.sendMessage("⚠️ This command is deprecated.\nUse the REST API: POST /api/backtest/run");
     }
     
     private void handleSelectStrategyCommand(String args) {
@@ -838,50 +794,10 @@ public class TelegramCommandHandler {
     }
     
     private void handleFullPipelineCommand(String args) {
-        telegramService.sendMessage("🚀 Running full data pipeline...\n\n" +
-            "Steps:\n" +
-            "1️⃣ Populate data (~5 min)\n" +
-            "2️⃣ Run backtests (~15 min)\n" +
-            "3️⃣ Select strategy (~1 min)\n\n" +
-            "Total: ~20-25 minutes");
-        
-        try {
-            // Step 1: Populate data
-            Map<String, Object> populateResult = backtestService.populateHistoricalDataInternal(730);
-            if (!"success".equals(populateResult.get("status")) && !"partial".equals(populateResult.get("status"))) {
-                telegramService.sendMessage("❌ Pipeline failed at: populate_data\nCheck logs for details");
-                return;
-            }
-            
-            // Step 2: Run backtests
-            Map<String, Object> backtestResult = backtestService.runCombinationalBacktestsInternal(80000, 730);
-            if (!"success".equals(backtestResult.get("status")) && !"partial".equals(backtestResult.get("status"))) {
-                telegramService.sendMessage("❌ Pipeline failed at: run_backtests\nCheck logs for details");
-                return;
-            }
-            
-            // Step 3: Select strategy
-            autoStrategySelector.selectBestStrategyAndStock();
-            
-            telegramService.sendMessage("✅ Full pipeline complete! Check status with /data-status");
-        } catch (Exception e) {
-            log.error("Failed to run pipeline via Telegram", e);
-            telegramService.sendMessage("❌ Error: " + e.getMessage());
-        }
+        telegramService.sendMessage("⚠️ This command is deprecated.\nUse the REST API: POST /api/backtest/run");
     }
     
     private void handleDataStatusCommand(String args) {
-        try {
-            Map<String, Object> status = backtestService.getDataStatus();
-            
-            telegramService.sendMessage(String.format(
-                "📊 *Data Status*\n\n" +
-                "Historical Data: %d bars",
-                status.get("market_data_records")
-            ));
-        } catch (Exception e) {
-            log.error("Failed to get data status via Telegram", e);
-            telegramService.sendMessage("❌ Error: " + e.getMessage());
-        }
+        telegramService.sendMessage("⚠️ This command is deprecated.\nData is automatically managed by the backtest system.");
     }
 }
