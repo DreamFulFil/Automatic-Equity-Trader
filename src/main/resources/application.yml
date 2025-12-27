@@ -37,7 +37,6 @@ jasypt:
 management:
   endpoints:
     web:
-      base-path: /
       exposure:
         include: health
   endpoint:

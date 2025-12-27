@@ -91,16 +91,24 @@ tail -100 /tmp/bridge.log | rg "✅ Merged"
 ## Expected Results
 
 - **Date Range**: Should see data from ~2018-2020 to current date (depending on stock availability)
+  - Most stocks achieve 7+ years of historical coverage
+  - Actual coverage depends on when each stock was listed
 - **Coverage**: All 50 configured stocks should have data
 - **Sources**: Data primarily from Yahoo Finance (multi-year historical), supplemented by Shioaji (recent data) and TWSE
 - **Duration**: Full 10-year download takes approximately 5-10 minutes for 50 stocks
+- **Expected Total**: ~130,000-140,000 records for 50 stocks over 7 years
 
 ## Data Source Priority
 
 Current configuration (as of 2025-12-27):
-1. **Yahoo Finance** (Primary): Best for multi-year historical data, no rate limiting observed
-2. **Shioaji** (Supplement): Limited to 2020-03-02 onwards for stocks
+1. **Yahoo Finance** (Primary): Best for multi-year historical data, no rate limiting observed in normal usage
+2. **Shioaji** (Supplement): Limited to 2020-03-02 onwards for stocks, used to validate/fill recent data
 3. **TWSE** (Supplement): Taiwan Stock Exchange direct data
+
+This priority ensures:
+- Maximum historical depth (back to 2015-2018 for most stocks)
+- Reliable data coverage without hitting API limitations
+- Yahoo Finance provides the broadest date range despite Shioaji being the official broker API
 
 ## Troubleshooting
 
