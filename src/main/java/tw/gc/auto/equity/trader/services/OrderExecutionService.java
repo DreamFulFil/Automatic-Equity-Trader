@@ -6,32 +6,21 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
-import tw.gc.auto.equity.trader.services.TelegramService;
+import tw.gc.auto.equity.trader.AppConstants;
+import tw.gc.auto.equity.trader.RiskManagementService;
+import tw.gc.auto.equity.trader.RiskSettingsService;
+import tw.gc.auto.equity.trader.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
-import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
-import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService.ComplianceResult;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * OrderExecutionService - Handles order execution with retry logic, balance checks, and blackout enforcement.
- * 
- * Integrates with the EarningsBlackoutService to enforce trading restrictions around earnings dates.
- * Before placing any new orders (not exits), verifies the symbol is not in an earnings blackout window.
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class OrderExecutionService {
-
-    private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -40,10 +29,7 @@ public class OrderExecutionService {
     private final DataLoggingService dataLoggingService;
     private final PositionManager positionManager;
     private final RiskManagementService riskManagementService;
-    private final StockRiskSettingsService stockRiskSettingsService;
-    private final EarningsBlackoutService earningsBlackoutService;
-    private final TaiwanStockComplianceService taiwanComplianceService;
-    private final LlmService llmService;
+    private final RiskSettingsService riskSettingsService;
 
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
@@ -111,77 +97,9 @@ public class OrderExecutionService {
     }
 
     /**
-     * Execute order with retry wrapper and quantity bug fix.
-     * Enforces earnings blackout check and Taiwan compliance before placing new (non-exit) orders.
+     * Execute order with retry wrapper and quantity bug fix
      */
     public void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit, boolean emergencyShutdown, String strategyName) {
-        // Earnings blackout check - block new entries but allow exits
-        if (!isExit && isInEarningsBlackout()) {
-            log.warn("📅 EARNINGS BLACKOUT: Blocking {} order for {} - blackout window active", action, instrument);
-            telegramService.sendMessage(String.format(
-                "📅 ORDER BLOCKED - EARNINGS BLACKOUT\nAction: %s %d %s @ %.0f\nReason: Earnings blackout window active\nExisting positions can still be closed.",
-                action, quantity, instrument, price));
-            return;
-        }
-
-        // Taiwan compliance check - block if odd-lot day trading without sufficient capital
-        if (!isExit && strategyName != null) {
-            boolean isDayTrade = taiwanComplianceService.isIntradayStrategy(strategyName);
-            double currentCapital = taiwanComplianceService.fetchCurrentCapital();
-            ComplianceResult complianceResult = taiwanComplianceService.checkTradeCompliance(quantity, isDayTrade, currentCapital);
-            
-            if (!complianceResult.isApproved()) {
-                log.warn("🇹🇼 TAIWAN COMPLIANCE VETO: {}", complianceResult.getVetoReason());
-                telegramService.sendMessage(String.format(
-                    "🇹🇼 ORDER BLOCKED - TAIWAN COMPLIANCE\nAction: %s %d %s @ %.0f\nReason: %s",
-                    action, quantity, instrument, price, complianceResult.getVetoReason()));
-                return;
-            }
-        }
-        
-        // Ollama AI veto check (if enabled)
-        if (!isExit && stockRiskSettingsService.isAiVetoEnabled()) {
-            try {
-                Map<String, Object> tradeProposal = new HashMap<>();
-                tradeProposal.put("symbol", instrument);
-                tradeProposal.put("direction", action);
-                tradeProposal.put("shares", quantity);
-                tradeProposal.put("entry_logic", "Price-based signal");
-                tradeProposal.put("strategy_name", strategyName != null ? strategyName : "Unknown");
-                tradeProposal.put("daily_pnl", String.format("%.0f", riskManagementService.getDailyPnL()));
-                tradeProposal.put("weekly_pnl", String.format("%.0f", riskManagementService.getWeeklyPnL()));
-                tradeProposal.put("drawdown_percent", "N/A");
-                tradeProposal.put("trades_today", "N/A");
-                tradeProposal.put("win_streak", "0");
-                tradeProposal.put("loss_streak", "0");
-                tradeProposal.put("volatility_level", "Normal");
-                tradeProposal.put("time_of_day", LocalDateTime.now(TAIPEI_ZONE).toString());
-                tradeProposal.put("session_phase", "Intraday");
-                tradeProposal.put("news_headlines", "");
-                tradeProposal.put("strategy_days_active", "N/A");
-                tradeProposal.put("recent_backtest_stats", "N/A");
-                
-                Map<String, Object> vetoResult = llmService.executeTradeVeto(tradeProposal);
-                boolean vetoed = (Boolean) vetoResult.getOrDefault("veto", true);
-                String vetoReason = (String) vetoResult.getOrDefault("reason", "Unknown");
-                
-                if (vetoed) {
-                    log.warn("🤖 OLLAMA AI VETO: {}", vetoReason);
-                    telegramService.sendMessage(String.format(
-                        "🤖 ORDER BLOCKED - AI RISK VETO\nAction: %s %d %s @ %.0f\nReason: %s\n\nUse /risk enable_ai_veto false to disable AI veto",
-                        action, quantity, instrument, price, vetoReason));
-                    return;
-                } else {
-                    log.info("✅ Ollama AI approved trade: {}", vetoReason);
-                }
-            } catch (Exception e) {
-                log.error("❌ Ollama veto check failed: {} - Defaulting to VETO (fail-safe)", e.getMessage());
-                telegramService.sendMessage(String.format(
-                    "⚠️ AI VETO CHECK FAILED - Trade blocked as fail-safe\nError: %s", e.getMessage()));
-                return;
-            }
-        }
-
         int maxRetries = 3;
         int attempt = 0;
         
@@ -189,19 +107,15 @@ public class OrderExecutionService {
             try {
                 attempt++;
                 
-                String effectiveStrategyName = (strategyName != null && !strategyName.trim().isEmpty()) 
-                    ? strategyName 
-                    : "Strategy_STOCK_" + System.currentTimeMillis();
-                
                 Map<String, Object> orderMap = new HashMap<>();
                 orderMap.put("action", action);
                 orderMap.put("quantity", String.valueOf(quantity));
                 orderMap.put("price", price);
                 orderMap.put("is_exit", isExit);
-                orderMap.put("strategy", effectiveStrategyName);
+                orderMap.put("strategy", strategyName != null ? strategyName : "Unknown");
                 
                 log.info("📤 [Strategy: {}] Sending {} order (attempt {}, exit={}): {}", 
-                    effectiveStrategyName, instrument, attempt, isExit, orderMap);
+                    strategyName != null ? strategyName : "Unknown", instrument, attempt, isExit, orderMap);
                 String result = restTemplate.postForObject(
                         getBridgeUrl() + "/order", orderMap, String.class);
                 log.debug("📥 Order response: {}", result);
@@ -214,25 +128,24 @@ public class OrderExecutionService {
                 }
 
                 if (!isExit) {
-                    positionManager.updateEntry(instrument, price, LocalDateTime.now(ZoneId.of("Asia/Taipei")));
+                    positionManager.updateEntry(instrument, price, LocalDateTime.now(AppConstants.TAIPEI_ZONE));
                 }
-                    
+                
                 telegramService.sendMessage(String.format(
-                        "✅ ORDER FILLED [%s]\n%s %d %s @ %.0f\nPosition: %d", 
-                        effectiveStrategyName, action, quantity, instrument, price, positionManager.getPosition(instrument)));
+                        "✅ ORDER FILLED [%s]\\n%s %d %s @ %.0f\\nPosition: %d", 
+                        strategyName != null ? strategyName : "Unknown", action, quantity, instrument, price, positionManager.getPosition(instrument)));
                 
                 if (!isExit) {
                     Trade trade = Trade.builder()
-                            .timestamp(LocalDateTime.now(ZoneId.of("Asia/Taipei")))
+                            .timestamp(LocalDateTime.now(AppConstants.TAIPEI_ZONE))
                             .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
                             .quantity(quantity)
                             .entryPrice(price)
                             .symbol(instrument)
-                            .strategyName(effectiveStrategyName)
+                            .strategyName(strategyName != null ? strategyName : "Unknown")
                             .reason("Signal execution")
                             .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
                             .status(Trade.TradeStatus.OPEN)
-                            .assetType(Trade.AssetType.STOCK)
                             .build();
                     dataLoggingService.logTrade(trade);
                 }
@@ -279,13 +192,13 @@ public class OrderExecutionService {
             double originalEntryPrice = positionManager.getEntryPrice(instrument);
             LocalDateTime entryTime = positionManager.getEntryTime(instrument);
             int holdDurationMinutes = entryTime == null ? 0 :
-                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(ZoneId.of("Asia/Taipei"))).toMinutes();
+                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(AppConstants.TAIPEI_ZONE)).toMinutes();
             
             executeOrderWithRetry(action, Math.abs(pos), currentPrice, instrument, true, emergencyShutdown); // isExit=true triggers cooldown
             
             double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
             double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
-            riskManagementService.recordPnL(instrument, pnl, stockRiskSettingsService.getWeeklyLossLimit());
+            riskManagementService.recordPnL(instrument, pnl, riskSettingsService.getWeeklyLossLimit());
 
             Trade.TradingMode mode = emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE;
             dataLoggingService.closeLatestTrade(instrument, mode, currentPrice, pnl, holdDurationMinutes);
@@ -295,12 +208,12 @@ public class OrderExecutionService {
             
             log.info("🔒 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
             telegramService.sendMessage(String.format(
-                    "🔒 POSITION CLOSED\nReason: %s\nP&L: %.0f TWD\nDaily P&L: %.0f TWD\nWeekly P&L: %.0f TWD", 
+                    "🔒 POSITION CLOSED\\nReason: %s\\nP&L: %.0f TWD\\nDaily P&L: %.0f TWD\\nWeekly P&L: %.0f TWD", 
                     reason, pnl, riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL()));
             
             if (riskManagementService.isWeeklyLimitHit()) {
                 telegramService.sendMessage(String.format(
-                    "🚨 WEEKLY LOSS LIMIT HIT\nWeekly P&L: %.0f TWD\nTrading paused until next Monday!",
+                    "🚨 WEEKLY LOSS LIMIT HIT\\nWeekly P&L: %.0f TWD\\nTrading paused until next Monday!",
                     riskManagementService.getWeeklyPnL()
                 ));
             }
@@ -308,26 +221,5 @@ public class OrderExecutionService {
         } catch (Exception e) {
             log.error("❌ Flatten failed", e);
         }
-    }
-
-    /**
-     * Check if today is an earnings blackout day.
-     * Returns true if trading should be blocked for new entries.
-     */
-    public boolean isInEarningsBlackout() {
-        try {
-            LocalDate today = LocalDate.now(TAIPEI_ZONE);
-            return earningsBlackoutService.isDateBlackout(today);
-        } catch (Exception e) {
-            log.warn("⚠️ Could not check earnings blackout status: {}", e.getMessage());
-            return false; // Fail-open: allow trading if blackout check fails
-        }
-    }
-
-    /**
-     * Get earnings blackout status for monitoring/reporting
-     */
-    public boolean getEarningsBlackoutStatus() {
-        return isInEarningsBlackout();
     }
 }

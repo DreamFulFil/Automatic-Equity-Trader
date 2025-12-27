@@ -87,6 +87,11 @@ public class EarningsBlackoutService {
     private final AtomicBoolean refreshFailureAlertSent = new AtomicBoolean(false);
     private final ReentrantLock refreshLock = new ReentrantLock();
 
+    /**
+     * Refresh earnings blackout dates daily at 9:00 AM.
+     * JUSTIFICATION: Fetches upcoming earnings dates to enforce trading blackouts.
+     * Runs early morning before market opens to ensure blackout rules are current.
+     */
     @Scheduled(cron = "0 0 9 * * *", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void scheduledRefresh() {
         if (!earningsProperties.getRefresh().isEnabled()) {

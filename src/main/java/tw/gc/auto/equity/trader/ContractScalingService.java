@@ -136,7 +136,9 @@ public class ContractScalingService {
     }
     
     /**
-     * Daily update at 11:15 (before trading window opens at 11:30)
+     * Daily update at 11:15 (before trading window opens at 11:30).
+     * JUSTIFICATION: Updates contract sizing based on account equity before market opens.
+     * Runs before 11:30 trading window to ensure correct position sizes are ready.
      */
     @Scheduled(cron = "0 15 11 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     public void dailyContractSizingUpdate() {

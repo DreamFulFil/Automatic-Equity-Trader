@@ -857,6 +857,38 @@ Be concise, friendly, and actionable. Focus on what the trader can do to resolve
 # API ENDPOINTS
 # ============================================================================
 
+@app.post("/mode")
+def set_trading_mode(request: Request, mode_data: dict):
+    """
+    Dynamically switch trading mode (stock <-> futures)
+    """
+    global TRADING_MODE, shioaji
+    
+    new_mode = mode_data.get("mode")
+    if new_mode not in ["stock", "futures"]:
+        return JSONResponse(status_code=400, content={"error": "Invalid mode. Use 'stock' or 'futures'"})
+    
+    if new_mode == TRADING_MODE:
+        return {"status": "ok", "message": f"Already in {new_mode} mode", "mode": new_mode}
+    
+    print(f"🔄 Switching trading mode: {TRADING_MODE} -> {new_mode}")
+    
+    # 1. Logout current session
+    if shioaji:
+        shioaji.logout()
+    
+    # 2. Update global mode
+    TRADING_MODE = new_mode
+    
+    # 3. Re-initialize wrapper with new mode
+    shioaji = ShioajiWrapper(config, trading_mode=TRADING_MODE)
+    
+    # 4. Connect
+    if shioaji.connect():
+        return {"status": "ok", "message": f"Switched to {new_mode} mode", "mode": new_mode}
+    else:
+        return JSONResponse(status_code=500, content={"status": "error", "error": "Failed to connect in new mode", "mode": new_mode})
+
 @app.get("/health")
 def health():
     return {
@@ -1163,13 +1195,15 @@ class OrderRequest(BaseModel):
     action: str
     quantity: int
     price: float
-    is_exit: bool = False  # New field to indicate if this is an exit order
+    is_exit: bool = False
+    strategy: str = "Unknown"
 
 @app.post("/order")
 def place_order(order: OrderRequest):
     """Execute order via Shioaji with auto-reconnect"""
     global last_trade_time, consecutive_signal_count, last_signal_direction
     
+    print(f"🤖 [Strategy: {order.strategy}] Placing {order.action} order: {order.quantity} @ {order.price}")
     result = shioaji.place_order(order.action, order.quantity, order.price)
     
     # If this is an exit order, set the cooldown timer and reset signal tracking
@@ -1179,6 +1213,7 @@ def place_order(order: OrderRequest):
         last_signal_direction = "NEUTRAL"
         result["cooldown_started"] = True
         result["cooldown_until"] = (last_trade_time + timedelta(seconds=180)).isoformat()
+        print(f"🤖 [Strategy: {order.strategy}] Exit order - cooldown started")
     
     return result
 

@@ -78,10 +78,11 @@ jenv exec mvn test
 ## ✨ Key Features
 
 ### Trading Capabilities
-✅ **11 Concurrent Strategies** - DCA, MA Crossover, Bollinger Bands, VWAP, Momentum, Arbitrage, News/Sentiment, TWAP, Rebalancing, DRIP, Tax-Loss Harvesting  
-✅ **Multi-Market Support** - Taiwan stocks (TSE), Taiwan futures (TAIFEX), ready for US markets  
+✅ **17 Concurrent Strategies** - DCA, MA Crossover, Bollinger Bands, RSI, MACD, Stochastic, ATR Channel, Pivot Point, VWAP, TWAP, Momentum, Arbitrage, News/Sentiment, Rebalancing, DRIP, Tax-Loss Harvesting  
+✅ **Multi-Market Support** - Taiwan stocks (TSE), Taiwan futures (TAIFEX) with TradingModeEnum (TW_STOCK, TW_FUTURE, TW_STOCK_AND_FUTURE)  
 ✅ **Real-Time Market Data** - Tick-level streaming quotes and Level 2 order book depth  
-✅ **Smart Order Execution** - TWAP, VWAP execution strategies
+✅ **Smart Order Execution** - TWAP, VWAP execution strategies with strategy-level tracking  
+✅ **Shadow Mode** - Run multiple strategies in parallel simulation for performance comparison
 
 ### AI Integration
 ✅ **LLM-Powered Analysis** - Ollama Llama 3.1 8B for news sentiment, signal enhancement, risk assessment  

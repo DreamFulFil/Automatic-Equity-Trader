@@ -9,6 +9,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.web.client.RestTemplate;
+import tw.gc.auto.equity.trader.RiskManagementService;
+import tw.gc.auto.equity.trader.RiskSettingsService;
+import tw.gc.auto.equity.trader.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 
@@ -37,13 +40,7 @@ class OrderExecutionServiceTest {
     @Mock
     private RiskManagementService riskManagementService;
     @Mock
-    private StockRiskSettingsService stockRiskSettingsService;
-    @Mock
-    private EarningsBlackoutService earningsBlackoutService;
-    @Mock
-    private tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService taiwanComplianceService;
-    @Mock
-    private LlmService llmService;
+    private RiskSettingsService riskSettingsService;
 
     private PositionManager positionManager;
     private OrderExecutionService orderExecutionService;
@@ -52,14 +49,11 @@ class OrderExecutionServiceTest {
     void setUp() {
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
-        when(earningsBlackoutService.isDateBlackout(any())).thenReturn(false);
-        when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(false); // Disable AI veto in tests by default
         
         positionManager = new PositionManager();
         orderExecutionService = new OrderExecutionService(
             restTemplate, objectMapper, tradingProperties, telegramService, 
-            dataLoggingService, positionManager, riskManagementService, stockRiskSettingsService,
-            earningsBlackoutService, taiwanComplianceService, llmService
+            dataLoggingService, positionManager, riskManagementService, riskSettingsService
         );
     }
 
@@ -103,33 +97,6 @@ class OrderExecutionServiceTest {
         // Then
         verify(restTemplate, times(3)).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
         verify(telegramService).sendMessage(contains("Order failed after 3 attempts"));
-    }
-
-    @Test
-    void executeOrderWithRetry_whenEarningsBlackout_shouldBlockNewEntry() {
-        // Given
-        when(earningsBlackoutService.isDateBlackout(any())).thenReturn(true);
-
-        // When - try to place a new entry order (not exit)
-        orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false);
-
-        // Then - order should be blocked
-        verify(restTemplate, never()).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
-        verify(telegramService).sendMessage(contains("EARNINGS BLACKOUT"));
-    }
-
-    @Test
-    void executeOrderWithRetry_whenEarningsBlackout_shouldAllowExitOrder() {
-        // Given
-        when(earningsBlackoutService.isDateBlackout(any())).thenReturn(true);
-        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
-                .thenReturn("{\"status\":\"filled\"}");
-
-        // When - exit order should be allowed during blackout
-        orderExecutionService.executeOrderWithRetry("SELL", 1, 20000.0, "2454.TW", true, false);
-
-        // Then - exit should proceed
-        verify(restTemplate).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
     }
 
     @Test

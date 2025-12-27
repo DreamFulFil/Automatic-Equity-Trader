@@ -3,7 +3,7 @@ package tw.gc.auto.equity.trader.strategy.factory;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.StrategyFactory;
 import tw.gc.auto.equity.trader.strategy.impl.*;
-import tw.gc.auto.equity.trader.strategy.impl.*;
+import tw.gc.auto.equity.trader.strategy.impl.library.*;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -64,7 +64,7 @@ class TelegramServiceTest {
         
         Map<String, Object> body = requestCaptor.getValue().getBody();
         assertEquals("123456789", body.get("chat_id"));
-        assertEquals("Test message", body.get("text"));
+        assertEquals("🤖 Test message", body.get("text"));
     }
 
     @Test
@@ -107,7 +107,7 @@ class TelegramServiceTest {
         verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
         
         Map<String, Object> body = requestCaptor.getValue().getBody();
-        assertEquals("🚀 MTXF Bot started", body.get("text"));
+        assertEquals("🤖 🚀 MTXF Bot started", body.get("text"));
     }
 
     @Test
@@ -128,7 +128,7 @@ class TelegramServiceTest {
         verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
         
         Map<String, Object> body = requestCaptor.getValue().getBody();
-        assertEquals(expectedMessage, body.get("text"));
+        assertEquals("🤖 " + expectedMessage, body.get("text"));
     }
 
     // ==================== registerCommandHandlers() tests ====================

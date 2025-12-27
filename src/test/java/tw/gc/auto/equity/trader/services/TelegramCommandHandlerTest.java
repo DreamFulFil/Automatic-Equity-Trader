@@ -8,13 +8,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
-import tw.gc.auto.equity.trader.services.ContractScalingService;
-import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
-import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
-import tw.gc.auto.equity.trader.services.StockSettingsService;
-import tw.gc.auto.equity.trader.services.TelegramService;
-import tw.gc.auto.equity.trader.entities.StockRiskSettings;
+import tw.gc.auto.equity.trader.ContractScalingService;
+import tw.gc.auto.equity.trader.RiskManagementService;
+import tw.gc.auto.equity.trader.RiskSettingsService;
+import tw.gc.auto.equity.trader.ShioajiSettingsService;
+import tw.gc.auto.equity.trader.StockSettingsService;
+import tw.gc.auto.equity.trader.TelegramService;
+import tw.gc.auto.equity.trader.entities.RiskSettings;
 import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.entities.StockSettings;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
@@ -40,7 +40,7 @@ class TelegramCommandHandlerTest {
     @Mock private LlmService llmService;
     @Mock private OrderExecutionService orderExecutionService;
     @Mock private ApplicationContext applicationContext;
-    @Mock private StockRiskSettingsService stockRiskSettingsService;
+    @Mock private RiskSettingsService riskSettingsService;
 
     private TelegramCommandHandler telegramCommandHandler;
 
@@ -57,28 +57,16 @@ class TelegramCommandHandlerTest {
         StockSettings stockSettings = StockSettings.builder().shares(100).shareIncrement(10).build();
         when(stockSettingsService.getSettings()).thenReturn(stockSettings);
         
-        StockRiskSettings stockRiskSettings = StockRiskSettings.builder().dailyLossLimitTwd(5000).weeklyLossLimitTwd(15000).build();
-        when(stockRiskSettingsService.getSettings()).thenReturn(stockRiskSettings);
+        RiskSettings riskSettings = RiskSettings.builder().dailyLossLimit(5000).weeklyLossLimit(15000).build();
+        when(riskSettingsService.getSettings()).thenReturn(riskSettings);
         
         ShioajiSettings shioajiSettings = ShioajiSettings.builder().simulation(true).build();
         when(shioajiSettingsService.getSettings()).thenReturn(shioajiSettings);
 
-        ActiveStrategyService mockActiveStrategyService = mock(ActiveStrategyService.class);
-        StrategyPerformanceService mockStrategyPerformanceService = mock(StrategyPerformanceService.class);
-        ActiveStockService mockActiveStockService = mock(ActiveStockService.class);
-        when(mockActiveStockService.getActiveStock()).thenReturn("2454.TW");
-        when(mockActiveStockService.getActiveSymbol(anyString())).thenReturn("2454.TW");
-        
         telegramCommandHandler = new TelegramCommandHandler(
             telegramService, tradingStateService, positionManager, riskManagementService,
             contractScalingService, stockSettingsService, shioajiSettingsService, llmService,
-            orderExecutionService, applicationContext, stockRiskSettingsService,
-            mockActiveStrategyService, mockStrategyPerformanceService, mockActiveStockService,
-            mock(tw.gc.auto.equity.trader.services.BacktestService.class),
-            mock(tw.gc.auto.equity.trader.services.HistoryDataService.class),
-            mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class),
-            mock(tw.gc.auto.equity.trader.services.AutoStrategySelector.class),
-            mock(tw.gc.auto.equity.trader.services.SystemConfigService.class)
+            orderExecutionService, applicationContext, riskSettingsService
         );
         
         // Register commands to trigger internal registration logic (though we test handlers directly via reflection or by invoking registered callbacks if we could access them, but here we might need to expose handlers or test via side effects)

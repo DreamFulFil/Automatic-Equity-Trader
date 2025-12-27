@@ -47,6 +47,8 @@ public class EndOfDayStatisticsService {
     /**
      * Calculate and store end-of-day statistics.
      * Triggered at 13:05 Taiwan time (5 minutes after market close).
+     * JUSTIFICATION: Calculates and persists daily statistics (OHLCV, trades, P&L) for historical analysis.
+     * Runs after market close (13:00) to ensure all data is captured.
      */
     @Scheduled(cron = "0 5 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
     @Transactional

@@ -2,22 +2,18 @@ package tw.gc.auto.equity.trader;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
-import tw.gc.auto.equity.trader.entities.DailyStatistics;
+import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.entities.Signal;
 import tw.gc.auto.equity.trader.entities.Signal.SignalDirection;
-import tw.gc.auto.equity.trader.entities.Trade;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
-import tw.gc.auto.equity.trader.services.EndOfDayStatisticsService;
-import tw.gc.auto.equity.trader.services.DataLoggingService;
+import tw.gc.auto.equity.trader.services.*;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -25,145 +21,54 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.springframework.beans.factory.annotation.Value;
-import tw.gc.auto.equity.trader.strategy.IStrategy;
-import tw.gc.auto.equity.trader.strategy.Portfolio;
-import tw.gc.auto.equity.trader.strategy.TradeSignal;
-import tw.gc.auto.equity.trader.strategy.impl.*;
-import tw.gc.auto.equity.trader.strategy.impl.library.*;
-import tw.gc.auto.equity.trader.entities.MarketData;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Collections;
-
-import tw.gc.auto.equity.trader.services.LlmService;
-import tw.gc.auto.equity.trader.context.TradingContext;
-
-/**
- * Dual-Mode Lunch-Break Trading Engine (December 2025 Production Version)
- *
- * Supports two trading modes via -Dtrading.mode system property:
- * - "stock" (default): Trades 2454.TW odd lots (70 shares base, +27 per 20k equity)
- * - "futures": Trades MTXF with full scaling (1→2→3→4 contracts)
- *
- * Core trading orchestrator responsible for:
- * - Signal polling and trade execution with auto-scaling
- * - Position management with 45-minute hard exit
- * - Trading window enforcement with weekly loss breaker
- * - Shioaji auto-reconnect wrapper with retry logic
- *
- * NOTE: Taiwan market does not support day trading for odd lots.
- * Bot performs regular intraday trading (buy/sell same day) without special day trading mechanics.
- *
- * Delegates to:
- * - ContractScalingService: Auto sizing based on equity + 30d profit
- * - RiskManagementService: P&L tracking and weekly -15k TWD limit
- * - TelegramService: Notifications and remote commands (/status /pause /resume /close)
- */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class TradingEngine {
     
     private static final ZoneId TAIPEI_ZONE = AppConstants.TAIPEI_ZONE;
     
-    @NonNull
     private final RestTemplate restTemplate;
-    @NonNull
     private final ObjectMapper objectMapper;
-    @NonNull
     private final TelegramService telegramService;
-    @NonNull
     private final TradingProperties tradingProperties;
-    @NonNull
     private final ApplicationContext applicationContext;
-    @NonNull
     private final ContractScalingService contractScalingService;
-    @NonNull
     private final RiskManagementService riskManagementService;
-    @NonNull
     private final StockSettingsService stockSettingsService;
-    @NonNull
     private final RiskSettingsService riskSettingsService;
-    @NonNull
     private final DataLoggingService dataLoggingService;
-    @NonNull
     private final EndOfDayStatisticsService endOfDayStatisticsService;
-    @NonNull
     private final DailyStatisticsRepository dailyStatisticsRepository;
-    @NonNull
     private final ShioajiSettingsService shioajiSettingsService;
-    @NonNull
-    private final LlmService llmService;
-
-    public TradingEngine(TradingContext context) {
-        this.restTemplate = context.getRestTemplate();
-        this.objectMapper = context.getObjectMapper();
-        this.telegramService = context.getTelegramService();
-        this.tradingProperties = context.getTradingProperties();
-        this.applicationContext = context.getApplicationContext();
-        this.contractScalingService = context.getContractScalingService();
-        this.riskManagementService = context.getRiskManagementService();
-        this.stockSettingsService = context.getStockSettingsService();
-        this.riskSettingsService = context.getRiskSettingsService();
-        this.dataLoggingService = context.getDataLoggingService();
-        this.endOfDayStatisticsService = context.getEndOfDayStatisticsService();
-        this.dailyStatisticsRepository = context.getDailyStatisticsRepository();
-        this.shioajiSettingsService = context.getShioajiSettingsService();
-        this.llmService = context.getLlmService();
-    }
     
-    // Trading mode: "stock" or "futures"
-    private String tradingMode;
-    
-    // Position tracking per symbol (package-private for testing)
-    final Map<String, AtomicInteger> positions = new ConcurrentHashMap<>();
-    final Map<String, AtomicReference<Double>> entryPrices = new ConcurrentHashMap<>();
-    final Map<String, AtomicReference<LocalDateTime>> positionEntryTimes = new ConcurrentHashMap<>();
-    
-    // State flags (package-private for testing)
-    volatile boolean emergencyShutdown = false;
-    volatile boolean marketDataConnected = false;
-    volatile boolean tradingPaused = false;
-    
-    // News veto cache (package-private for testing)
-    final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
-    final AtomicReference<String> cachedNewsReason = new AtomicReference<>("");
-    
-    // Strategy Registry
-    private final List<IStrategy> activeStrategies = new ArrayList<>();
-    private final Map<String, Portfolio> strategyPortfolios = new ConcurrentHashMap<>();
-    
-    // Strategy Selection
-    private String activeStrategyName;
+    // New Services
+    private final TradingStateService tradingStateService;
+    private final TelegramCommandHandler telegramCommandHandler;
+    private final OrderExecutionService orderExecutionService;
+    private final PositionManager positionManager;
+    private final StrategyManager strategyManager;
+    private final ReportingService reportingService;
 
     @PostConstruct
     public void initialize() {
-        tradingMode = System.getProperty("trading.mode", "stock");
-        activeStrategyName = tradingProperties.getActiveStrategy();
+        tradingStateService.setTradingMode(System.getProperty("trading.mode", "stock"));
         
         log.info("🚀 Lunch Investor Bot initializing (December 2025 Production)...");
         
-        // Initialize Strategies
-        initializeStrategies();
+        // Strategies are initialized by StrategyManager @PostConstruct
         
-        log.info("📈 Trading Mode: {} ({})", tradingMode.toUpperCase(), 
-            "stock".equals(tradingMode) ? "2454.TW odd lots" : "MTXF futures");
+        log.info("📈 Trading Mode: {} ({})", tradingStateService.getTradingMode().toUpperCase(), 
+            "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW odd lots" : "MTXF futures");
         
-        registerTelegramCommands();
+        telegramCommandHandler.registerCommands(strategyManager.getActiveStrategies());
         
         // Calculate statistics for yesterday on startup
         LocalDate yesterday = LocalDate.now(TAIPEI_ZONE).minusDays(1);
-        String symbol = "stock".equals(tradingMode) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        String symbol = getActiveSymbol();
         if (dailyStatisticsRepository.findByTradeDateAndSymbol(yesterday, symbol).isEmpty()) {
             try {
                 log.info("📊 Calculating statistics for {} on startup...", yesterday);
@@ -175,17 +80,35 @@ public class TradingEngine {
             log.info("📊 Statistics for {} already exist, skipping calculation on startup", yesterday);
         }
         
-        // Get simulation mode status
-        boolean isSimulation = shioajiSettingsService.getSettings().isSimulation();
-        String tradingModeLabel = isSimulation 
-            ? "🟡 SIMULATION MODE" 
-            : "🔴 LIVE TRADING MODE";
+        sendStartupMessage();
         
-        String modeDescription = "stock".equals(tradingMode) 
+        // Also log to console prominently
+        log.warn("═══════════════════════════════════════════════════");
+        log.warn(getTradingModeLabel());
+        log.warn("═══════════════════════════════════════════════════");
+        
+        try {
+            String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
+            log.info("✅ Python bridge connected: {}", response);
+            tradingStateService.setMarketDataConnected(true);
+            
+            runPreMarketHealthCheck();
+            if ("futures".equals(tradingStateService.getTradingMode())) {
+                contractScalingService.updateContractSizing();
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ Python bridge not available during startup (will retry during trading cycle): {}", e.getMessage());
+        }
+    }
+
+    private void sendStartupMessage() {
+        String tradingModeLabel = getTradingModeLabel();
+        
+        String modeDescription = "stock".equals(tradingStateService.getTradingMode()) 
             ? "Mode: STOCK (2454.TW odd lots)" 
             : "Mode: FUTURES (MTXF)";
         
-        String scalingInfo = "stock".equals(tradingMode)
+        String scalingInfo = "stock".equals(tradingStateService.getTradingMode())
             ? String.format("Base shares: %d (+%d per 20k equity)", 
                 stockSettingsService.getSettings().getShares(),
                 stockSettingsService.getSettings().getShareIncrement())
@@ -219,407 +142,39 @@ public class TradingEngine {
                 riskManagementService.getEarningsBlackoutStock()) : ""
         );
         telegramService.sendMessage(startupMessage);
-        
-        // Also log to console prominently
-        log.warn("═══════════════════════════════════════════════════");
-        log.warn(tradingModeLabel);
-        log.warn("═══════════════════════════════════════════════════");
-        
-        try {
-            String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
-            log.info("✅ Python bridge connected: {}", response);
-            marketDataConnected = true;
-            
-            runPreMarketHealthCheck();
-            if ("futures".equals(tradingMode)) {
-                contractScalingService.updateContractSizing();
-            }
-        } catch (Exception e) {
-            log.warn("⚠️ Python bridge not available during startup (will retry during trading cycle): {}", e.getMessage());
-            // Don't send Telegram message during startup - bridge may start later
-            // marketDataConnected remains false, will be retried in trading cycle
-        }
     }
 
-    private void initializeStrategies() {
-        // Initialize a diverse set of strategies (targeting ~40 variations)
-        
-        // 1. Moving Average Crossovers (Trend)
-        activeStrategies.add(new MovingAverageCrossoverStrategy(5, 10, 0.001));
-        activeStrategies.add(new MovingAverageCrossoverStrategy(10, 20, 0.001));
-        activeStrategies.add(new MovingAverageCrossoverStrategy(20, 50, 0.002));
-        activeStrategies.add(new MovingAverageCrossoverStrategy(50, 200, 0.005)); // Golden Cross
-        
-        // 2. RSI Strategies (Mean Reversion)
-        activeStrategies.add(new RSIStrategy(14, 70, 30)); // Standard
-        activeStrategies.add(new RSIStrategy(7, 80, 20));  // Aggressive
-        activeStrategies.add(new RSIStrategy(21, 65, 35)); // Conservative
-        
-        // 3. MACD Strategies (Momentum)
-        activeStrategies.add(new MACDStrategy(12, 26, 9)); // Standard
-        activeStrategies.add(new MACDStrategy(5, 35, 5));  // Custom
-        
-        // 4. Bollinger Bands (Volatility)
-        activeStrategies.add(new BollingerBandStrategy()); // Default 20, 2.0
-        
-        // 5. Stochastic (Momentum)
-        activeStrategies.add(new StochasticStrategy(14, 3, 80, 20));
-        activeStrategies.add(new StochasticStrategy(5, 3, 90, 10)); // Fast
-        
-        // 6. ATR Channels (Breakout)
-        activeStrategies.add(new ATRChannelStrategy(20, 2.0));
-        activeStrategies.add(new ATRChannelStrategy(14, 1.5));
-        
-        // 7. Pivot Points (Support/Resistance)
-        activeStrategies.add(new PivotPointStrategy());
-        
-        // 8. DCA (Investment)
-        activeStrategies.add(new DCAStrategy());
-        
-        // 9. Rebalancing
-        activeStrategies.add(new AutomaticRebalancingStrategy(5));
-        
-        // 10. Momentum
-        activeStrategies.add(new MomentumTradingStrategy());
-        
-        // Initialize portfolios for each strategy
-        for (IStrategy strategy : activeStrategies) {
-            Map<String, Integer> pos = new HashMap<>();
-            pos.put(getActiveSymbol(), 0);
-            
-            Portfolio p = Portfolio.builder()
-                .equity(80000.0) // 80k per strategy as requested
-                .availableMargin(80000.0)
-                .positions(pos)
-                .tradingMode(tradingMode)
-                .tradingQuantity(getTradingQuantity())
-                .build();
-            
-            strategyPortfolios.put(strategy.getName(), p);
-            log.info("✅ Initialized Strategy: {}", strategy.getName());
-        }
-        
-        log.info("🔥 Total Active Strategies: {}", activeStrategies.size());
+    private String getTradingModeLabel() {
+        boolean isSimulation = shioajiSettingsService.getSettings().isSimulation();
+        return isSimulation ? "🟡 SIMULATION MODE" : "🔴 LIVE TRADING MODE";
     }
 
-    String getActiveSymbol() {
-        return "stock".equals(tradingMode) ? "2454.TW" : "AUTO_EQUITY_TRADER";
-    }
-
-    AtomicInteger positionFor(String symbol) {
-        return positions.computeIfAbsent(symbol, k -> new AtomicInteger(0));
-    }
-
-    AtomicReference<Double> entryPriceFor(String symbol) {
-        return entryPrices.computeIfAbsent(symbol, k -> new AtomicReference<>(0.0));
-    }
-
-    AtomicReference<LocalDateTime> entryTimeFor(String symbol) {
-        return positionEntryTimes.computeIfAbsent(symbol, k -> new AtomicReference<>(null));
-    }
-
-    void setPositionForTest(String symbol, int position) { // package-private for tests
-        positionFor(symbol).set(position);
-    }
-
-    void setEntryForTest(String symbol, double price, LocalDateTime time) { // package-private for tests
-        entryPriceFor(symbol).set(price);
-        entryTimeFor(symbol).set(time);
-    }
-
-    void executeOrderForTest(String action, int quantity, double price) { // package-private for tests
-        executeOrderWithRetry(action, quantity, price, getActiveSymbol(), false);
-    }
-    
-    /**
-     * Get base stock quantity for stock mode (2454.TW odd lots)
-     * Base: 70 shares (≈77k NTD at NT$1,100/share, perfect for 80k capital)
-     * Auto-scale: +27 shares for every additional 20k equity above 80k base
-     */
-    int getBaseStockQuantity() {
-        return stockSettingsService.getBaseStockQuantity(contractScalingService.getLastEquity());
-    }
-    
-    /**
-     * Get trading quantity based on mode
-     */
-    int getTradingQuantity() {
-        if ("stock".equals(tradingMode)) {
-            return getBaseStockQuantity();
-        } else {
-            return contractScalingService.getMaxContracts();
-        }
-    }
-    
-    /**
-     * Check account balance/position and adjust quantity to prevent insufficient funds/shares
-     */
-    private int checkBalanceAndAdjustQuantity(String action, int requestedQuantity, double price, String instrument) {
-        try {
-            if ("BUY".equals(action)) {
-                // Check available balance for BUY orders
-                String accountJson = restTemplate.getForObject(getBridgeUrl() + "/account", String.class);
-                JsonNode accountData = objectMapper.readTree(accountJson);
-                
-                if (!"ok".equals(accountData.path("status").asText())) {
-                    log.warn("⚠️ Could not get account balance - proceeding with requested quantity");
-                    return requestedQuantity;
-                }
-                
-                double availableBalance = accountData.path("available_margin").asDouble(0.0);
-                if (availableBalance <= 0) {
-                    log.warn("⚠️ No available balance in account");
-                    return 0;
-                }
-                
-                // Calculate maximum affordable quantity
-                double maxAffordable = availableBalance / price;
-                int maxQuantity = (int) Math.floor(maxAffordable);
-                
-                // For stocks, ensure we don't exceed reasonable limits
-                if ("stock".equals(tradingMode)) {
-                    maxQuantity = Math.min(maxQuantity, 1000); // Safety limit
-                }
-                
-                if (maxQuantity < requestedQuantity) {
-                    log.warn("⚠️ Balance insufficient - reducing quantity from {} to {} (balance: {:.0f} TWD, price: {:.0f} TWD)",
-                        requestedQuantity, maxQuantity, availableBalance, price);
-                    return Math.max(0, maxQuantity);
-                }
-                
-            } else if ("SELL".equals(action)) {
-                // Check current position for SELL orders
-                AtomicInteger currentPosition = positionFor(instrument);
-                int availableShares = Math.abs(currentPosition.get());
-                
-                if (availableShares <= 0) {
-                    log.warn("⚠️ No position to sell for {}", instrument);
-                    return 0;
-                }
-                
-                if (requestedQuantity > availableShares) {
-                    log.warn("⚠️ Insufficient shares - reducing quantity from {} to {} (position: {} shares)",
-                        requestedQuantity, availableShares, availableShares);
-                    return availableShares;
-                }
-            }
-            
-            return requestedQuantity;
-            
-        } catch (Exception e) {
-            log.error("❌ Failed to check account balance/position: {}", e.getMessage());
-            // On error, proceed with requested quantity to avoid blocking trades
-            return requestedQuantity;
-        }
-    }
-    
-    public String getTradingMode() {
-        return tradingMode;
-    }
-    
-    private void runPreMarketHealthCheck() {
-        try {
-            Map<String, Object> testOrder = new HashMap<>();
-            testOrder.put("action", "BUY");
-            testOrder.put("quantity", String.valueOf(1));
-            testOrder.put("price", 20000.0);
-            
-            String result = restTemplate.postForObject(
-                    getBridgeUrl() + "/order/dry-run", testOrder, String.class);
-            
-            if (result != null && result.contains("validated")) {
-                log.info("✅ Pre-market health check PASSED: order endpoint working");
-            } else {
-                log.warn("⚠️ Pre-market health check: unexpected response: {}", result);
-                telegramService.sendMessage("⚠️ Pre-market health check: order endpoint returned unexpected response");
-            }
-        } catch (Exception e) {
-            log.error("❌ Pre-market health check FAILED: order endpoint broken", e);
-            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\nOrder endpoint error: " + e.getMessage() + 
-                    "\nOrders may fail during trading session!");
-        }
-    }
-    
-    private void registerTelegramCommands() {
-        telegramService.registerCommandHandlers(
-            v -> handleStatusCommand(),
-            v -> handlePauseCommand(),
-            v -> handleResumeCommand(),
-            v -> handleCloseCommand(),
-            v -> handleShutdownCommand()
-        );
-        
-        // Register dynamic strategy switching
-        telegramService.registerCustomCommand("/strategy", args -> {
-            if (args == null || args.trim().isEmpty()) {
-                telegramService.sendMessage("Current Active Strategy: " + activeStrategyName + 
-                    "\nAvailable: " + activeStrategies.stream().map(IStrategy::getName).reduce((a,b) -> a + ", " + b).orElse("None"));
-            } else {
-                String newStrategy = args.trim();
-                // Verify it exists (fuzzy match)
-                boolean exists = activeStrategies.stream()
-                    .anyMatch(s -> s.getName().equalsIgnoreCase(newStrategy));
-                
-                if (exists || "LegacyBridge".equalsIgnoreCase(newStrategy)) {
-                    this.activeStrategyName = newStrategy;
-                    telegramService.sendMessage("✅ Active Strategy switched to: " + newStrategy);
-                    log.info("🔄 Strategy switched to {} via Telegram", newStrategy);
-                } else {
-                    telegramService.sendMessage("❌ Strategy not found: " + newStrategy);
-                }
-            }
-        });
-        
-        // Register mode switching (Live/Sim)
-        telegramService.registerCustomCommand("/mode", args -> {
-            if ("live".equalsIgnoreCase(args)) {
-                shioajiSettingsService.updateSimulationMode(false);
-                telegramService.sendMessage("🔴 Switched to LIVE TRADING mode (Database updated)");
-            } else if ("sim".equalsIgnoreCase(args) || "simulation".equalsIgnoreCase(args)) {
-                shioajiSettingsService.updateSimulationMode(true);
-                telegramService.sendMessage("🟡 Switched to SIMULATION mode (Database updated)");
-            } else {
-                boolean isSim = shioajiSettingsService.getSettings().isSimulation();
-                telegramService.sendMessage("Current Mode: " + (isSim ? "🟡 SIMULATION" : "🔴 LIVE") + 
-                    "\nUsage: /mode live OR /mode sim");
-            }
-        });
-        // Register Agent commands
-        telegramService.registerCustomCommand("/ask", args -> {
-            if (args == null || args.trim().isEmpty()) {
-                telegramService.sendMessage("Usage: /ask <question>\nAsk the Tutor Bot about trading concepts.");
-            } else {
-                // In a real implementation, we would inject TutorBotAgent and call it
-                // For now, we'll use a direct LLM call via LlmService as a proxy
-                try {
-                    String response = llmService.generateInsight("You are a trading tutor. Answer this: " + args);
-                    telegramService.sendMessage("🎓 Tutor: " + response);
-                } catch (Exception e) {
-                    telegramService.sendMessage("❌ Error asking tutor: " + e.getMessage());
-                }
-            }
-        });
-        
-        telegramService.registerCustomCommand("/news", args -> {
-            // In a real implementation, we would inject NewsAnalyzerAgent
-            telegramService.sendMessage("📰 News Analysis:\nFetching latest market news... (Mock)");
-            // Trigger async news fetch/analysis here
-        });
-    }
-    
-    private void handleShutdownCommand() {
-        log.info("🛑 Shutdown command received via Telegram");
-        telegramService.sendMessage("🛑 Shutting down application...\nFlattening all positions");
-        
-        // Trigger shutdown in background thread
-        new Thread(() -> {
-            try {
-                flattenPosition("Shutdown via Telegram command");
-                Thread.sleep(2000); // Give time for messages to send
-                
-                int exitCode = org.springframework.boot.SpringApplication.exit(applicationContext, () -> 0);
-                System.exit(exitCode);
-            } catch (Exception e) {
-                log.error("❌ Error during Telegram-triggered shutdown", e);
-            }
-        }).start();
-    }
-    
-    void handleStatusCommand() { // package-private for testing
-        String state = "🟢 ACTIVE";
-        if (emergencyShutdown) state = "🔴 EMERGENCY SHUTDOWN";
-        else if (riskManagementService.isWeeklyLimitHit()) state = "🟡 WEEKLY LIMIT PAUSED";
-        else if (riskManagementService.isEarningsBlackout()) state = "📅 EARNINGS BLACKOUT";
-        else if (tradingPaused) state = "⏸️ PAUSED BY USER";
-        
-        String instrument = getActiveSymbol();
-        AtomicInteger posRef = positionFor(instrument);
-        AtomicReference<Double> entryRef = entryPriceFor(instrument);
-        AtomicReference<LocalDateTime> entryTimeRef = entryTimeFor(instrument);
-
-        String positionInfo = posRef.get() == 0 ? "No position" :
-            String.format("%d @ %.0f (held %d min)",
-                posRef.get(),
-                entryRef.get(),
-                entryTimeRef.get() != null ?
-                    java.time.Duration.between(entryTimeRef.get(), LocalDateTime.now(TAIPEI_ZONE)).toMinutes() : 0
-            );
-        
-        String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK (2454.TW)\nShares: %d (base %d +%d/20k)", 
-                getBaseStockQuantity(),
-                stockSettingsService.getSettings().getShares(),
-                stockSettingsService.getSettings().getShareIncrement())
-            : String.format("Mode: FUTURES (MTXF)\nContracts: %d", contractScalingService.getMaxContracts());
-        
-        String message = String.format(
-            "📊 BOT STATUS\n" +
-            "━━━━━━━━━━━━━━━━\n" +
-            "State: %s\n" +
-            "%s\n" +
-            "Position: %s\n" +
-            "Equity: %.0f TWD\n" +
-            "30d Profit: %.0f TWD\n" +
-            "Today P&L: %.0f TWD\n" +
-            "Week P&L: %.0f TWD\n" +
-            "News Veto: %s\n" +
-            "━━━━━━━━━━━━━━━━\n" +
-            "Commands: /pause /resume /close /shutdown",
-            state, modeInfo, positionInfo,
-            contractScalingService.getLastEquity(), contractScalingService.getLast30DayProfit(),
-            riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL(),
-            cachedNewsVeto.get() ? "🚨 ACTIVE" : "✅ Clear"
-        );
-        telegramService.sendMessage(message);
-    }
-    
-    private void handlePauseCommand() {
-        tradingPaused = true;
-        log.info("⏸️ Trading paused by user command");
-        telegramService.sendMessage("⏸️ Trading PAUSED\nNo new entries until /resume\nExisting positions will still flatten at 13:00");
-    }
-    
-    void handleResumeCommand() { // package-private for testing
-        if (riskManagementService.isWeeklyLimitHit()) {
-            telegramService.sendMessage("❌ Cannot resume - Weekly loss limit hit\nWait until next Monday");
-            return;
-        }
-        if (riskManagementService.isEarningsBlackout()) {
-            telegramService.sendMessage("❌ Cannot resume - Earnings blackout day\nNo trading today");
-            return;
-        }
-        tradingPaused = false;
-        log.info("▶️ Trading resumed by user command");
-        telegramService.sendMessage("▶️ Trading RESUMED\nBot is active");
-    }
-    
-    private void handleCloseCommand() {
-        if (positionFor(getActiveSymbol()).get() == 0) {
-            telegramService.sendMessage("ℹ️ No position to close");
-            return;
-        }
-        log.info("🔒 Close command received from user");
-        flattenPosition("Closed by user");
-        telegramService.sendMessage("✅ Position closed by user command");
+    private String getActiveSymbol() {
+        return "stock".equals(tradingStateService.getTradingMode()) ? "2454.TW" : "AUTO_EQUITY_TRADER";
     }
     
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
     }
     
+    /**
+     * Main trading loop - executes every 30 seconds.
+     * JUSTIFICATION: Core trading logic that fetches market data, generates signals,
+     * and executes trades. 30s interval balances responsiveness with API rate limits.
+     */
     @Scheduled(fixedRate = 30000)
     public void tradingLoop() {
         // Try to reconnect to bridge if not connected
-        if (!marketDataConnected) {
+        if (!tradingStateService.isMarketDataConnected()) {
             try {
                 String response = restTemplate.getForObject(getBridgeUrl() + "/health", String.class);
                 log.info("✅ Python bridge reconnected: {}", response);
-                marketDataConnected = true;
+                tradingStateService.setMarketDataConnected(true);
                 telegramService.sendMessage("✅ Python bridge reconnected!");
                 
                 // Run pre-market checks now that bridge is available
                 runPreMarketHealthCheck();
-                if ("futures".equals(tradingMode)) {
+                if ("futures".equals(tradingStateService.getTradingMode())) {
                     contractScalingService.updateContractSizing();
                 }
             } catch (Exception e) {
@@ -628,14 +183,14 @@ public class TradingEngine {
             }
         }
         
-        if (emergencyShutdown) return;
+        if (tradingStateService.isEmergencyShutdown()) return;
         
         if (riskManagementService.isEarningsBlackout()) {
             log.debug("📅 Earnings blackout day - no trading");
             return;
         }
         
-        if (riskManagementService.isWeeklyLimitHit() && positionFor(getActiveSymbol()).get() == 0) {
+        if (riskManagementService.isWeeklyLimitHit() && positionManager.getPosition(getActiveSymbol()) == 0) {
             log.debug("🟡 Weekly limit hit - waiting until next Monday");
             return;
         }
@@ -661,35 +216,16 @@ public class TradingEngine {
                 .build();
             
             // Run All Strategies
-            for (IStrategy strategy : activeStrategies) {
-                try {
-                    Portfolio p = strategyPortfolios.get(strategy.getName());
-                    TradeSignal signal = strategy.execute(p, marketData);
-                    
-                    if (signal.getDirection() != TradeSignal.SignalDirection.NEUTRAL) {
-                        log.info("💡 Strategy [{}] Signal: {} ({})", strategy.getName(), signal.getDirection(), signal.getReason());
-                        
-                        // Execute Shadow Trade (Virtual)
-                        executeShadowTrade(strategy.getName(), p, signal, currentPrice);
-                        
-                        // Execute REAL Trade if this is the selected active strategy
-                        if (strategy.getName().equalsIgnoreCase(activeStrategyName)) {
-                            executeRealStrategyTrade(signal, currentPrice);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("Error running strategy {}", strategy.getName(), e);
-                }
-            }
+            strategyManager.executeStrategies(marketData, currentPrice);
             
             if (now.getMinute() % 10 == 0 && now.getSecond() < 30) {
                 updateNewsVetoCache();
             }
             
             // Legacy Bridge Strategy (Default if activeStrategyName is "LegacyBridge")
-            if ("LegacyBridge".equalsIgnoreCase(activeStrategyName)) {
-                if (positionFor(getActiveSymbol()).get() == 0) {
-                    if (!tradingPaused && !riskManagementService.isWeeklyLimitHit()) {
+            if ("LegacyBridge".equalsIgnoreCase(tradingStateService.getActiveStrategyName())) {
+                if (positionManager.getPosition(getActiveSymbol()) == 0) {
+                    if (!tradingStateService.isTradingPaused() && !riskManagementService.isWeeklyLimitHit()) {
                         evaluateEntry(); // Legacy entry logic
                     }
                 } else {
@@ -705,10 +241,10 @@ public class TradingEngine {
     
     void check45MinuteHardExit() { // package-private for testing
         String instrument = getActiveSymbol();
-        AtomicInteger posRef = positionFor(instrument);
-        if (posRef.get() == 0) return;
+        int pos = positionManager.getPosition(instrument);
+        if (pos == 0) return;
         
-        LocalDateTime entryTime = entryTimeFor(instrument).get();
+        LocalDateTime entryTime = positionManager.getEntryTime(instrument);
         if (entryTime == null) return;
         
         long minutesHeld = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
@@ -720,7 +256,7 @@ public class TradingEngine {
                 "⏰ 45-MIN HARD EXIT\\nPosition held %d minutes\\nForce-flattening now!",
                 minutesHeld
             ));
-            flattenPosition("45-minute time limit");
+            orderExecutionService.flattenPosition("45-minute time limit", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
         }
     }
     
@@ -734,8 +270,7 @@ public class TradingEngine {
             String reason = newsData.path("news_reason").asText("");
             double score = newsData.path("news_score").asDouble(0.5);
             
-            cachedNewsVeto.set(veto);
-            cachedNewsReason.set(reason);
+            tradingStateService.setNewsVeto(veto, reason);
             
             if (veto) {
                 log.warn("🚨 News veto ACTIVE: {} (score: {})", reason, score);
@@ -757,14 +292,14 @@ public class TradingEngine {
             telegramService.sendMessage(String.format(
                     "🚨 EMERGENCY SHUTDOWN\\nDaily loss: %.0f TWD\\nFlattening all positions!", 
                     riskManagementService.getDailyPnL()));
-            flattenPosition("Daily loss limit");
-            emergencyShutdown = true;
+            orderExecutionService.flattenPosition("Daily loss limit", getActiveSymbol(), tradingStateService.getTradingMode(), true);
+            tradingStateService.setEmergencyShutdown(true);
         }
     }
     
     void evaluateEntry() throws Exception { // package-private for testing
-        if (cachedNewsVeto.get()) {
-            log.debug("🚨 News veto active (cached) - no entry. Reason: {}", cachedNewsReason.get());
+        if (tradingStateService.isNewsVeto()) {
+            log.debug("🚨 News veto active (cached) - no entry. Reason: {}", tradingStateService.getNewsReason());
             return;
         }
         
@@ -784,9 +319,9 @@ public class TradingEngine {
                 .confidence(confidence)
                 .currentPrice(currentPrice)
                 .exitSignal(false)
-                .symbol("stock".equals(tradingMode) ? "2454.TW" : "AUTO_EQUITY_TRADER")
+                .symbol(getActiveSymbol())
                 .marketData(signalJson)
-                .newsVeto(cachedNewsVeto.get())
+                .newsVeto(tradingStateService.isNewsVeto())
                 .build();
         dataLoggingService.logSignal(signalEntity);
         
@@ -797,19 +332,18 @@ public class TradingEngine {
         
         int quantity = getTradingQuantity();
         String instrument = getActiveSymbol();
+        String tradingMode = tradingStateService.getTradingMode();
         
         // 🚨 CRITICAL: Check account balance before placing BUY orders
         if ("LONG".equals(direction)) {
-            quantity = checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument);
+            quantity = orderExecutionService.checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument, tradingMode);
             if (quantity <= 0) {
                 log.warn("⚠️ Insufficient balance for BUY order - skipping trade");
                 telegramService.sendMessage("⚠️ Insufficient account balance - BUY order skipped");
                 return;
             }
         } else if ("SHORT".equals(direction) && "stock".equals(tradingMode)) {
-            // For stock SHORT orders (which we reject), check if we have shares to sell
-            // This shouldn't happen due to the SHORT rejection above, but safety check
-            quantity = checkBalanceAndAdjustQuantity("SELL", quantity, currentPrice, instrument);
+            quantity = orderExecutionService.checkBalanceAndAdjustQuantity("SELL", quantity, currentPrice, instrument, tradingMode);
             if (quantity <= 0) {
                 log.warn("⚠️ No position to sell - skipping SHORT signal");
                 return;
@@ -817,22 +351,19 @@ public class TradingEngine {
         }
         
         if ("LONG".equals(direction)) {
-            executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false);
+            orderExecutionService.executeOrderWithRetry("BUY", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
         } else if ("SHORT".equals(direction)) {
-            // 🚨 CRITICAL: Taiwan stock market does not allow short selling for retail investors
-            // Only futures (MTXF) support short positions
             if ("stock".equals(tradingMode)) {
                 log.warn("⚠️ SHORT signal ignored - Taiwan retail investors cannot short sell stocks");
                 telegramService.sendMessage("⚠️ SHORT signal received but ignored (retail investors cannot short sell stocks in Taiwan)");
                 return;
             } else {
-                // Futures mode allows short selling - check available margin (like BUY orders)
-                quantity = checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument);
+                quantity = orderExecutionService.checkBalanceAndAdjustQuantity("BUY", quantity, currentPrice, instrument, tradingMode);
                 if (quantity <= 0) {
                     log.warn("⚠️ Insufficient margin for SHORT order - skipping futures SHORT order");
                     return;
                 }
-                executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false);
+                orderExecutionService.executeOrderWithRetry("SELL", quantity, currentPrice, instrument, false, tradingStateService.isEmergencyShutdown());
             }
         }
     }
@@ -843,42 +374,34 @@ public class TradingEngine {
         
         double currentPrice = signal.path("current_price").asDouble(0.0);
         String instrument = getActiveSymbol();
-        AtomicInteger posRef = positionFor(instrument);
-        AtomicReference<Double> entryRef = entryPriceFor(instrument);
-        AtomicReference<LocalDateTime> entryTimeRef = entryTimeFor(instrument);
-        int pos = posRef.get();
-        double entry = entryRef.get();
+        int pos = positionManager.getPosition(instrument);
+        double entry = positionManager.getEntryPrice(instrument);
         
         // ========================================================================
         // MINIMUM HOLD TIME CHECK (Anti-Whipsaw)
-        // Prevent exiting too quickly after entry - give position time to develop
         // ========================================================================
-        LocalDateTime entryTime = entryTimeRef.get();
+        LocalDateTime entryTime = positionManager.getEntryTime(instrument);
         if (entryTime != null) {
             long holdMinutes = java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
             if (holdMinutes < 3) {  // 3-minute minimum hold time
                 log.debug("⏳ Hold time: {} min (min 3 min required before exit evaluation)", holdMinutes);
                 // Only allow stop-loss during minimum hold period
-                double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
+                double multiplier = "stock".equals(tradingStateService.getTradingMode()) ? 1.0 : 50.0;
                 double unrealizedPnL = (currentPrice - entry) * pos * multiplier;
-                double stopLossThreshold = "stock".equals(tradingMode) 
-                    ? -500 * Math.abs(pos)
-                    : -500 * Math.abs(pos);
+                double stopLossThreshold = -500 * Math.abs(pos);
                 if (unrealizedPnL < stopLossThreshold) {
                     log.warn("🛑 Stop-loss hit during hold period: {} TWD", unrealizedPnL);
-                    flattenPosition("Stop-loss");
+                    orderExecutionService.flattenPosition("Stop-loss", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
                 }
                 return;  // Skip normal exit evaluation during minimum hold period
             }
         }
         
         // P&L calculation differs by mode
-        double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0; // MTXF = 50 TWD per point
+        double multiplier = "stock".equals(tradingStateService.getTradingMode()) ? 1.0 : 50.0; // MTXF = 50 TWD per point
         double unrealizedPnL = (currentPrice - entry) * pos * multiplier;
         
-        double stopLossThreshold = "stock".equals(tradingMode) 
-            ? -500 * Math.abs(pos)  // Stock: -500 TWD per unit
-            : -500 * Math.abs(pos); // Futures: -500 TWD per contract
+        double stopLossThreshold = -500 * Math.abs(pos);
         boolean stopLoss = unrealizedPnL < stopLossThreshold;
         boolean exitSignal = signal.path("exit_signal").asBoolean(false);
         
@@ -901,335 +424,44 @@ public class TradingEngine {
         
         if (stopLoss) {
             log.warn("🛑 Stop-loss hit: {} TWD (threshold: {})", unrealizedPnL, stopLossThreshold);
-            flattenPosition("Stop-loss");
+            orderExecutionService.flattenPosition("Stop-loss", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
         } else if (exitSignal) {
             log.info("📈 Exit signal (trend reversal): {} TWD", unrealizedPnL);
-            flattenPosition("Trend reversal");
+            orderExecutionService.flattenPosition("Trend reversal", instrument, tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
         } else if (unrealizedPnL > 0) {
             log.debug("💰 Position running: +{} TWD (no cap, letting it run)", unrealizedPnL);
         }
     }
     
-    /**
-     * Execute order with retry wrapper and quantity bug fix
-     * Fixes the 422 error by ensuring quantity is always sent as string
-     */
-    private void executeOrderWithRetry(String action, int quantity, double price) {
-        executeOrderWithRetry(action, quantity, price, getActiveSymbol(), false);
-    }
-    
-    /**
-     * Execute order with retry wrapper, optional exit flag for cooldown tracking
-     * @param isExit true if this is an exit/close position order (triggers cooldown on bridge)
-     */
-    private void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit) {
-        int maxRetries = 3;
-        int attempt = 0;
-        
-        while (attempt < maxRetries) {
-            try {
-                attempt++;
-                
-                Map<String, Object> orderMap = new HashMap<>();
-                orderMap.put("action", action);
-                orderMap.put("quantity", String.valueOf(quantity)); // Fix: Force string conversion
-                orderMap.put("price", price);
-                orderMap.put("is_exit", isExit); // Signal to bridge to start cooldown
-                
-                log.info("📤 Sending {} order (attempt {}, exit={}): {}", instrument, attempt, isExit, orderMap);
-                String result = restTemplate.postForObject(
-                        getBridgeUrl() + "/order", orderMap, String.class);
-                log.debug("📥 Order response: {}", result);
-                
-                // Success - update position
-                AtomicInteger position = positionFor(instrument);
-                if ("BUY".equals(action)) {
-                    position.addAndGet(quantity);
-                } else {
-                    position.addAndGet(-quantity);
-                }
-
-                if (!isExit) {
-                    entryPriceFor(instrument).set(price);
-                    entryTimeFor(instrument).set(LocalDateTime.now(TAIPEI_ZONE));
-                }
-                
-                telegramService.sendMessage(String.format(
-                        "✅ ORDER FILLED\\n%s %d %s @ %.0f\\nPosition: %d", 
-                        action, quantity, instrument, price, positionFor(instrument).get()));
-                
-                if (!isExit) {
-                    Trade trade = Trade.builder()
-                            .timestamp(LocalDateTime.now(TAIPEI_ZONE))
-                            .action("BUY".equals(action) ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
-                            .quantity(quantity)
-                            .entryPrice(price)
-                            .symbol(instrument)
-                            .reason("Signal execution")
-                            .mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
-                            .status(Trade.TradeStatus.OPEN)
-                            .build();
-                    dataLoggingService.logTrade(trade);
-                }
-                
-                return; // Success - exit retry loop
-                
-            } catch (Exception e) {
-                log.error("❌ Order execution failed (attempt {}): {}", attempt, e.getMessage());
-                
-                if (attempt >= maxRetries) {
-                    telegramService.sendMessage("🚨 Order failed after " + maxRetries + " attempts: " + e.getMessage());
-                    return;
-                }
-                
-                // Exponential backoff: 1s, 2s, 4s
-                try {
-                    Thread.sleep(1000 * (1L << (attempt - 1)));
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-        }
-    }
-    
-    public void flattenPosition(String reason) {
-        String instrument = getActiveSymbol();
-        AtomicInteger posRef = positionFor(instrument);
-        int pos = posRef.get();
-        if (pos == 0) return;
-        
-        String action = pos > 0 ? "SELL" : "BUY";
+    private void runPreMarketHealthCheck() {
         try {
-            String signalJson = restTemplate.getForObject(getBridgeUrl() + "/signal", String.class);
-            JsonNode signal = objectMapper.readTree(signalJson);
-            double currentPrice = signal.path("current_price").asDouble(0.0);
+            java.util.Map<String, Object> testOrder = new java.util.HashMap<>();
+            testOrder.put("action", "BUY");
+            testOrder.put("quantity", String.valueOf(1));
+            testOrder.put("price", 20000.0);
             
-                // Store entry metadata before executeOrderWithRetry overwrites it
-                double originalEntryPrice = entryPriceFor(instrument).get();
-                LocalDateTime entryTime = entryTimeFor(instrument).get();
-            int holdDurationMinutes = entryTime == null ? 0 :
-                    (int) java.time.Duration.between(entryTime, LocalDateTime.now(TAIPEI_ZONE)).toMinutes();
+            String result = restTemplate.postForObject(
+                    getBridgeUrl() + "/order/dry-run", testOrder, String.class);
             
-                executeOrderWithRetry(action, Math.abs(pos), currentPrice, instrument, true); // isExit=true triggers cooldown
-            
-            double multiplier = "stock".equals(tradingMode) ? 1.0 : 50.0;
-            double pnl = (currentPrice - originalEntryPrice) * pos * multiplier;
-                riskManagementService.recordPnL(instrument, pnl, riskSettingsService.getWeeklyLossLimit());
-
-            Trade.TradingMode mode = emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE;
-            dataLoggingService.closeLatestTrade(instrument, mode, currentPrice, pnl, holdDurationMinutes);
-            
-                posRef.set(0);
-                entryTimeFor(instrument).set(null);
-            
-            log.info("🔒 Position flattened - P&L: {} TWD (Reason: {})", pnl, reason);
-            telegramService.sendMessage(String.format(
-                    "🔒 POSITION CLOSED\\nReason: %s\\nP&L: %.0f TWD\\nDaily P&L: %.0f TWD\\nWeekly P&L: %.0f TWD", 
-                    reason, pnl, riskManagementService.getDailyPnL(), riskManagementService.getWeeklyPnL()));
-            
-            if (riskManagementService.isWeeklyLimitHit()) {
-                telegramService.sendMessage(String.format(
-                    "🚨 WEEKLY LOSS LIMIT HIT\\nWeekly P&L: %.0f TWD\\nTrading paused until next Monday!",
-                    riskManagementService.getWeeklyPnL()
-                ));
-            }
-            
-        } catch (Exception e) {
-            log.error("❌ Flatten failed", e);
-        }
-    }
-    
-    @Scheduled(cron = "0 30 13 * * MON-FRI", zone = AppConstants.SCHEDULER_TIMEZONE)
-    public void calculateDailyStatistics() {
-        log.info("📊 Calculating end-of-day statistics...");
-        try {
-            LocalDate today = LocalDate.now(TAIPEI_ZONE);
-            String symbol = getActiveSymbol();
-            endOfDayStatisticsService.calculateAndSaveStatisticsForDay(today, symbol);
-            
-            // Also calculate for all active strategies
-            for (IStrategy strategy : activeStrategies) {
-                // In a real system, we'd track per-strategy stats separately
-                // For now, the main stats cover the aggregate account performance
-            }
-            
-            // Generate LLM Insight
-            generateDailyInsight(today, symbol);
-            
-            sendDailySummary();
-        } catch (Exception e) {
-            log.error("❌ Failed to calculate daily statistics", e);
-        }
-    }
-    
-    private void generateDailyInsight(LocalDate date, String symbol) {
-        try {
-            DailyStatistics stats = dailyStatisticsRepository.findByTradeDateAndSymbol(date, symbol)
-                .orElseThrow(() -> new RuntimeException("No stats found for " + date));
-                
-            String prompt = String.format(
-                "Analyze these trading statistics for %s on %s:\n" +
-                "PnL: %.0f\nTrades: %d\nWin Rate: %.1f%%\n" +
-                "Provide a 1-sentence insight on performance and a 1-sentence recommendation.",
-                symbol, date, stats.getTotalPnL(), stats.getTotalTrades(), stats.getWinRate());
-                
-            String insight = llmService.generateInsight(prompt);
-            stats.setLlamaInsight(insight);
-            stats.setInsightGeneratedAt(LocalDateTime.now(TAIPEI_ZONE));
-            dailyStatisticsRepository.save(stats);
-            log.info("🧠 Generated LLM Insight: {}", insight);
-        } catch (Exception e) {
-            log.error("Failed to generate LLM insight", e);
-        }
-    }
-
-    private void sendDailySummary() {
-        double pnl = riskManagementService.getDailyPnL();
-        String status = pnl > 0 ? "💰 Profitable" : "📉 Loss";
-        String comment = "";
-        
-        // Fetch insight if available
-        String insight = "";
-        try {
-            LocalDate today = LocalDate.now(TAIPEI_ZONE);
-            String symbol = getActiveSymbol();
-            insight = dailyStatisticsRepository.findByTradeDateAndSymbol(today, symbol)
-                .map(DailyStatistics::getLlamaInsight)
-                .orElse("");
-            if (!insight.isEmpty()) {
-                insight = "\n\n🧠 AI Insight:\n" + insight;
+            if (result != null && result.contains("validated")) {
+                log.info("✅ Pre-market health check PASSED: order endpoint working");
+            } else {
+                log.warn("⚠️ Pre-market health check: unexpected response: {}", result);
+                telegramService.sendMessage("⚠️ Pre-market health check: order endpoint returned unexpected response");
             }
         } catch (Exception e) {
-            // ignore
+            log.error("❌ Pre-market health check FAILED: order endpoint broken", e);
+            telegramService.sendMessage("🚨 PRE-MARKET CHECK FAILED!\nOrder endpoint error: " + e.getMessage() + 
+                    "\nOrders may fail during trading session!");
         }
-        
-        if (pnl > 3000) {
-            comment = "\\n🚀 EXCEPTIONAL DAY! Let winners run!";
-        } else if (pnl > 2000) {
-            comment = "\\n🎯 Great performance!";
-        } else if (pnl > 1000) {
-            comment = "\\n✅ Solid day!";
-        }
-        
-        String modeInfo = "stock".equals(tradingMode) 
-            ? String.format("Mode: STOCK\\nShares: %d (base %d +%d/20k)",
-                getBaseStockQuantity(),
-                stockSettingsService.getSettings().getShares(),
-                stockSettingsService.getSettings().getShareIncrement())
-            : String.format("Mode: FUTURES\\nContracts: %d", contractScalingService.getMaxContracts());
-        
-        telegramService.sendMessage(String.format(
-                "📊 DAILY SUMMARY\n" +
-                "━━━━━━━━━━━━━━━━\n" +
-                "%s\n" +
-                "Today P&L: %.0f TWD\n" +
-                "Week P&L: %.0f TWD\n" +
-                "Equity: %.0f TWD\n" +
-                "Status: %s%s\n" +
-                "━━━━━━━━━━━━━━━━\n" +
-                "🚀 NO PROFIT CAPS - Unlimited upside!",
-                modeInfo, pnl, riskManagementService.getWeeklyPnL(),
-                contractScalingService.getLastEquity(), status, comment, insight));
     }
     
-    private void executeRealStrategyTrade(TradeSignal signal, double price) {
-        String symbol = getActiveSymbol();
-        int currentPos = positionFor(symbol).get();
-        
-        // LONG Signal
-        if (signal.getDirection() == TradeSignal.SignalDirection.LONG && currentPos <= 0) {
-            // Close Short if any
-            if (currentPos < 0) {
-                flattenPosition("Strategy Reversal (Short -> Long)");
-            }
-            
-            // Open Long
-            if (positionFor(symbol).get() == 0) {
-                int qty = getTradingQuantity();
-                qty = checkBalanceAndAdjustQuantity("BUY", qty, price, symbol);
-                if (qty > 0) {
-                    executeOrderWithRetry("BUY", qty, price);
-                }
-            }
-        } 
-        // SHORT Signal
-        else if (signal.getDirection() == TradeSignal.SignalDirection.SHORT && currentPos >= 0) {
-            // Close Long if any
-            if (currentPos > 0) {
-                flattenPosition("Strategy Reversal (Long -> Short)");
-            }
-            
-            // Open Short (only if futures mode or margin allowed)
-            if ("futures".equals(tradingMode) && positionFor(symbol).get() == 0) {
-                int qty = getTradingQuantity();
-                qty = checkBalanceAndAdjustQuantity("SELL", qty, price, symbol);
-                if (qty > 0) {
-                    executeOrderWithRetry("SELL", qty, price);
-                }
-            }
+    private int getTradingQuantity() {
+        if ("stock".equals(tradingStateService.getTradingMode())) {
+            return stockSettingsService.getBaseStockQuantity(contractScalingService.getLastEquity());
+        } else {
+            return contractScalingService.getMaxContracts();
         }
-        // EXIT Signal (Explicit Close)
-        else if (signal.isExitSignal() && currentPos != 0) {
-             flattenPosition("Strategy Exit Signal: " + signal.getReason());
-        }
-    }
-
-    private void executeShadowTrade(String strategyName, Portfolio p, TradeSignal signal, double price) {
-        String symbol = getActiveSymbol();
-        int currentPos = p.getPosition(symbol);
-        
-        // LONG Signal
-        if (signal.getDirection() == TradeSignal.SignalDirection.LONG && currentPos <= 0) {
-            // Close Short if any
-            if (currentPos < 0) {
-                double pnl = (p.getEntryPrice(symbol) - price) * Math.abs(currentPos);
-                p.setEquity(p.getEquity() + pnl);
-                p.setPosition(symbol, 0);
-                logShadowTrade(strategyName, "BUY_TO_COVER", Math.abs(currentPos), price, pnl, signal.getReason());
-            }
-            
-            // Open Long
-            int qty = 1; // Fixed 1 unit for shadow tracking
-            p.setPosition(symbol, qty);
-            p.setEntryPrice(symbol, price);
-            logShadowTrade(strategyName, "BUY", qty, price, null, signal.getReason());
-            
-        } 
-        // SHORT Signal
-        else if (signal.getDirection() == TradeSignal.SignalDirection.SHORT && currentPos >= 0) {
-            // Close Long if any
-            if (currentPos > 0) {
-                double pnl = (price - p.getEntryPrice(symbol)) * currentPos;
-                p.setEquity(p.getEquity() + pnl);
-                p.setPosition(symbol, 0);
-                logShadowTrade(strategyName, "SELL", currentPos, price, pnl, signal.getReason());
-            }
-            
-            // Open Short
-            int qty = 1;
-            p.setPosition(symbol, -qty);
-            p.setEntryPrice(symbol, price);
-            logShadowTrade(strategyName, "SELL_SHORT", qty, price, null, signal.getReason());
-        }
-    }
-
-    private void logShadowTrade(String strategyName, String action, int qty, double price, Double pnl, String reason) {
-        Trade trade = Trade.builder()
-            .timestamp(LocalDateTime.now(TAIPEI_ZONE))
-            .action(action.contains("BUY") ? Trade.TradeAction.BUY : Trade.TradeAction.SELL)
-            .quantity(qty)
-            .entryPrice(price)
-            .symbol(getActiveSymbol())
-            .strategyName(strategyName) // Track which strategy did this
-            .reason(reason)
-            .mode(Trade.TradingMode.SIMULATION) // Always SIMULATION for shadow trades
-            .status(Trade.TradeStatus.CLOSED)
-            .realizedPnL(pnl)
-            .build();
-            
-        dataLoggingService.logTrade(trade);
-        log.info("👻 Shadow Trade [{}]: {} {} @ {} (PnL: {})", strategyName, action, qty, price, pnl);
     }
 
     @PreDestroy
@@ -1241,7 +473,7 @@ public class TradingEngine {
         
         // Calculate end-of-day statistics for today on shutdown
         LocalDate today = LocalDate.now(TAIPEI_ZONE);
-        String symbol = "stock".equals(tradingMode) ? "2454.TW" : "AUTO_EQUITY_TRADER";
+        String symbol = getActiveSymbol();
         if (dailyStatisticsRepository.findByTradeDateAndSymbol(today, symbol).isEmpty()) {
             try {
                 log.info("📊 Calculating today's statistics on shutdown...");
@@ -1252,5 +484,9 @@ public class TradingEngine {
         } else {
             log.info("📊 Statistics for {} already exist, skipping calculation on shutdown", today);
         }
+    }
+
+    public void flattenPosition(String reason) {
+        orderExecutionService.flattenPosition(reason, getActiveSymbol(), tradingStateService.getTradingMode(), tradingStateService.isEmergencyShutdown());
     }
 }
