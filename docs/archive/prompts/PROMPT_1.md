@@ -268,7 +268,7 @@ telegram:
 # Ollama LLM
 ollama:
   url: "http://localhost:11434"
-  model: "llama3.1:8b-instruct-q5_K_M"
+  model: "phi3:3.8b"
   timeout-seconds: 30
 
 # Logging
