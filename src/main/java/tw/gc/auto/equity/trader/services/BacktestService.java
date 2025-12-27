@@ -48,6 +48,7 @@ public class BacktestService {
     private final BacktestResultRepository backtestResultRepository;
     private final MarketDataRepository marketDataRepository;
     private final HistoryDataService historyDataService;
+    private final SystemStatusService systemStatusService;
     
     /**
      * Run backtest and persist results to database
@@ -581,7 +582,8 @@ public class BacktestService {
     }
     
     /**
-     * Run parallelized backtest across multiple stocks
+     * Run parallelized backtest across multiple stocks.
+     * Updates SystemStatusService when backtest starts and completes.
      * 
      * Flow:
      * 1. Fetch top 50 stocks using selection criteria
@@ -598,75 +600,81 @@ public class BacktestService {
         
         log.info("🚀 Starting Parallelized Backtest with {} strategies", strategies.size());
         
-        // Step 1: Fetch top 50 stocks
-        List<String> stocks = fetchTop50Stocks();
-        log.info("📊 Selected {} stocks for backtesting", stocks.size());
+        systemStatusService.startBacktest();
         
-        // Step 2: Download historical data for all stocks
-        log.info("📥 Downloading 10 years of historical data for {} stocks...", stocks.size());
-        downloadHistoricalDataForStocks(stocks, 10);
-        
-        // Step 3: Run backtests in parallel
-        log.info("🧪 Running backtests in parallel...");
-        Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
-        
-        ExecutorService executor = Executors.newFixedThreadPool(
-            Math.min(stocks.size(), Runtime.getRuntime().availableProcessors())
-        );
-        
-        List<CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>>> futures = 
-            new ArrayList<>();
-        
-        LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
-        LocalDateTime now = LocalDateTime.now();
-        
-        for (String symbol : stocks) {
-            CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future = 
-                CompletableFuture.supplyAsync(() -> {
-                    try {
-                        // Fetch historical data from database
-                        List<MarketData> history = marketDataRepository
-                            .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
-                                symbol, 
-                                MarketData.Timeframe.DAY_1, 
-                                tenYearsAgo, 
-                                now
-                            );
-                        
-                        if (history.isEmpty()) {
-                            log.warn("⚠️ No historical data found for {}", symbol);
+        try {
+            // Step 1: Fetch top 50 stocks
+            List<String> stocks = fetchTop50Stocks();
+            log.info("📊 Selected {} stocks for backtesting", stocks.size());
+            
+            // Step 2: Download historical data for all stocks
+            log.info("📥 Downloading 10 years of historical data for {} stocks...", stocks.size());
+            downloadHistoricalDataForStocks(stocks, 10);
+            
+            // Step 3: Run backtests in parallel
+            log.info("🧪 Running backtests in parallel...");
+            Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
+            
+            ExecutorService executor = Executors.newFixedThreadPool(
+                Math.min(stocks.size(), Runtime.getRuntime().availableProcessors())
+            );
+            
+            List<CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>>> futures = 
+                new ArrayList<>();
+            
+            LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
+            LocalDateTime now = LocalDateTime.now();
+            
+            for (String symbol : stocks) {
+                CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future = 
+                    CompletableFuture.supplyAsync(() -> {
+                        try {
+                            // Fetch historical data from database
+                            List<MarketData> history = marketDataRepository
+                                .findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+                                    symbol, 
+                                    MarketData.Timeframe.DAY_1, 
+                                    tenYearsAgo, 
+                                    now
+                                );
+                            
+                            if (history.isEmpty()) {
+                                log.warn("⚠️ No historical data found for {}", symbol);
+                                return Map.entry(symbol, new HashMap<String, InMemoryBacktestResult>());
+                            }
+                            
+                            log.info("📊 Running backtest for {} ({} data points)", symbol, history.size());
+                            Map<String, InMemoryBacktestResult> results = runBacktest(strategies, history, initialCapital);
+                            
+                            return Map.entry(symbol, results);
+                            
+                        } catch (Exception e) {
+                            log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage(), e);
                             return Map.entry(symbol, new HashMap<String, InMemoryBacktestResult>());
                         }
-                        
-                        log.info("📊 Running backtest for {} ({} data points)", symbol, history.size());
-                        Map<String, InMemoryBacktestResult> results = runBacktest(strategies, history, initialCapital);
-                        
-                        return Map.entry(symbol, results);
-                        
-                    } catch (Exception e) {
-                        log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage(), e);
-                        return Map.entry(symbol, new HashMap<String, InMemoryBacktestResult>());
-                    }
-                }, executor);
-            
-            futures.add(future);
-        }
-        
-        // Wait for all backtests to complete
-        for (CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future : futures) {
-            try {
-                Map.Entry<String, Map<String, InMemoryBacktestResult>> entry = future.get();
-                allResults.put(entry.getKey(), entry.getValue());
-            } catch (Exception e) {
-                log.error("❌ Failed to retrieve backtest result: {}", e.getMessage(), e);
+                    }, executor);
+                
+                futures.add(future);
             }
+            
+            // Wait for all backtests to complete
+            for (CompletableFuture<Map.Entry<String, Map<String, InMemoryBacktestResult>>> future : futures) {
+                try {
+                    Map.Entry<String, Map<String, InMemoryBacktestResult>> entry = future.get();
+                    allResults.put(entry.getKey(), entry.getValue());
+                } catch (Exception e) {
+                    log.error("❌ Failed to retrieve backtest result: {}", e.getMessage(), e);
+                }
+            }
+            
+            executor.shutdown();
+            
+            log.info("✅ Parallelized backtest completed. {} stocks tested.", allResults.size());
+            
+            return allResults;
+        } finally {
+            systemStatusService.completeBacktest();
         }
-        
-        executor.shutdown();
-        
-        log.info("✅ Parallelized backtest completed. {} stocks tested.", allResults.size());
-        
-        return allResults;
     }
     
     /**

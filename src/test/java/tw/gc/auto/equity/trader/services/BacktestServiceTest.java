@@ -12,12 +12,14 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class BacktestServiceTest {
 
     private BacktestService backtestService;
     private List<MarketData> historicalData;
     private List<IStrategy> strategies;
+    private SystemStatusService mockSystemStatusService;
 
     @BeforeEach
     void setUp() {
@@ -27,7 +29,10 @@ class BacktestServiceTest {
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class);
         HistoryDataService mockHistoryService = 
             org.mockito.Mockito.mock(HistoryDataService.class);
-        backtestService = new BacktestService(mockRepo, mockMarketDataRepo, mockHistoryService);
+        mockSystemStatusService = org.mockito.Mockito.mock(SystemStatusService.class);
+        when(mockSystemStatusService.startBacktest()).thenReturn(true);
+        
+        backtestService = new BacktestService(mockRepo, mockMarketDataRepo, mockHistoryService, mockSystemStatusService);
         strategies = new ArrayList<>();
         strategies.add(new RSIStrategy(14, 70, 30));
 

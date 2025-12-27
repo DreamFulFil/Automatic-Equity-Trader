@@ -50,6 +50,7 @@ public class HistoryDataService {
     private final ObjectMapper objectMapper;
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
+    private final SystemStatusService systemStatusService;
     
     // Flag to ensure truncation happens only once per backtest run
     private final AtomicBoolean tablesCleared = new AtomicBoolean(false);
@@ -79,7 +80,8 @@ public class HistoryDataService {
                               ObjectMapper objectMapper,
                               DataSource dataSource,
                               JdbcTemplate jdbcTemplate,
-                              org.springframework.transaction.PlatformTransactionManager transactionManager) {
+                              org.springframework.transaction.PlatformTransactionManager transactionManager,
+                              SystemStatusService systemStatusService) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
         this.strategyStockMappingRepository = strategyStockMappingRepository;
@@ -88,11 +90,13 @@ public class HistoryDataService {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
         this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        this.systemStatusService = systemStatusService;
     }
     
     /**
      * Download historical data for multiple stocks concurrently using Virtual Threads.
      * Uses a single global writer thread to prevent database connection contention.
+     * Updates SystemStatusService when download starts and completes.
      * 
      * @param symbols List of stock symbols to download
      * @param years Number of years of history
@@ -101,80 +105,86 @@ public class HistoryDataService {
     public Map<String, DownloadResult> downloadHistoricalDataForMultipleStocks(List<String> symbols, int years) {
         log.info("🚀 Starting concurrent download for {} stocks, {} years each", symbols.size(), years);
         
-        truncateTablesIfNeeded();
-        
-        BlockingQueue<HistoricalDataPoint> globalQueue = new ArrayBlockingQueue<>(GLOBAL_QUEUE_CAPACITY);
-        AtomicBoolean allDownloadsComplete = new AtomicBoolean(false);
-        AtomicInteger totalInserted = new AtomicInteger(0);
-        CountDownLatch writerLatch = new CountDownLatch(1);
-        
-        // Start single global writer thread
-        Thread globalWriter = Thread.ofPlatform()
-            .name("GlobalHistoryWriter")
-            .start(() -> {
-                try {
-                    int inserted = runGlobalWriter(globalQueue, allDownloadsComplete);
-                    totalInserted.set(inserted);
-                    log.info("✅ Global writer completed. Total inserted: {}", inserted);
-                } catch (Exception e) {
-                    log.error("❌ Global writer failed: {}", e.getMessage(), e);
-                } finally {
-                    writerLatch.countDown();
-                }
-            });
-        
-        // Semaphore to limit concurrent downloads
-        Semaphore downloadPermits = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
-        Map<String, DownloadResult> results = new HashMap<>();
-        Map<String, AtomicInteger> symbolCounts = new HashMap<>();
-        
-        symbols.forEach(s -> symbolCounts.put(s, new AtomicInteger(0)));
-        
-        // Launch Virtual Threads for each stock download
-        try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<Void>> futures = symbols.stream()
-                .map(symbol -> CompletableFuture.runAsync(() -> {
-                    try {
-                        downloadPermits.acquire();
-                        try {
-                            int downloaded = downloadStockData(symbol, years, globalQueue, symbolCounts.get(symbol));
-                            synchronized (results) {
-                                results.put(symbol, new DownloadResult(symbol, downloaded, 0, 0));
-                            }
-                        } finally {
-                            downloadPermits.release();
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        log.error("❌ Download interrupted for {}", symbol);
-                    } catch (Exception e) {
-                        log.error("❌ Download failed for {}: {}", symbol, e.getMessage());
-                        synchronized (results) {
-                            results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
-                        }
-                    }
-                }, virtualExecutor))
-                .collect(Collectors.toList());
-            
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        }
-        
-        allDownloadsComplete.set(true);
+        systemStatusService.startHistoryDownload();
         
         try {
-            if (!writerLatch.await(10, TimeUnit.MINUTES)) {
-                log.warn("⚠️ Global writer timed out");
+            truncateTablesIfNeeded();
+            
+            BlockingQueue<HistoricalDataPoint> globalQueue = new ArrayBlockingQueue<>(GLOBAL_QUEUE_CAPACITY);
+            AtomicBoolean allDownloadsComplete = new AtomicBoolean(false);
+            AtomicInteger totalInserted = new AtomicInteger(0);
+            CountDownLatch writerLatch = new CountDownLatch(1);
+            
+            // Start single global writer thread
+            Thread globalWriter = Thread.ofPlatform()
+                .name("GlobalHistoryWriter")
+                .start(() -> {
+                    try {
+                        int inserted = runGlobalWriter(globalQueue, allDownloadsComplete);
+                        totalInserted.set(inserted);
+                        log.info("✅ Global writer completed. Total inserted: {}", inserted);
+                    } catch (Exception e) {
+                        log.error("❌ Global writer failed: {}", e.getMessage(), e);
+                    } finally {
+                        writerLatch.countDown();
+                    }
+                });
+            
+            // Semaphore to limit concurrent downloads
+            Semaphore downloadPermits = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
+            Map<String, DownloadResult> results = new HashMap<>();
+            Map<String, AtomicInteger> symbolCounts = new HashMap<>();
+            
+            symbols.forEach(s -> symbolCounts.put(s, new AtomicInteger(0)));
+            
+            // Launch Virtual Threads for each stock download
+            try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+                List<CompletableFuture<Void>> futures = symbols.stream()
+                    .map(symbol -> CompletableFuture.runAsync(() -> {
+                        try {
+                            downloadPermits.acquire();
+                            try {
+                                int downloaded = downloadStockData(symbol, years, globalQueue, symbolCounts.get(symbol));
+                                synchronized (results) {
+                                    results.put(symbol, new DownloadResult(symbol, downloaded, 0, 0));
+                                }
+                            } finally {
+                                downloadPermits.release();
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            log.error("❌ Download interrupted for {}", symbol);
+                        } catch (Exception e) {
+                            log.error("❌ Download failed for {}: {}", symbol, e.getMessage());
+                            synchronized (results) {
+                                results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
+                            }
+                        }
+                    }, virtualExecutor))
+                    .collect(Collectors.toList());
+                
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            
+            allDownloadsComplete.set(true);
+            
+            try {
+                if (!writerLatch.await(10, TimeUnit.MINUTES)) {
+                    log.warn("⚠️ Global writer timed out");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            // Update results with actual inserted counts
+            int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
+            log.info("✅ Multi-stock download complete. {} stocks, {} downloaded, {} inserted",
+                symbols.size(), totalDownloaded, totalInserted.get());
+            
+            return results;
+        } finally {
+            systemStatusService.completeHistoryDownload();
         }
-        
-        // Update results with actual inserted counts
-        int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
-        log.info("✅ Multi-stock download complete. {} stocks, {} downloaded, {} inserted",
-            symbols.size(), totalDownloaded, totalInserted.get());
-        
-        return results;
     }
     
     /**

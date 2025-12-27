@@ -1,5 +1,8 @@
 package tw.gc.auto.equity.trader.controllers;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,8 +12,9 @@ import tw.gc.auto.equity.trader.services.SystemStatusService;
 
 /**
  * Status Controller
- * Provides a simple boolean status endpoint for system health monitoring.
+ * Provides status endpoint for tracking long-running operations.
  * 
+ * Reports whether historical data download and/or backtesting are in progress.
  * Uses atomic state management via SystemStatusService for thread-safe operations.
  */
 @RestController
@@ -22,14 +26,35 @@ public class StatusController {
     private final SystemStatusService systemStatusService;
 
     /**
-     * Get system operational status.
+     * Get operation status.
      * 
-     * @return true if all systems are operational, false otherwise
+     * @return OperationStatus with download and backtest running flags
      */
     @GetMapping("/status")
-    public boolean getStatus() {
-        boolean status = systemStatusService.isSystemHealthy();
-        log.debug("Status check: {}", status);
-        return status;
+    public OperationStatus getStatus() {
+        boolean downloadRunning = systemStatusService.isHistoryDownloadRunning();
+        boolean backtestRunning = systemStatusService.isBacktestRunning();
+        boolean anyOperationRunning = downloadRunning || backtestRunning;
+        
+        log.debug("Status check: download={}, backtest={}", downloadRunning, backtestRunning);
+        
+        return new OperationStatus(
+            anyOperationRunning,
+            downloadRunning,
+            backtestRunning,
+            systemStatusService.getHistoryDownloadStartTime(),
+            systemStatusService.getBacktestStartTime()
+        );
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OperationStatus {
+        private boolean operationRunning;
+        private boolean historyDownloadRunning;
+        private boolean backtestRunning;
+        private long historyDownloadStartTime;
+        private long backtestStartTime;
     }
 }
