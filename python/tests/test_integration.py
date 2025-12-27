@@ -144,7 +144,7 @@ class TestOllamaIntegration:
     
     def test_news_endpoint_returns_veto_decision(self):
         """GET /signal/news should return news analysis"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)  # Must be > Ollama timeout (15s)
         
         assert r.status_code == 200
         data = r.json()
@@ -157,8 +157,8 @@ class TestOllamaIntegration:
         assert "timestamp" in data
     
     def test_news_endpoint_handles_empty_headlines(self):
-        """News endpoint should work even with no headlines"""
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=10)
+        """News endpoint should work even with no headlines - uses cache"""
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=5)  # Should hit cache from first test
         
         assert r.status_code == 200
         data = r.json()
