@@ -54,6 +54,23 @@
 
 **Release workflow note:** For release steps and required release body format, refer to the prompt templates at `.github/prompts/commit.prompt.md` and `.github/prompts/release.prompt.md` and use `./scripts/operational/bump-version.sh` to perform the version bump and tag.
 
+**Enforced process & no-fallback rule:** Do not use ad-hoc or fallback shell scripts to perform commit message validation, `VERSION` updates, or release publishing. Always follow the prompts and helpers:
+- For commits and commit formatting, use `.github/prompts/commit.prompt.md` and follow the Conventional Commits rules described there.
+- For release creation and release-body format, use `.github/prompts/release.prompt.md` and the helper scripts under `scripts/operational` (e.g., `bump-version.sh`, `create-release.sh`, `update-release-body.sh`).
+
+To help enforce this policy, this repository includes a local Git hook and a validation script (`scripts/operational/validate-commit-and-version.sh`) which:
+- Validates commit messages conform to Conventional Commits, and
+- For minor-bump commit types (`feat`, `perf`, `refactor`), ensures an updated `VERSION` file is staged in the commit. If not, the hook will block the commit and instruct you to run `./scripts/operational/bump-version.sh minor` and stage the `VERSION` change.
+
+Enable the hook locally with:
+```bash
+# Set hooks path once per clone
+git config core.hooksPath .githooks
+# Ensure commit-msg hook is executable
+chmod +x .githooks/commit-msg
+```
+This prevents accidental omission of `VERSION` bumps and ensures releases are created using the documented prompts and helpers.
+
 **Test Protection Policy**
 * **Coverage:** Unit tests are mandatory for every Java or Python code change.
 * **Integration Testing:** Required for interactions with external components. Mocks are permitted if the external interaction is resource-heavy.
