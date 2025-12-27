@@ -52,7 +52,8 @@ Trade 1–6 MTXF contracts during the 11:30–13:00 lunch window with AI news fi
 | Pre-market health check (order dry-run) | Implemented | Yes |
 | Clean JSON earnings file (no manual YAML) | Implemented | Yes |
 | Two separate crontabs (09:00 scraper + 11:15 bot) | Implemented | Yes |
-| Comprehensive test suite (283 tests) | Implemented | Yes |
+| **Intra-day self-healing supervisor (Phase 2)** | **Implemented** | **Yes** |
+| Comprehensive test suite (403 tests) | Implemented | Yes |
 
 ---
 
@@ -468,6 +469,57 @@ Commands: /pause /resume /close
 
 ---
 
+## 🔄 System Robustness & Self-Healing
+
+### Phase 2: Intra-Day Self-Healing (December 2025)
+
+The bot includes a **process supervisor** that automatically restarts the Python bridge if it crashes during trading hours, ensuring continuous operation without manual intervention.
+
+#### How It Works
+
+1. **Supervisor Loop**: The `start-lunch-bot.fish` script wraps the Python bridge in a supervision loop
+2. **Crash Detection**: If the Python process terminates unexpectedly, the supervisor detects it immediately
+3. **Auto-Restart**: The bridge is automatically restarted after a 5-second delay
+4. **Logging**: All restarts are logged to `logs/supervisor.log` with timestamps and exit codes
+5. **Graceful Shutdown**: Stop-file mechanism (`logs/supervisor.stop`) ensures clean shutdown at 13:00
+
+#### Robustness Timeline
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| **Phase 1** | Daily resilience (startup cleanup, resource limits) | ✅ Deployed Nov 2025 |
+| **Phase 2** | Intra-day self-healing supervisor | ✅ Deployed Dec 2025 |
+| **Future** | Circuit breaker for repeated crashes | Planned |
+
+#### Key Benefits
+
+- **Zero Downtime**: Python bridge crashes no longer kill the entire trading session
+- **Automatic Recovery**: Restarts happen within seconds without human intervention
+- **Visibility**: All crash events and restarts are logged and visible
+- **Tested**: 12 new supervisor tests ensure reliability (403 total tests)
+
+### Process Lifecycle
+
+```
+11:15 → Bot starts
+     ├─ Cleanup old processes
+     ├─ Set ulimit -n 16384
+     ├─ Start Ollama
+     └─ Start supervisor loop
+          └─ while [no stop file]:
+               ├─ Run Python bridge
+               ├─ If crash: log + wait 5s + restart
+               └─ If stop file: exit cleanly
+
+13:00 → Java exits
+     ├─ Create stop file
+     ├─ POST /shutdown to bridge
+     ├─ Wait for supervisor exit
+     └─ Kill Ollama
+```
+
+---
+
 ## 🛡 Risk Management & Safety
 
 ### Hard Limits (Always Active)
@@ -556,17 +608,16 @@ grep "P&L" logs/mtxf-bot.log
 
 ### Comprehensive Test Suite
 
-The project includes a complete testing suite with **283 tests** covering all components.
+The project includes a complete testing suite with **403 tests** covering all components.
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| **Java Unit Tests** | 138 | TradingEngine, RiskManagement, ContractScaling, Telegram |
-| **Java Integration Tests** | 30 | Java-Python bridge communication, order flow |
-| **Python Unit Tests** | 58 | Bridge logic, contract validation, config decryption |
+| **Java Integration Tests** | 108 | Java-Python bridge communication, order flow |
+| **Python Unit Tests** | 59 | Bridge logic, contract validation, config decryption |
 | **Python Integration Tests** | 24 | Real bridge endpoints, Ollama integration |
 | **E2E Tests** | 18 | Full trading session simulation |
-| **Fish Shell Tests** | 15 | Startup script, environment validation |
-| **Total** | **283** | |
+| **Fish Shell Tests** | 27 | Startup script, supervisor, environment validation |
+| **Total** | **403** | |
 
 ### Running All Tests
 

@@ -129,18 +129,61 @@ else
     echo -e "$GREEN📅 Earnings blackout dates loaded$NC"
 end
 
-# Step 6: Create logs directory
+# Step 6: Create logs directory and stop-file for supervision
 mkdir -p logs
 
-# Step 7: Start Python bridge (Fish background job)
-echo "6️⃣ Starting Python bridge..."
-cd python
-source venv/bin/activate.fish  # Fish activation
-set -x JASYPT_PASSWORD $JASYPT_SECRET
-nohup python3 bridge.py > ../logs/python-bridge.log 2>&1 &
-set PYTHON_PID $last_pid
-echo -e "$GREEN✅ Python bridge started (PID: $PYTHON_PID)$NC"
-cd ..
+# Remove any existing stop-file from previous runs
+set STOP_FILE "$BOT_DIR/logs/supervisor.stop"
+rm -f $STOP_FILE
+
+# Step 7: Start Python bridge with supervision loop (Fish background job)
+echo "6️⃣ Starting Python bridge with intra-day supervision..."
+
+# Supervisor function that runs in background
+function supervise_python_bridge
+    set -l BOT_DIR $argv[1]
+    set -l JASYPT_SECRET $argv[2]
+    set -l STOP_FILE "$BOT_DIR/logs/supervisor.stop"
+    
+    cd $BOT_DIR/python
+    source venv/bin/activate.fish
+    
+    set -l restart_count 0
+    set -l GREEN '\033[0;32m'
+    set -l YELLOW '\033[1;33m'
+    set -l RED '\033[0;31m'
+    set -l NC '\033[0m'
+    
+    while not test -f $STOP_FILE
+        echo "🔄 [Supervisor] Starting Python bridge (attempt "(math $restart_count + 1)")..." >> $BOT_DIR/logs/supervisor.log
+        
+        set -x JASYPT_PASSWORD $JASYPT_SECRET
+        python3 bridge.py >> $BOT_DIR/logs/python-bridge.log 2>&1
+        set -l exit_code $status
+        
+        # Check if stop was requested
+        if test -f $STOP_FILE
+            echo "✅ [Supervisor] Stop file detected, exiting supervision loop." >> $BOT_DIR/logs/supervisor.log
+            break
+        end
+        
+        # Bridge crashed unexpectedly
+        set restart_count (math $restart_count + 1)
+        echo "⚠️ [Supervisor] Python bridge crashed with exit code $exit_code. Restarting in 5 seconds... (restart #$restart_count)" >> $BOT_DIR/logs/supervisor.log
+        
+        # Log to main output as well for visibility
+        echo -e "$YELLOW⚠️ Python bridge crashed! Auto-restarting in 5s... (restart #$restart_count)$NC"
+        
+        sleep 5
+    end
+    
+    echo "🛑 [Supervisor] Supervision loop terminated." >> $BOT_DIR/logs/supervisor.log
+end
+
+# Start the supervisor in the background
+supervise_python_bridge $BOT_DIR $JASYPT_SECRET &
+set SUPERVISOR_PID $last_pid
+echo -e "$GREEN✅ Python bridge supervisor started (PID: $SUPERVISOR_PID)$NC"
 
 # Wait for bridge to be ready (more reliable)
 echo "Waiting for Python bridge..."
@@ -173,7 +216,11 @@ set JAVA_EXIT_CODE $status
 echo ""
 echo "☕ Java application exited with code: $JAVA_EXIT_CODE"
 
-# --- START: New and improved shutdown logic ---
+# --- START: New and improved shutdown logic with supervisor ---
+
+# Signal the supervisor to stop by creating the stop file
+echo "🛑 Signaling supervisor to stop..."
+touch $STOP_FILE
 
 # Cleanup: Stop Python bridge via its own API
 echo "🐍 Requesting graceful shutdown of Python bridge via API..."
@@ -181,27 +228,35 @@ echo "🐍 Requesting graceful shutdown of Python bridge via API..."
 set -l response_code (/usr/bin/curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8888/shutdown)
 
 if test $response_code -eq 200
-    echo "✅ Python bridge accepted shutdown request. Waiting for it to exit..."
-    # Wait up to 10 seconds for the process to terminate
+    echo "✅ Python bridge accepted shutdown request. Waiting for supervisor to exit..."
+    # Wait up to 15 seconds for the supervisor to terminate
     set -l wait_time 0
-    while kill -0 $PYTHON_PID 2>/dev/null
-        if test $wait_time -ge 10
-            echo "⚠️ Python bridge did not exit after 10s. Force killing..."
+    while kill -0 $SUPERVISOR_PID 2>/dev/null
+        if test $wait_time -ge 15
+            echo "⚠️ Supervisor did not exit after 15s. Force killing..."
             # Use absolute path for kill for cron robustness
-            /usr/bin/kill -9 $PYTHON_PID 2>/dev/null
+            /usr/bin/kill -9 $SUPERVISOR_PID 2>/dev/null
+            # Also kill any remaining Python bridge processes
+            for pid in (/usr/bin/pgrep -f "python3 bridge.py")
+                /usr/bin/kill -9 $pid 2>/dev/null
+            end
             break
         end
         sleep 1
         set wait_time (math $wait_time + 1)
     end
 else
-    echo "⚠️ Python bridge did not respond to shutdown command (HTTP: $response_code). Force killing..."
+    echo "⚠️ Python bridge did not respond to shutdown command (HTTP: $response_code). Force killing supervisor..."
     # Use absolute path for kill for cron robustness
-    /usr/bin/kill -9 $PYTHON_PID 2>/dev/null
+    /usr/bin/kill -9 $SUPERVISOR_PID 2>/dev/null
+    # Also kill any remaining Python bridge processes
+    for pid in (/usr/bin/pgrep -f "python3 bridge.py")
+        /usr/bin/kill -9 $pid 2>/dev/null
+    end
 end
 
-if not kill -0 $PYTHON_PID 2>/dev/null
-    echo "✅ Python bridge has stopped."
+if not kill -0 $SUPERVISOR_PID 2>/dev/null
+    echo "✅ Supervisor and Python bridge have stopped."
 end
 
 # Stop Ollama service
@@ -209,15 +264,26 @@ echo "🦙 Stopping Ollama service..."
 # Use absolute path for pkill for cron robustness
 /usr/bin/pkill -x ollama 2>/dev/null
 
+# Clean up the stop file
+rm -f $STOP_FILE
+
 echo "✅ All services stopped. Goodbye!"
 
-# --- END: New and improved shutdown logic ---
+# --- END: New and improved shutdown logic with supervisor ---
 
 # Cleanup on manual interrupt (Ctrl+C)
 function cleanup --on-signal INT --on-signal TERM
     echo ""
     echo "🛑 Manual shutdown requested..."
-    kill $PYTHON_PID 2>/dev/null
+    # Create stop file to signal supervisor
+    touch $STOP_FILE
+    # Kill supervisor and any Python bridge processes
+    kill $SUPERVISOR_PID 2>/dev/null
+    for pid in (/usr/bin/pgrep -f "python3 bridge.py")
+        /usr/bin/kill -9 $pid 2>/dev/null
+    end
     pkill -x ollama 2>/dev/null
+    # Clean up stop file
+    rm -f $STOP_FILE
     exit
 end

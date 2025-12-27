@@ -357,9 +357,19 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}Phase 4: Fish Shell Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
+# Run both fish test files
 FISH_OUTPUT=$(fish tests/fish/test_start_script.fish 2>&1) || true
+FISH_SUPERVISOR_OUTPUT=$(fish tests/fish/test_supervisor.fish 2>&1) || true
 
-read FISH_PASSED FISH_FAILED FISH_SKIPPED <<< $(parse_fish_results "$FISH_OUTPUT")
+# Combine outputs
+COMBINED_FISH_OUTPUT="${FISH_OUTPUT}${FISH_SUPERVISOR_OUTPUT}"
+
+read FISH_PASSED_1 FISH_FAILED_1 FISH_SKIPPED_1 <<< $(parse_fish_results "$FISH_OUTPUT")
+read FISH_PASSED_2 FISH_FAILED_2 FISH_SKIPPED_2 <<< $(parse_fish_results "$FISH_SUPERVISOR_OUTPUT")
+
+FISH_PASSED=$((FISH_PASSED_1 + FISH_PASSED_2))
+FISH_FAILED=$((FISH_FAILED_1 + FISH_FAILED_2))
+FISH_SKIPPED=$((FISH_SKIPPED_1 + FISH_SKIPPED_2))
 
 if [ "${FISH_FAILED:-0}" -eq 0 ]; then
     echo -e "${GREEN}Fish shell tests passed${NC}"
