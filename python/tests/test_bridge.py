@@ -23,6 +23,7 @@ from bridge import (
     decrypt_config_value,
     fetch_news_headlines,
     call_llama_news_veto,
+    send_telegram_message,
     OrderRequest,
 )
 
@@ -205,6 +206,106 @@ class TestSignalGeneration:
         # Avg of last 60 / 2: (10*30 + 20*30) / 2 = 450
         # Ratio: 600/450 = 1.33
         assert volume_ratio > 1.3  # Should indicate volume surge
+
+
+class TestTelegramNotification:
+    """Tests for Telegram notification functionality"""
+    
+    @patch('bridge.requests.post')
+    @patch('bridge.open', create=True)
+    @patch('bridge.yaml.safe_load')
+    def test_send_telegram_success(self, mock_yaml, mock_open, mock_post):
+        """Should send Telegram message successfully"""
+        # Mock config file
+        mock_config = {
+            'telegram': {
+                'bot-token': 'ENC(test_token)',
+                'chat-id': 'ENC(test_chat)'
+            }
+        }
+        mock_yaml.return_value = mock_config
+        
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+        
+        with patch('bridge.decrypt_config_value') as mock_decrypt:
+            mock_decrypt.side_effect = ['decrypted_token', 'decrypted_chat']
+            result = send_telegram_message("Test message", "password")
+        
+        assert result is True
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+        assert 'sendMessage' in call_args[0][0]
+        assert call_args[1]['json']['text'] == "Test message"
+        assert call_args[1]['json']['parse_mode'] == "HTML"
+    
+    @patch('bridge.requests.post')
+    @patch('bridge.open', create=True)
+    @patch('bridge.yaml.safe_load')
+    def test_send_telegram_missing_config(self, mock_yaml, mock_open, mock_post):
+        """Should handle missing Telegram config gracefully"""
+        mock_config = {}
+        mock_yaml.return_value = mock_config
+        
+        result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+        mock_post.assert_not_called()
+    
+    @patch('bridge.requests.post')
+    @patch('bridge.open', create=True)
+    @patch('bridge.yaml.safe_load')
+    def test_send_telegram_missing_credentials(self, mock_yaml, mock_open, mock_post):
+        """Should handle missing credentials gracefully"""
+        mock_config = {
+            'telegram': {
+                'bot-token': None,
+                'chat-id': None
+            }
+        }
+        mock_yaml.return_value = mock_config
+        
+        with patch('bridge.decrypt_config_value') as mock_decrypt:
+            mock_decrypt.return_value = None
+            result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+        mock_post.assert_not_called()
+    
+    @patch('bridge.requests.post')
+    @patch('bridge.open', create=True)
+    @patch('bridge.yaml.safe_load')
+    def test_send_telegram_api_failure(self, mock_yaml, mock_open, mock_post):
+        """Should handle Telegram API failures gracefully"""
+        mock_config = {
+            'telegram': {
+                'bot-token': 'test_token',
+                'chat-id': 'test_chat'
+            }
+        }
+        mock_yaml.return_value = mock_config
+        
+        # Mock failed response
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_post.return_value = mock_response
+        
+        with patch('bridge.decrypt_config_value') as mock_decrypt:
+            mock_decrypt.side_effect = ['token', 'chat']
+            result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+    
+    @patch('bridge.requests.post')
+    @patch('bridge.open', side_effect=FileNotFoundError)
+    def test_send_telegram_config_file_missing(self, mock_open, mock_post):
+        """Should handle missing config file gracefully"""
+        result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+        mock_post.assert_not_called()
 
 
 class TestEarningsScraper:

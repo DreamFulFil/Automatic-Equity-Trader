@@ -4,19 +4,33 @@
 # Usage: fish start-lunch-bot.fish <jasypt-secret>
 ###############################################################################
 
-# --- Robust Cleanup of previous runs ---
+# --- ROBUST Cleanup: Only use POSIX-compliant kill commands ---
 echo "🧹 Cleaning up leftover processes from previous runs..."
-# Kill Python bridge processes (matching the full command line)
-for pid in (pgrep -f "python3 bridge.py")
-    echo "  Killing old Python bridge process: $pid"
-    kill -9 $pid > /dev/null 2>&1
+
+# Kill Python bridge processes (ROBUST: verify PID exists before killing)
+for pid in (pgrep -f "python.*bridge.py" 2>/dev/null || echo "")
+    if test -n "$pid"
+        echo "  Killing old Python bridge process: $pid"
+        /bin/kill -9 $pid 2>/dev/null || true
+    end
 end
 
-# Kill Ollama server processes (matching the executable name)
-for pid in (pgrep -x ollama)
-    echo "  Killing old Ollama process: $pid"
-    kill -9 $pid > /dev/null 2>&1
+# Kill Ollama server processes (ROBUST: verify PID exists)
+for pid in (pgrep -x ollama 2>/dev/null || echo "")
+    if test -n "$pid"
+        echo "  Killing old Ollama process: $pid"
+        /bin/kill -9 $pid 2>/dev/null || true
+    end
 end
+
+# Kill any leftover Java MTXF processes
+for pid in (pgrep -f "java.*mtxf-bot" 2>/dev/null || echo "")
+    if test -n "$pid"
+        echo "  Killing old Java bot process: $pid"
+        /bin/kill -9 $pid 2>/dev/null || true
+    end
+end
+
 echo "🧹 Cleanup complete."
 # --- End Cleanup ---
 
@@ -33,11 +47,34 @@ end
 
 set JASYPT_SECRET $argv[1]
 
-set BOT_DIR (dirname (status --current-filename))
+set BOT_DIR (cd (dirname (status --current-filename)) && pwd)
 cd $BOT_DIR
 
-# Set JAVA_HOME for Maven (critical for cron environment)
-set -x JAVA_HOME /Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home
+# Use jenv for Java version management (ROBUST: works in cron + CI + local)
+set -x PATH $HOME/.jenv/shims $PATH
+if command -v jenv > /dev/null
+    # Use jenv exec for all Java commands (most stable)
+    set -x JAVA_HOME (jenv javahome)
+    # Verify Java 21 is active
+    if not jenv version | grep -q "21.0"
+        echo "⚠️ Warning: jenv not using Java 21, setting explicitly..."
+        jenv local 21.0 > /dev/null 2>&1 || true
+        set -x JAVA_HOME (jenv javahome)
+    end
+else
+    # Fallback to direct JAVA_HOME (for CI or systems without jenv)
+    if test -d /Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home
+        set -x JAVA_HOME /Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home
+    else if test -d /usr/lib/jvm/java-21-openjdk-amd64
+        set -x JAVA_HOME /usr/lib/jvm/java-21-openjdk-amd64
+    else
+        echo "❌ Java 21 not found! Install via: brew install openjdk@21"
+        exit 1
+    end
+end
+
+# Ensure Java is in PATH
+set -x PATH $JAVA_HOME/bin $PATH
 
 echo "🚀 MTXF Lunch Bot Launcher (Fish Shell)"
 echo "========================================"
@@ -50,14 +87,22 @@ set -l RED '\033[0;31m'
 set -l YELLOW '\033[1;33m'
 set -l NC '\033[0m' # No Color
 
-# Step 1: Check Java 21
+# Step 1: Check Java 21 (ROBUST: works with or without jenv)
 echo "1️⃣ Checking Java 21..."
-if not java -version 2>&1 | grep -q "version \"21"
+set JAVA_CMD "java"
+if command -v jenv > /dev/null
+    # Use jenv exec for stability in cron
+    set JAVA_CMD "jenv exec java"
+end
+
+if not eval $JAVA_CMD -version 2>&1 | grep -q "version \"21"
     echo -e "$RED❌ Java 21 not found!$NC"
     echo "Install via: brew install openjdk@21"
+    echo "Current Java version:"
+    eval $JAVA_CMD -version
     exit 1
 end
-echo -e "$GREEN✅ Java 21 detected$NC"
+echo -e "$GREEN✅ Java 21 detected (using: $JAVA_CMD)$NC"
 
 # Step 2: Check Python 3.10+
 echo "2️⃣ Checking Python..."
@@ -113,11 +158,16 @@ if not curl -s http://localhost:11434/api/tags | grep -q "llama3.1"
 end
 echo -e "$GREEN✅ Ollama + Llama 3.1 ready$NC"
 
-# Step 5: Build Java app
+# Step 5: Build Java app (ROBUST: use jenv exec mvn if available)
 echo "5️⃣ Building Java application..."
+set MVN_CMD "mvn"
+if command -v jenv > /dev/null
+    set MVN_CMD "jenv exec mvn"
+end
+
 if not test -f "target/mtxf-bot-1.0.0.jar"
-    echo "Building JAR file..."
-    mvn clean package -DskipTests
+    echo "Building JAR file (using: $MVN_CMD)..."
+    eval $MVN_CMD clean package -DskipTests
     if test $status -ne 0
         echo "❌ Maven build failed!"
         exit 1
@@ -238,21 +288,26 @@ if test $attempts -eq 30
     echo "⚠️ Warning: Python bridge not ready after 30s, starting Java anyway..."
 end
 
-# Step 8: Start Java trading engine
+# Step 8: Start Java trading engine (ROBUST: use jenv exec)
 echo "7️⃣ Starting Java trading engine..."
 echo ""
 echo "📊 Bot is running! Press Ctrl+C to stop."
 echo "📱 Check your Telegram for alerts."
 echo ""
 
-java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+# Use jenv exec for cron reliability, fallback to java otherwise
+if command -v jenv > /dev/null
+    jenv exec java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+else
+    java -jar target/mtxf-bot-1.0.0.jar --jasypt.encryptor.password="$JASYPT_SECRET"
+end
 set JAVA_EXIT_CODE $status
 
 # Java has exited (either normally at 13:00 or due to error)
 echo ""
 echo "☕ Java application exited with code: $JAVA_EXIT_CODE"
 
-# --- START: New and improved shutdown logic with supervisor ---
+# --- START: ROBUST shutdown logic with supervisor ---
 
 # Signal the supervisor to stop by creating the stop file
 echo "🛑 Signaling supervisor to stop..."
@@ -266,13 +321,15 @@ if test $response_code -eq 200
     echo "✅ Python bridge accepted shutdown request. Waiting for supervisor to exit..."
     # Wait up to 15 seconds for the supervisor to terminate
     set -l wait_time 0
-    while kill -0 $SUPERVISOR_PID 2>/dev/null
+    while /bin/kill -0 $SUPERVISOR_PID 2>/dev/null
         if test $wait_time -ge 15
             echo "⚠️ Supervisor did not exit after 15s. Force killing..."
-            kill -9 $SUPERVISOR_PID 2>/dev/null
+            /bin/kill -9 $SUPERVISOR_PID 2>/dev/null || true
             # Also kill any remaining Python bridge processes
-            for pid in (pgrep -f "python3 bridge.py")
-                kill -9 $pid 2>/dev/null
+            for pid in (pgrep -f "python.*bridge.py" 2>/dev/null || echo "")
+                if test -n "$pid"
+                    /bin/kill -9 $pid 2>/dev/null || true
+                end
             end
             break
         end
@@ -281,20 +338,22 @@ if test $response_code -eq 200
     end
 else
     echo "⚠️ Python bridge did not respond to shutdown command (HTTP: $response_code). Force killing supervisor..."
-    kill -9 $SUPERVISOR_PID 2>/dev/null
+    /bin/kill -9 $SUPERVISOR_PID 2>/dev/null || true
     # Also kill any remaining Python bridge processes
-    for pid in (pgrep -f "python3 bridge.py")
-        kill -9 $pid 2>/dev/null
+    for pid in (pgrep -f "python.*bridge.py" 2>/dev/null || echo "")
+        if test -n "$pid"
+            /bin/kill -9 $pid 2>/dev/null || true
+        end
     end
 end
 
-if not kill -0 $SUPERVISOR_PID 2>/dev/null
+if not /bin/kill -0 $SUPERVISOR_PID 2>/dev/null
     echo "✅ Supervisor and Python bridge have stopped."
 end
 
-# Stop Ollama service
+# Stop Ollama service (ROBUST: use absolute path)
 echo "🦙 Stopping Ollama service..."
-pkill -x ollama 2>/dev/null
+/usr/bin/pkill -x ollama 2>/dev/null || true
 
 # Clean up the stop file
 rm -f $STOP_FILE
@@ -303,18 +362,20 @@ echo "✅ All services stopped. Goodbye!"
 
 # --- END: New and improved shutdown logic with supervisor ---
 
-# Cleanup on manual interrupt (Ctrl+C)
+# Cleanup on manual interrupt (Ctrl+C) - ROBUST
 function cleanup --on-signal INT --on-signal TERM
     echo ""
     echo "🛑 Manual shutdown requested..."
     # Create stop file to signal supervisor
     touch $STOP_FILE
-    # Kill supervisor and any Python bridge processes
-    kill $SUPERVISOR_PID 2>/dev/null
-    for pid in (pgrep -f "python3 bridge.py")
-        kill -9 $pid 2>/dev/null
+    # Kill supervisor and any Python bridge processes (ROBUST: use absolute paths)
+    /bin/kill $SUPERVISOR_PID 2>/dev/null || true
+    for pid in (pgrep -f "python.*bridge.py" 2>/dev/null || echo "")
+        if test -n "$pid"
+            /bin/kill -9 $pid 2>/dev/null || true
+        end
     end
-    pkill -x ollama 2>/dev/null
+    /usr/bin/pkill -x ollama 2>/dev/null || true
     # Clean up stop file
     rm -f $STOP_FILE
     exit

@@ -433,16 +433,6 @@ public class TradingEngine {
         System.exit(SpringApplication.exit(applicationContext));
     }
     
-    private void shutdownPythonBridge() {
-        try {
-            log.info("Requesting Python bridge shutdown...");
-            restTemplate.postForObject(getBridgeUrl() + "/shutdown", "", String.class);
-            log.info("Python bridge shutdown requested");
-        } catch (Exception e) {
-            log.warn("Could not notify Python bridge to shutdown: {}", e.getMessage());
-        }
-    }
-    
     private void sendDailySummary() {
         double pnl = riskManagementService.getDailyPnL();
         String status = pnl > 0 ? "Profitable" : "Loss";
@@ -472,7 +462,7 @@ public class TradingEngine {
     public void shutdown() {
         log.info("Shutting down - flattening positions");
         flattenPosition("System shutdown");
-        // The shutdownPythonBridge() call is removed.
+        // Daily summary already sent by autoFlatten() - don't send twice
         telegramService.sendMessage("Bot stopped");
     }
 }

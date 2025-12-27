@@ -42,11 +42,14 @@ Java (Spring Boot :16350) ◄──REST──► Python (FastAPI :8888) ──�
 
 ### Running Tests
 ```bash
+# Setup Java environment
+jenv local 21.0
+
 # Java unit tests
-mvn test
+jenv exec mvn test
 
 # Java integration tests (requires Python bridge running)
-BRIDGE_URL=http://localhost:8888 mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
+BRIDGE_URL=http://localhost:8888 jenv exec mvn test mvn test -Dtest=OrderEndpointIntegrationTest,SystemIntegrationTest
 
 # Python unit tests
 cd python && ../python/venv/bin/pytest tests/test_bridge.py -v
@@ -55,7 +58,7 @@ cd python && ../python/venv/bin/pytest tests/test_bridge.py -v
 BRIDGE_URL=http://localhost:8888 ../python/venv/bin/pytest tests/test_integration.py -v
 
 # All tests
-mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v
+jenv exec mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v
 ```
 
 ### Test Coverage Requirements
@@ -114,8 +117,10 @@ mvn test && BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests
 
 ## Quick Reference
 ```bash
+# Setup Java environment
+jenv local 21.0
 # Build
-mvn clean package -DskipTests
+jenv exec mvn clean package -DskipTests
 
 # Run
 ./start-lunch-bot.fish <jasypt-secret>

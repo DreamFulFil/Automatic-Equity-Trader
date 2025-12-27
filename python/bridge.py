@@ -718,7 +718,7 @@ def scrape_earnings_dates(jasypt_password: str = None):
                     print(f"  ✅ {ticker}: {dt.isoformat()}")
             
             # Rate limit: 15 seconds between requests to avoid 429 errors
-            time.sleep(15)
+            time.sleep(5)
             
         except Exception as e:
             print(f"  ❌ {ticker}: {e}")

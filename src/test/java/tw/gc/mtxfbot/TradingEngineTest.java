@@ -486,6 +486,8 @@ class TradingEngineTest {
 
     // ==================== shutdownPythonBridge() tests ====================
 
+    // OBSOLETE TEST - shutdownPythonBridge method no longer exists
+    /*
     @Test
     void shutdownPythonBridge_shouldCallShutdownEndpoint() throws Exception {
         // Given
@@ -508,6 +510,7 @@ class TradingEngineTest {
         // When & Then - should not throw
         assertDoesNotThrow(() -> invokePrivateMethod(tradingEngine, "shutdownPythonBridge"));
     }
+    */
 
     // ==================== autoFlatten() tests ====================
 
