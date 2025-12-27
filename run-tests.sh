@@ -2,22 +2,17 @@
 ###############################################################################
 # Automatic-Equity-Trader - Complete Test Suite Runner
 #
-# Usage: ./run-tests.sh [--unit|--integration|--full] [--native] <jasypt-password>
+# Usage: ./run-tests.sh [--unit|--integration|--full] <jasypt-password>
 #
 # Execution Tiers:
 #   --unit        : Fast unit tests only (no containers/external services)
 #   --integration : Unit + Integration tests (mocked & container-based)
 #   --full        : Unit + Integration + E2E (default)
 #
-# Native Compilation:
-#   --native      : Build GraalVM native image after all tests pass
-#   --native-test : Run native image tests (validates AOT under closed-world)
-#
 # Features:
 #   - ANSI color-coded status (Green=PASS, Red=FAIL, Yellow=RUNNING)
 #   - Real-time progress bar with percentage tracking
 #   - Tiered execution for development workflow optimization
-#   - GraalVM native image compilation (optional)
 ###############################################################################
 
 set -e
@@ -45,8 +40,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ###############################################################################
 TEST_TIER="full"
 JASYPT_PASSWORD=""
-BUILD_NATIVE=false
-RUN_NATIVE_TEST=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -62,25 +55,13 @@ while [[ $# -gt 0 ]]; do
             TEST_TIER="full"
             shift
             ;;
-        --native)
-            BUILD_NATIVE=true
-            shift
-            ;;
-        --native-test)
-            RUN_NATIVE_TEST=true
-            shift
-            ;;
         -h|--help)
-            echo "Usage: ./run-tests.sh [--unit|--integration|--full] [--native] [--native-test] <jasypt-password>"
+            echo "Usage: ./run-tests.sh [--unit|--integration|--full] <jasypt-password>"
             echo ""
             echo "Execution Tiers:"
             echo "  --unit        Fast unit tests only (no containers/external services)"
             echo "  --integration Unit + Integration tests (mocked & container-based)"
             echo "  --full        Unit + Integration + E2E (default)"
-            echo ""
-            echo "Native Compilation:"
-            echo "  --native      Build GraalVM native image after all tests pass"
-            echo "  --native-test Run native image tests (validates AOT under closed-world)"
             echo ""
             exit 0
             ;;
@@ -756,61 +737,6 @@ if [ "$ALL_PASSED" = true ]; then
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║  ✅ ALL TESTS PASSED - System ready for production           ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
-    
-    ###########################################################################
-    # Native Compilation (only if --native flag was passed and all tests pass)
-    ###########################################################################
-    if [ "$BUILD_NATIVE" = true ]; then
-        echo ""
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BLUE}🔧 Native Image Compilation (GraalVM AOT)${NC}"
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo -e "${YELLOW}⏳ Building native executable (this may take 5-10 minutes)...${NC}"
-        
-        NATIVE_START=$(date +%s)
-        NATIVE_OUTPUT=$($MVN_CMD clean -Pnative native:compile -DskipTests 2>&1) || true
-        NATIVE_END=$(date +%s)
-        NATIVE_DURATION=$((NATIVE_END - NATIVE_START))
-        
-        if [ -f "target/auto-equity-trader" ]; then
-            NATIVE_SIZE=$(du -h target/auto-equity-trader | cut -f1)
-            echo -e "${GREEN}✅ Native executable built successfully${NC}"
-            echo -e "${DIM}   📦 Binary: target/auto-equity-trader${NC}"
-            echo -e "${DIM}   📏 Size: $NATIVE_SIZE${NC}"
-            echo -e "${DIM}   ⏱️  Build time: ${NATIVE_DURATION}s${NC}"
-        else
-            echo -e "${RED}❌ Native compilation failed${NC}"
-            echo "$NATIVE_OUTPUT" | tail -50
-            exit 1
-        fi
-    fi
-    
-    ###########################################################################
-    # Native Test Execution (only if --native-test flag was passed)
-    ###########################################################################
-    if [ "$RUN_NATIVE_TEST" = true ]; then
-        echo ""
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BLUE}🧪 Native Image Tests (Closed-World Validation)${NC}"
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo -e "${YELLOW}⏳ Running native tests (validates reflection/proxy hints)...${NC}"
-        
-        NATIVE_TEST_START=$(date +%s)
-        NATIVE_TEST_OUTPUT=$($MVN_CMD -PnativeTest test 2>&1) || true
-        NATIVE_TEST_END=$(date +%s)
-        NATIVE_TEST_DURATION=$((NATIVE_TEST_END - NATIVE_TEST_START))
-        
-        if echo "$NATIVE_TEST_OUTPUT" | grep -q "BUILD SUCCESS"; then
-            echo -e "${GREEN}✅ Native tests passed${NC}"
-            echo -e "${DIM}   ⏱️  Duration: ${NATIVE_TEST_DURATION}s${NC}"
-        else
-            echo -e "${RED}❌ Native tests failed (reflection/proxy issues detected)${NC}"
-            echo "$NATIVE_TEST_OUTPUT" | tail -50
-            exit 1
-        fi
-    fi
     
     exit 0
 else

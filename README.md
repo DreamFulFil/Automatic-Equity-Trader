@@ -8,7 +8,6 @@
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-[![GraalVM](https://img.shields.io/badge/AOT-GraalVM%20Native-red.svg)](https://graalvm.org/)
 [![Tests](https://img.shields.io/badge/Tests-524%20passing-brightgreen.svg)](tests/)
 
 ---
@@ -17,7 +16,7 @@
 
 **Automatic Equity Trader** is a risk-first, AI-powered automated trading platform for Taiwan stock market. Designed for capital preservation with conservative strategies, comprehensive testing, and full observability.
 
-**Production-Ready:** 524 passing tests | 99 strategies | AI trade veto | GraalVM AOT support
+**Production-Ready:** 524 passing tests | 99 strategies | AI trade veto
 
 ---
 
@@ -104,56 +103,6 @@ pip install -r python/requirements.txt
 ./start-auto-trader.fish YOUR_JASYPT_PASSWORD
 ```
 
-### GraalVM Native Image (Optional)
-
-For production deployments requiring sub-second startup times and minimal memory footprint:
-
-**Prerequisites:**
-```bash
-# Install GraalVM 21 with native-image support
-./scripts/setup/install-graalvm.sh
-
-# Verify installation
-java -version        # Should show "GraalVM"
-native-image --version
-```
-
-**Build Native Executable:**
-```bash
-# Automated build (runs tests + builds native image)
-./scripts/build-native.sh YOUR_JASYPT_PASSWORD
-
-# Manual workflow
-./run-tests.sh --unit YOUR_JASYPT_PASSWORD      # Verify tests pass
-./mvnw clean -Pnative native:compile -DskipTests  # Build native (5-10 min)
-
-# Validate native image
-./mvnw -PnativeTest test  # Optional: Test closed-world assumption
-```
-
-**Run Native Binary:**
-```bash
-# Native binary is prioritized automatically
-./start-auto-trader.fish YOUR_JASYPT_PASSWORD
-
-# Or run directly
-./target/auto-equity-trader --jasypt.encryptor.password=YOUR_PASSWORD
-```
-
-**Performance Comparison:**
-| Metric | Native (AOT) | JVM |
-|--------|-------------|-----|
-| Startup Time | 200-500ms | 3-5s |
-| Memory (RSS) | 150-300MB | 500MB-1GB |
-| Binary Size | ~100MB | 56MB JAR + JVM |
-| Build Time | 5-10 min | 20-30s |
-
-**When to Use:**
-- ✅ Production deployments (fast startup, low memory)
-- ✅ CI/CD pipelines (validate AOT compatibility)
-- ✅ Resource-constrained environments
-- ❌ Active development (slow build cycle)
-
 ---
 
 ## 📱 Telegram Commands
@@ -176,9 +125,6 @@ Control the trading bot via Telegram. See [Telegram Commands Documentation](docs
 
 # Full test suite (unit + integration + e2e)
 ./run-tests.sh YOUR_JASYPT_PASSWORD
-
-# Native image validation
-./run-tests.sh --native-test YOUR_JASYPT_PASSWORD
 ```
 
 **Test Coverage:**
@@ -198,7 +144,6 @@ This project follows [Semantic Versioning](https://semver.org/):
 
 **Recent Releases:**
 - `v0.79.0` - PgBulkInsert and single-writer pattern for data ingestion
-- `v0.78.0` - GraalVM Native Image support (AOT compilation)
 - `v0.77.0` - JDBC batch insert optimization
 - `v0.76.0` - PostgreSQL COPY protocol for bulk inserts
 

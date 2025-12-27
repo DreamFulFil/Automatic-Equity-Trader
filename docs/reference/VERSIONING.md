@@ -63,7 +63,7 @@ The version bump is integrated into the standard completion workflow:
 2. **Run tests:** `./run-tests.sh <jasypt-password>`
 3. **Bump version:**
    ```bash
-   ./scripts/operational/bump-version.sh feat
+   ./scripts/bump-version.sh feat
    ```
 4. **Commit & push:**
    ```bash
@@ -77,7 +77,7 @@ The version bump is integrated into the standard completion workflow:
 
 ```bash
 # Automatic version bump + tag + release
-./scripts/operational/bump-version.sh feat
+./scripts/bump-version.sh feat
 
 # Then commit and push
 git add VERSION
@@ -108,7 +108,7 @@ When working with GitHub Copilot, the agent will automatically:
 ### Feature Release (Minor)
 ```bash
 # Before: VERSION=0.79.0
-./scripts/operational/bump-version.sh feat
+./scripts/bump-version.sh feat
 # After: VERSION=0.80.0, tag v0.80.0, GitHub release created
 
 git add VERSION
@@ -119,7 +119,7 @@ git push origin main --tags
 ### Bug Fix (Patch)
 ```bash
 # Before: VERSION=0.80.0
-./scripts/operational/bump-version.sh fix
+./scripts/bump-version.sh fix
 # After: VERSION=0.80.1 (no tag, no release)
 
 git add VERSION
@@ -130,7 +130,7 @@ git push origin main
 ### Performance Improvement (Minor)
 ```bash
 # Before: VERSION=0.80.1
-./scripts/operational/bump-version.sh perf
+./scripts/bump-version.sh perf
 # After: VERSION=0.81.0, tag v0.81.0, GitHub release created
 
 git add VERSION
@@ -166,7 +166,7 @@ git tag -d v0.80.0
 git push origin :refs/tags/v0.80.0
 
 # Recreate
-./scripts/operational/bump-version.sh feat
+./scripts/bump-version.sh feat
 git push origin --tags
 ```
 
