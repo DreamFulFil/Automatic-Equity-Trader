@@ -70,6 +70,18 @@ PRE-COMMIT CHECKLIST
 - Ensure no compile warnings or unused imports
 - Update the `VERSION` file contents when required (e.g., `echo "0.80.0" > VERSION`), or run `./scripts/operational/bump-version.sh <minor|patch>`
 
+Enforcement & local hooks
+- To avoid forgetting VERSION updates, enable the local commit hook which validates commit messages and ensures a `VERSION` update is staged for minor-bump commits:
+  ```bash
+  git config core.hooksPath .githooks
+  chmod +x .githooks/commit-msg
+  ```
+- You can run the validator manually before committing:
+  ```bash
+  ./scripts/operational/validate-commit-and-version.sh <commit-msg-file>
+  ```
+- The validator will instruct you to run `./scripts/operational/bump-version.sh minor` if a VERSION update is required but missing.
+
 EXAMPLES
 - feat(selection): add dynamic stock selection algorithm
 - fix: handle null ticker names in telegram parser
