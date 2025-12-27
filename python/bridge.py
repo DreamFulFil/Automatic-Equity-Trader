@@ -17,6 +17,7 @@ Bulletproof Features:
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 import sys
 import os
 # Ensure local compat shims are importable (for Python 3.14 compat)
@@ -40,7 +41,22 @@ import statistics
 import feedparser
 from Crypto.Cipher import DES
 
-app = FastAPI()
+# Lifespan event handler (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Run trading init in background so FastAPI binds quickly
+    import threading
+    def _init_bg():
+        try:
+            init_trading_mode()
+        except Exception as e:
+            print(f"⚠️ Background init error: {e}")
+    t = threading.Thread(target=_init_bg, daemon=True)
+    t.start()
+    yield
+    # Shutdown: cleanup if needed (currently none)
+
+app = FastAPI(lifespan=lifespan)
 
 # ============================================================================
 # JASYPT DECRYPTION
@@ -337,17 +353,8 @@ def init_trading_mode():
     OLLAMA_MODEL = config['ollama']['model']
 
 
-# Run trading init in background on startup so FastAPI binds quickly
-@app.on_event("startup")
-def _startup_event():
-    import threading
-    def _init_bg():
-        try:
-            init_trading_mode()
-        except Exception as e:
-            print(f"⚠️ Background init error: {e}")
-    t = threading.Thread(target=_init_bg, daemon=True)
-    t.start()
+# ============================================================================
+# ROUTES
 
 # ============================================================================
 # NEWS ANALYSIS
