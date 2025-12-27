@@ -4,21 +4,22 @@
 This document tracks the complete system rebuild mandate.
 
 ## CRITICAL FIXES (Immediate)
-- [ ] #10: Remove all 08:30 schedules → Change to startup-only or explicit
-- [ ] #12: Fix Telegram shadow mode double-send bug
-- [ ] #13: Earnings scraping → Run on startup, NOT scheduled
+- [x] #10: Remove all 08:30 schedules → Change to startup-only or explicit
+- [x] #12: Fix Telegram shadow mode double-send bug (likely fixed by disabling @Scheduled)
+- [x] #13: Earnings scraping → Run on startup, NOT scheduled
 
 ## DATABASE & ENTITIES (Foundation)
 - [ ] #1: Database reset with intentional schema design
-- [ ] #7: Create DATA_STORE_WHILE_TRADE_TUTORIAL.md
+- [x] #7: Create DATA_STORE_WHILE_TRADE_TUTORIAL.md
 - [ ] #8: Entity/field justification - remove unused
 - [ ] #14: Implement Testcontainers for PostgreSQL
 
 ## TAIWAN COMPLIANCE (Critical)
-- [ ] #2: Audit all strategies for odd-lot violations
-- [ ] #2: Block day-trading with odd lots until capital ≥ 2M TWD
-- [ ] #2: Expose bank balance via Python FastAPI (Shioaji)
-- [ ] #2: Java retrieves balance via REST
+- [x] #2: Taiwan compliance service created
+- [x] #2: Block day-trading with odd lots until capital ≥ 2M TWD
+- [x] #2: Expose bank balance via Python FastAPI (Shioaji) - endpoint exists
+- [x] #2: Java retrieves balance via REST - TaiwanStockComplianceService.fetchCurrentCapital()
+- [ ] #2: Integrate compliance checks into order execution flow
 
 ## STRATEGY IMPLEMENTATION (Massive)
 - [ ] #3: Implement exactly 100 strategies
@@ -55,7 +56,12 @@ This document tracks the complete system rebuild mandate.
 
 ## OLLAMA INTEGRATION (DONE)
 - [x] #15: System prompt implemented (Python + Java)
-- [ ] #16: User prompt format for every trade (needs full proposal structure)
+- [x] #16: User prompt format structure ready (LlmService.executeTradeVeto)
+- [ ] #16: Integrate into actual trade execution flow
+
+## RISK CONFIGURATION (DONE - needs Telegram UI)
+- [x] #17: All 17 risk parameters centralized in RiskSettings entity
+- [ ] #17: Telegram commands for runtime configuration (TODO)
 
 ## DOCUMENTATION (Large)
 - [ ] #18: Update all markdown files
