@@ -43,6 +43,7 @@ public class OrderExecutionService {
     private final RiskSettingsService riskSettingsService;
     private final EarningsBlackoutService earningsBlackoutService;
     private final TaiwanStockComplianceService taiwanComplianceService;
+    private final LlmService llmService;
 
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
@@ -134,6 +135,49 @@ public class OrderExecutionService {
                 telegramService.sendMessage(String.format(
                     "🇹🇼 ORDER BLOCKED - TAIWAN COMPLIANCE\nAction: %s %d %s @ %.0f\nReason: %s",
                     action, quantity, instrument, price, complianceResult.getVetoReason()));
+                return;
+            }
+        }
+        
+        // Ollama AI veto check (if enabled)
+        if (!isExit && riskSettingsService.isAiVetoEnabled()) {
+            try {
+                Map<String, Object> tradeProposal = new HashMap<>();
+                tradeProposal.put("symbol", instrument);
+                tradeProposal.put("direction", action);
+                tradeProposal.put("shares", quantity);
+                tradeProposal.put("entry_logic", "Price-based signal");
+                tradeProposal.put("strategy_name", strategyName != null ? strategyName : "Unknown");
+                tradeProposal.put("daily_pnl", String.format("%.0f", riskManagementService.getDailyPnL()));
+                tradeProposal.put("weekly_pnl", String.format("%.0f", riskManagementService.getWeeklyPnL()));
+                tradeProposal.put("drawdown_percent", "N/A");
+                tradeProposal.put("trades_today", "N/A");
+                tradeProposal.put("win_streak", "0");
+                tradeProposal.put("loss_streak", "0");
+                tradeProposal.put("volatility_level", "Normal");
+                tradeProposal.put("time_of_day", LocalDateTime.now(TAIPEI_ZONE).toString());
+                tradeProposal.put("session_phase", "Intraday");
+                tradeProposal.put("news_headlines", "");
+                tradeProposal.put("strategy_days_active", "N/A");
+                tradeProposal.put("recent_backtest_stats", "N/A");
+                
+                Map<String, Object> vetoResult = llmService.executeTradeVeto(tradeProposal);
+                boolean vetoed = (Boolean) vetoResult.getOrDefault("veto", true);
+                String vetoReason = (String) vetoResult.getOrDefault("reason", "Unknown");
+                
+                if (vetoed) {
+                    log.warn("🤖 OLLAMA AI VETO: {}", vetoReason);
+                    telegramService.sendMessage(String.format(
+                        "🤖 ORDER BLOCKED - AI RISK VETO\nAction: %s %d %s @ %.0f\nReason: %s\n\nUse /risk enable_ai_veto false to disable AI veto",
+                        action, quantity, instrument, price, vetoReason));
+                    return;
+                } else {
+                    log.info("✅ Ollama AI approved trade: {}", vetoReason);
+                }
+            } catch (Exception e) {
+                log.error("❌ Ollama veto check failed: {} - Defaulting to VETO (fail-safe)", e.getMessage());
+                telegramService.sendMessage(String.format(
+                    "⚠️ AI VETO CHECK FAILED - Trade blocked as fail-safe\nError: %s", e.getMessage()));
                 return;
             }
         }

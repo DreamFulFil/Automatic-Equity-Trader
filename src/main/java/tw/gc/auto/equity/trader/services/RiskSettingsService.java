@@ -109,6 +109,13 @@ public class RiskSettingsService {
     }
     
     /**
+     * Check if AI veto is enabled
+     */
+    public boolean isAiVetoEnabled() {
+        return getSettings().isEnableAiVeto();
+    }
+    
+    /**
      * Update a specific risk setting by key
      * @param key Setting name (snake_case)
      * @param value New value

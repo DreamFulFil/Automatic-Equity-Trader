@@ -42,6 +42,8 @@ class OrderExecutionServiceTest {
     private EarningsBlackoutService earningsBlackoutService;
     @Mock
     private tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService taiwanComplianceService;
+    @Mock
+    private LlmService llmService;
 
     private PositionManager positionManager;
     private OrderExecutionService orderExecutionService;
@@ -51,12 +53,13 @@ class OrderExecutionServiceTest {
         when(tradingProperties.getBridge()).thenReturn(bridge);
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         when(earningsBlackoutService.isDateBlackout(any())).thenReturn(false);
+        when(riskSettingsService.isAiVetoEnabled()).thenReturn(false); // Disable AI veto in tests by default
         
         positionManager = new PositionManager();
         orderExecutionService = new OrderExecutionService(
             restTemplate, objectMapper, tradingProperties, telegramService, 
             dataLoggingService, positionManager, riskManagementService, riskSettingsService,
-            earningsBlackoutService, taiwanComplianceService
+            earningsBlackoutService, taiwanComplianceService, llmService
         );
     }
 
