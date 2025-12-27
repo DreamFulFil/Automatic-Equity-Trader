@@ -169,7 +169,7 @@ shutdown_gracefully() {
     if [ "$CI" = "true" ]; then
         echo -e "${YELLOW}🛑 Graceful Shutdown (CI mode - no Telegram messages)${NC}"
     else
-        echo -e "${YELLOW}🛑 Graceful Shutdown (Telegram messages e,f,g)${NC}"
+        echo -e "${YELLOW}🛑 Graceful Shutdown (Telegram messages)${NC}"
     fi
     
     # Trigger daily summary and shutdown via REST API (SKIP IN CI)

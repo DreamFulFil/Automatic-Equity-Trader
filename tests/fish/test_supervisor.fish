@@ -2,7 +2,7 @@
 ###############################################################################
 # Fish Shell Tests for Supervisor Functionality
 # 
-# Tests for the Python bridge supervisor in start-lunch-bot.fish
+# Tests for the Python bridge supervisor in start-auto-trader.fish
 #
 # Run: fish tests/fish/test_supervisor.fish
 ###############################################################################
@@ -51,7 +51,7 @@ end
 
 # Test 1: Supervisor function exists in start script
 function test_supervisor_function_exists
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*function supervise_python_bridge*" $content
         report_test "Supervisor function exists" pass
         return 0
@@ -63,7 +63,7 @@ end
 
 # Test 2: Supervisor creates stop file
 function test_supervisor_uses_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*STOP_FILE*" $content; and string match -q "*supervisor.stop*" $content
         report_test "Supervisor uses stop file mechanism" pass
         return 0
@@ -75,7 +75,7 @@ end
 
 # Test 3: Supervisor loop checks for stop file
 function test_supervisor_loop_checks_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*while not test -f*STOP_FILE*" $content
         report_test "Supervisor loop checks stop file" pass
         return 0
@@ -87,7 +87,7 @@ end
 
 # Test 4: Supervisor logs to supervisor.log
 function test_supervisor_logs_to_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*supervisor.log*" $content
         report_test "Supervisor logs to supervisor.log" pass
         return 0
@@ -99,7 +99,7 @@ end
 
 # Test 5: Supervisor restarts on crash
 function test_supervisor_restarts_on_crash
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*Python bridge crashed*" $content; and string match -q "*Restarting*" $content
         report_test "Supervisor restarts on crash" pass
         return 0
@@ -111,7 +111,7 @@ end
 
 # Test 6: Supervisor has restart delay
 function test_supervisor_has_restart_delay
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*sleep 5*" $content; or string match -q "*sleep*" $content
         report_test "Supervisor has restart delay" pass
         return 0
@@ -123,7 +123,7 @@ end
 
 # Test 7: Startup cleanup removes old stop file
 function test_startup_removes_old_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*rm -f*STOP_FILE*" $content
         report_test "Startup removes old stop file" pass
         return 0
@@ -135,7 +135,7 @@ end
 
 # Test 8: Shutdown creates stop file
 function test_shutdown_creates_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*touch*STOP_FILE*" $content
         report_test "Shutdown creates stop file" pass
         return 0
@@ -147,7 +147,7 @@ end
 
 # Test 9: Shutdown waits for supervisor to exit
 function test_shutdown_waits_for_supervisor
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*kill -0*SUPERVISOR_PID*" $content; or string match -q "*Waiting for supervisor*" $content
         report_test "Shutdown waits for supervisor" pass
         return 0
@@ -159,7 +159,7 @@ end
 
 # Test 10: Manual interrupt handler uses stop file
 function test_interrupt_handler_uses_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     set -l in_cleanup_function 0
     set -l found_touch_stop_file 0
     
@@ -184,7 +184,7 @@ end
 
 # Test 11: Supervisor tracks restart count
 function test_supervisor_tracks_restart_count
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     if string match -q "*restart_count*" $content
         report_test "Supervisor tracks restart count" pass
         return 0
@@ -196,7 +196,7 @@ end
 
 # Test 12: Cleanup removes stop file at end
 function test_cleanup_removes_stop_file
-    set -l content (cat "$PROJECT_ROOT/start-lunch-bot.fish")
+    set -l content (cat "$PROJECT_ROOT/start-auto-trader.fish")
     # Check that there's a cleanup of stop file after shutdown logic
     if string match -q "*rm -f*STOP_FILE*" $content
         report_test "Cleanup removes stop file at end" pass

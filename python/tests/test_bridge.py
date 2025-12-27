@@ -338,6 +338,39 @@ class TestTelegramNotification:
         
         assert result is False
         mock_post.assert_not_called()
+    
+    @patch('app.services.telegram_service.os.environ.get')
+    @patch('app.services.telegram_service.requests.post')
+    def test_send_telegram_ci_environment(self, mock_post, mock_env_get):
+        """Should skip Telegram in CI environment"""
+        mock_env_get.return_value = 'true'
+        
+        result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+        mock_post.assert_not_called()
+        mock_env_get.assert_called_once_with('CI')
+    
+    @patch('app.services.telegram_service.requests.post')
+    @patch('app.core.config.open', create=True)
+    @patch('app.core.config.yaml.safe_load')
+    @patch('app.services.telegram_service.os.environ.get')
+    def test_send_telegram_disabled_in_config(self, mock_env_get, mock_yaml, mock_open, mock_post):
+        """Should respect telegram.enabled flag in config"""
+        mock_env_get.return_value = None  # Not in CI
+        mock_config = {
+            'telegram': {
+                'enabled': False,
+                'bot-token': 'test_token',
+                'chat-id': 'test_chat'
+            }
+        }
+        mock_yaml.return_value = mock_config
+        
+        result = send_telegram_message("Test message", "password")
+        
+        assert result is False
+        mock_post.assert_not_called()
 
 
 class TestEarningsScraper:
