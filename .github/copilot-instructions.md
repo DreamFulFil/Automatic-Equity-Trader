@@ -136,3 +136,82 @@ Commit type?
 **Claude Model Restriction:**
 * If any Claude model is used, do NOT generate markdown summary reports or arbitrary markdown files unless explicitly instructed.
 * Only update the main README.MD, and keep it concise and focused on essential changes.
+
+**GraalVM Native Build Guidelines:**
+
+* **Prerequisites (One-Time Setup):**
+  ```bash
+  # Install GraalVM 21 via SDKMAN (recommended)
+  curl -s "https://get.sdkman.io" | bash
+  source "$HOME/.sdkman/bin/sdkman-init.sh"
+  sdk install java 21-graal
+  sdk use java 21-graal
+  
+  # Verify installation
+  java -version  # Should show "GraalVM"
+  native-image --version  # Should work without error
+  
+  # Alternative: Homebrew (macOS)
+  brew install --cask graalvm-jdk21
+  export JAVA_HOME=/Library/Java/JavaVirtualMachines/graalvm-jdk-21/Contents/Home
+  export PATH=$JAVA_HOME/bin:$PATH
+  ```
+
+* **When to Use Native Compilation:**
+  - Production deployments requiring sub-second startup times
+  - Memory-constrained environments (native images use ~3-5x less memory)
+  - CI/CD pipelines validating AOT compatibility
+  - **NEVER** during active development (5-10 minute build time)
+
+* **Build Commands:**
+  ```bash
+  # Standard JAR build (fast, for development)
+  ./mvnw clean package -DskipTests
+  
+  # Native executable build (slow, for production)
+  # Requires: All tests must pass first
+  ./run-tests.sh --unit dreamfulfil && \
+  ./mvnw clean -Pnative native:compile -DskipTests
+  
+  # Native test validation (validates closed-world assumption)
+  ./mvnw -PnativeTest test
+  ```
+
+* **Artifacts Produced:**
+  - `target/auto-equity-trader.jar` - Standard Spring Boot JAR (always built)
+  - `target/auto-equity-trader` - Native executable (only with `-Pnative`)
+
+* **Startup Script Behavior:**
+  - `start-auto-trader.fish` prioritizes native binary if present
+  - Falls back to JAR if native binary missing or outdated
+  - No code changes needed for native vs JVM mode
+
+* **Closed-World Assumption (Critical):**
+  - GraalVM requires all reflection/proxy usage to be declared at build time
+  - Spring Boot 3 handles most cases via AOT processing
+  - **Symptoms of violations:** `ClassNotFoundException`, `NoSuchMethodException` at runtime
+  - **Validation:** Always run `./mvnw -PnativeTest test` before deployment
+  - **Hints:** Add `@RegisterReflectionForBinding` or `RuntimeHints` if needed
+
+* **Debugging Native Build Failures:**
+  ```bash
+  # Verbose native compilation (shows all classes processed)
+  ./mvnw -Pnative native:compile -Dverbose
+  
+  # Check native-image build logs
+  cat target/native-image/auto-equity-trader-build.log
+  
+  # Test reflection hints
+  ./mvnw -PnativeTest test -Dtest=YourFailingTest
+  ```
+
+* **Performance Benchmarks:**
+  - JVM startup: ~3-5 seconds
+  - Native startup: ~200-500ms (6-10x faster)
+  - JVM memory: ~500MB-1GB RSS
+  - Native memory: ~150-300MB RSS (3-5x smaller)
+
+* **CI/CD Integration:**
+  - `./run-tests.sh --full --native dreamfulfil` runs full suite + native build
+  - Native tests validate AOT compatibility on every PR
+  - GitHub Actions can cache native-image for faster builds
