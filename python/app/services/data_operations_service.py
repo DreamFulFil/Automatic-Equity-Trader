@@ -280,11 +280,11 @@ class DataOperationsService:
                 date_sources[d] = "twse"
                 source_breakdown["twse"] += 1
 
-        # Determine primary source (which contributed most data)
-        if source_breakdown["yahoo"] > 0:
-            primary_source = "yahoo"
-        elif source_breakdown["shioaji"] > 0:
+        # Determine primary source (prefer Shioaji when available)
+        if source_breakdown["shioaji"] > 0:
             primary_source = "shioaji"
+        elif source_breakdown["yahoo"] > 0:
+            primary_source = "yahoo"
         elif source_breakdown["twse"] > 0:
             primary_source = "twse"
         else:
@@ -326,6 +326,7 @@ class DataOperationsService:
             
             data_points.append({
                 "timestamp": timestamp_str,
+                "name": self.STOCK_NAMES.get(stock_code, stock_code),  # Add stock name
                 "open": bar["open"],
                 "high": bar["high"],
                 "low": bar["low"],
