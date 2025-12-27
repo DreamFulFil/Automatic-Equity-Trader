@@ -30,31 +30,9 @@ public class TelegramService {
         }
 
         try {
-            // Escape special characters for MarkdownV2
-            String safeMessage = message
-                    .replace("\\", "\\\\")
-                    .replace("_", "\\_")
-                    .replace("*", "\\*")
-                    .replace("[", "\\[")
-                    .replace("]", "\\]")
-                    .replace("(", "\\(")
-                    .replace(")", "\\)")
-                    .replace("~", "\\~")
-                    .replace("`", "\\`")
-                    .replace(">", "\\>")
-                    .replace("#", "\\#")
-                    .replace("+", "\\+")
-                    .replace("-", "\\-")
-                    .replace("=", "\\=")
-                    .replace("|", "\\|")
-                    .replace("{", "\\{")
-                    .replace("}", "\\}")
-                    .replace(".", "\\.")
-                    .replace("!", "\\!");
-
-            String encodedMessage = URLEncoder.encode(safeMessage, StandardCharsets.UTF_8);
+            String encodedMessage = URLEncoder.encode(message, StandardCharsets.UTF_8);
             String url = String.format(
-                    "https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s&parse_mode=MarkdownV2",
+                    "https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s",
                     botToken, chatId, encodedMessage);
 
             restTemplate.getForObject(url, String.class);
