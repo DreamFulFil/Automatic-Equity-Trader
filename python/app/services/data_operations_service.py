@@ -123,10 +123,29 @@ class DataOperationsService:
             password=self.db_config['password']
         )
     
-    def fetch_historical_data(self, stock_code: str, days: int) -> List[Dict]:
+    def fetch_historical_data(self, stock_code: str, days: int, symbol: str = None, start_date: str = None, end_date: str = None) -> dict:
         """
         Fetch historical OHLCV data for a Taiwan stock, merging TWSE, Shioaji, Yahoo Finance to fill all available days.
-        Returns a list of dicts with keys: date, open, high, low, close, volume
+        Returns a structured object in the exact format expected by /data/download-batch endpoint.
+        
+        Args:
+            stock_code: Taiwan stock code (e.g., "2330")
+            days: Number of days of historical data to fetch
+            symbol: Full Yahoo Finance symbol (e.g., "2330.TW"), defaults to {stock_code}.TW
+            start_date: ISO format start date (optional, for response metadata)
+            end_date: ISO format end date (optional, for response metadata)
+            
+        Returns:
+            dict: Structured response object with status, symbol, source, data, count, etc.
+                {
+                    "status": "success",
+                    "symbol": "2330.TW",
+                    "source": "merged",
+                    "data": [...],  # List of OHLCV data points
+                    "count": 100,
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-12-21"
+                }
         """
         from datetime import datetime
         import pandas as pd
@@ -149,8 +168,27 @@ class DataOperationsService:
                 d = norm_date(bar['date'])
                 if d not in merged:
                     merged[d] = bar
-        # Return sorted by date
-        return [merged[d] for d in sorted(merged.keys())]
+        # Format for endpoint
+        data_points = []
+        for d in sorted(merged.keys()):
+            bar = merged[d]
+            data_points.append({
+                "timestamp": bar["date"].isoformat() if hasattr(bar["date"], "isoformat") else str(bar["date"]),
+                "open": bar["open"],
+                "high": bar["high"],
+                "low": bar["low"],
+                "close": bar["close"],
+                "volume": bar["volume"]
+            })
+        return {
+            "status": "success",
+            "symbol": symbol or f"{stock_code}.TW",
+            "source": "merged",
+            "data": data_points,
+            "count": len(data_points),
+            "start_date": start_date,
+            "end_date": end_date
+        }
 
     def _fetch_twse(self, stock_code: str, start, end) -> List[Dict]:
         import pandas as pd

@@ -372,7 +372,7 @@ public class BacktestService {
      * 
      * @return List of 50 stock symbols in Yahoo Finance format (e.g., "2330.TW")
      */
-    private List<String> fetchTop50Stocks() {
+    public List<String> fetchTop50Stocks() {
         log.info("🌐 Dynamically fetching top 50 Taiwan stocks from web sources...");
         
         Set<StockCandidate> candidates = new HashSet<>();

@@ -521,26 +521,27 @@ class DownloadBatchRequest(BaseModel):
     symbol: str
     start_date: str
     end_date: str
+    stocks: list = []  # Optional list of Taiwan stock symbols from Java
 
 @app.post("/data/download-batch")
 def download_batch(request: DownloadBatchRequest):
     """
     Download historical OHLCV data for a stock symbol within a date range.
-    Delegates to DataOperationsService.fetch_historical_data for TWSE, Shioaji, Yahoo fallback and merging.
+    Acts as a pass-through: receives request, delegates to DataOperationsService.fetch_historical_data,
+    and returns the service result directly without modification.
+    
     Args:
-        symbol: Stock symbol (e.g., "2330.TW")
-        start_date: Start date in ISO format
-        end_date: End date in ISO format
+        request: DownloadBatchRequest with symbol, start_date, end_date, and optional stocks list
+        
     Returns:
-        JSON with historical data points
+        Structured response from DataOperationsService.fetch_historical_data
     """
     try:
-        # Extract stock code and days
         stock_code = request.symbol.replace(".TWO", "").replace(".TW", "")
         start = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
         end = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
         days = (end - start).days + 1
-        # Load config for DB (use env or fallback)
+        
         db_config = {
             'host': os.environ.get('POSTGRES_HOST', 'localhost'),
             'port': int(os.environ.get('POSTGRES_PORT', 5432)),
@@ -548,32 +549,19 @@ def download_batch(request: DownloadBatchRequest):
             'username': os.environ.get('POSTGRES_USER', 'dreamer'),
             'password': os.environ.get('POSTGRES_PASSWORD', 'password')
         }
+        
         from app.services.data_operations_service import DataOperationsService
         service = DataOperationsService(db_config)
-        bars = service.fetch_historical_data(stock_code, days)
-        # Filter bars to requested date range
-        bars = [b for b in bars if start.date() <= b['date'] <= end.date()]
-        # Format for response
-        data_points = [
-            {
-                "timestamp": b['date'].isoformat() if hasattr(b['date'], 'isoformat') else str(b['date']),
-                "open": b['open'],
-                "high": b['high'],
-                "low": b['low'],
-                "close": b['close'],
-                "volume": b['volume']
-            }
-            for b in bars
-        ]
-        return {
-            "status": "success",
-            "symbol": request.symbol,
-            "source": "merged",
-            "data": data_points,
-            "count": len(data_points),
-            "start_date": request.start_date,
-            "end_date": request.end_date
-        }
+        
+        # Pass-through delegation: return service result directly
+        return service.fetch_historical_data(
+            stock_code=stock_code,
+            days=days,
+            symbol=request.symbol,
+            start_date=request.start_date,
+            end_date=request.end_date
+        )
+        
     except Exception as e:
         return JSONResponse(
             status_code=500,

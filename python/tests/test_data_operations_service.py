@@ -30,11 +30,13 @@ def test_fetch_historical_data_merges_sources(service):
     with patch.object(service, '_fetch_twse', return_value=twse_data), \
          patch.object(service, '_fetch_shioaji', return_value=shioaji_data), \
          patch.object(service, '_fetch_yahoo', return_value=yahoo_data):
-        merged = service.fetch_historical_data('2330', days)
-        assert len(merged) == 5
-        # Dates should be unique and sorted
-        dates = [bar['date'] for bar in merged]
-        assert dates == sorted(dates)
-        # All fields present
-        for bar in merged:
-            assert all(k in bar for k in ['date', 'open', 'high', 'low', 'close', 'volume'])
+        result = service.fetch_historical_data('2330', days)
+        # Verify structured response object
+        assert result['status'] == 'success'
+        assert result['symbol'] == '2330.TW'
+        assert result['source'] == 'merged'
+        assert result['count'] == 5
+        assert len(result['data']) == 5
+        # Verify data structure
+        for bar in result['data']:
+            assert all(k in bar for k in ['timestamp', 'open', 'high', 'low', 'close', 'volume'])
