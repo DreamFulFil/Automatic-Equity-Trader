@@ -356,11 +356,12 @@ echo -e "${BLUE}🎯 Phase 6: E2E Tests${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 E2E_OUTPUT=$(BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest \
-    tests/e2e/test_full_session.py -v 2>&1) || true
+    tests/e2e/test_full_session.py -v 2>&1)
+E2E_EXIT_CODE=$?
 
 E2E_SUMMARY=$(echo "$E2E_OUTPUT" | grep -E "[0-9]+ passed" | tail -1)
 
-if echo "$E2E_OUTPUT" | grep -qE "passed"; then
+if [ $E2E_EXIT_CODE -eq 0 ] && echo "$E2E_OUTPUT" | grep -qE "passed" && ! echo "$E2E_OUTPUT" | grep -qE "failed|error"; then
     echo -e "${GREEN}✅ E2E tests passed${NC}"
     E2E_RESULT="PASSED"
 else
