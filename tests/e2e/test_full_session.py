@@ -161,9 +161,9 @@ class TestFullTradingSession:
     @pytest.mark.skipif(not ollama_available(), reason="Ollama not available")
     def test_news_veto_check(self):
         """
-        Test news veto integration with Ollama
+        Test news veto integration with Ollama (uses 5-min cache)
         """
-        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=45)
+        r = requests.get(f"{BRIDGE_URL}/signal/news", timeout=20)
         assert r.status_code == 200
         news = r.json()
         

@@ -68,7 +68,7 @@ class OllamaService:
             response = requests.post(
                 f"{self.url}/api/generate",
                 json=payload,
-                timeout=120
+                timeout=15  # Reduced from 120s to 15s for production performance
             )
             result = response.json().get('response', '')
             return {"response": result}
