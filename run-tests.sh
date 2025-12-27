@@ -294,6 +294,14 @@ echo ""
 # Phase 2: Python Unit Tests
 ###############################################################################
 
+# Ensure python venv exists and dependencies are installed
+if [ ! -d python/venv ]; then
+  echo -e "${YELLOW}🐍 Creating Python virtualenv and installing dependencies...${NC}"
+  python3 -m venv python/venv
+  python3 -m pip install --upgrade pip setuptools wheel
+  python3 -m pip install -r python/requirements.txt
+fi
+
 # Verify shioaji availability on PyPI to fail fast if a required binary version is removed
 SHIOAJI_SPEC=$(grep -E '^\s*shioaji' python/requirements.txt | head -1 | awk -F'==' '{print $1"=="$2}')
 if [ -n "$SHIOAJI_SPEC" ]; then
