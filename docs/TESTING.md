@@ -364,9 +364,8 @@ python/venv/bin/pytest python/tests/test_bridge.py -q || exit 1
 
 ### All Tests (Full Suite)
 ```bash
-mvn test && \
-BRIDGE_URL=http://localhost:8888 python/venv/bin/pytest python/tests/ -v && \
-fish tests/fish/test_start_script.fish
+./run-tests.sh <jasypt-password>    # Run all tests
+./run-tests.sh help                 # Show help and usage info
 ```
 
 ### Fast Tests Only (Unit Tests)

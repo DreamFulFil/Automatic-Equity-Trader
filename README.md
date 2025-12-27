@@ -491,7 +491,8 @@ The project includes a complete testing suite with **283 tests** covering all co
 Use the provided test runner script (requires Jasypt password):
 
 ```bash
-./run-tests.sh <jasypt-password>
+./run-tests.sh <jasypt-password>    # Run all tests
+./run-tests.sh help                 # Show help and usage info
 ```
 
 This script:
