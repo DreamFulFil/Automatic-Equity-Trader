@@ -292,8 +292,24 @@ def place_order_dry_run(order: OrderRequest):
     }
 
 @app.get("/earnings/scrape")
-def scrape_earnings_endpoint():
+def scrape_earnings_endpoint(force: bool = False):
     try:
+        # If a cached file exists and force is not set, return cached results quickly to avoid
+long external scrapes in tests and fast health checks.
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+        config_dir = os.path.join(project_root, 'config')
+        output_file = os.path.join(config_dir, 'earnings-blackout-dates.json')
+
+        if not force and os.path.exists(output_file):
+            try:
+                with open(output_file, 'r') as f:
+                    cached = json.load(f)
+                    return cached
+            except Exception:
+                # Fall through to perform live scrape if cache is unreadable
+                pass
+
         jasypt_password = os.environ.get('JASYPT_PASSWORD')
         if not jasypt_password:
             return JSONResponse(status_code=500, content={"error": "JASYPT_PASSWORD not set"})
