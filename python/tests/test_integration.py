@@ -340,7 +340,7 @@ class TestAccountEndpoints:
     
     def test_earnings_scrape_endpoint(self):
         """Should successfully scrape earnings dates"""
-        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=15)
+        r = requests.get(f"{BRIDGE_URL}/earnings/scrape", timeout=90)
         
         assert r.status_code == 200
         data = r.json()
