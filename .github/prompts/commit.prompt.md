@@ -1,100 +1,36 @@
 ---
 agent: agent
 ---
-Commit instruction — Conventional Commits (v1.0.0)
 
-**Note:** This file is an operational prompt template for maintainers. Before bumping versions, run unit tests and prefer `./scripts/operational/bump-version.sh` to perform the bump.
-Follow the Conventional Commits spec: https://www.conventionalcommits.org/en/v1.0.0/#specification
+# Commit prompt — Conventional Commits (concise)
 
-FORMAT
-<type>(<scope>): <short summary>
+Purpose: enforce commit message style and pre-commit checks for maintainability and release accuracy.
 
-<detailed description — optional; wrapped at ~72 chars>
+Quick rules
+- Format: `<type>(<scope>): <short summary>` (imperative, ≤50 chars)
+- Types: feat, fix, perf, refactor, docs, test, ci, chore
+- Short summary MUST summarize files changed (comma-separated scopes) — e.g. `fix(earnings,tests): return cached earnings data`
 
-<footer — optional; e.g., BREAKING CHANGE: description or Refs: #123>
+Pre-commit checklist (required)
+1. Run unit tests: `./run-tests.sh --unit <jasypt-password>`
+2. Add/modify unit tests covering your change
+3. Ensure no compile warnings or unused imports
+4. For minor bumps (`feat|perf|refactor`): update `VERSION` (use `./scripts/operational/bump-version.sh minor`) and stage it
 
-ALLOWED TYPES
-feat, fix, perf, refactor, docs, test, ci, chore
+Validator
+- Run: `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
+- The validator enforces Conventional Commits and ensures `VERSION` is staged for minor bumps
+- Configure hook: `git config core.hooksPath .githooks && chmod +x .githooks/commit-msg`
 
-SCOPE
-Optional single word describing area (e.g., telegram, selection, data)
+Release rule
+- Only create a release if commit is a minor bump (per rules above). See `.github/prompts/release.prompt.md` for release steps.
 
-SHORT SUMMARY
-- Imperative, present tense
-- ≤50 characters
-- No trailing period
+Examples
+- `feat(selection): add dynamic stock selection algorithm`
+- `fix(bridge): handle null ticker names in telegram parser`
 
-BODY
-- Explain what and why (not how)
-- Use bullet points for multiple items
-
-FOOTER
-- Reference issues (Refs: #123)
-- Use `BREAKING CHANGE: <description>` for breaking changes
-
-REPO-SPECIFIC VERSIONING RULES
-- Minor bump (create tag & release): types `feat`, `perf`, `refactor`
-- Patch bump: types `fix`, `chore`, `docs`, `ci`, `test`
-
-REPOSITORY PROCEDURE (follow exactly)
-1. Run unit tests before committing: `./run-tests.sh --unit <jasypt-password>`
-2. For a minor bump (feat/perf/refactor):
-   - Update the `VERSION` file with the new semantic version (keep <1.0.0). Example: 0.79.0 → 0.80.0.
-     You can update it manually:
-     ```bash
-     echo "0.80.0" > VERSION
-     ```
-     or use the helper script to pick the correct new version:
-     ```bash
-     # Run bump helper and capture a timestamped log for audit
-     mkdir -p logs
-     LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-     ./scripts/operational/bump-version.sh minor 2>&1 | tee "logs/bump-${LOG_TS}.log"
-     ```
-   - Commit the `VERSION` change and any code changes, then create an annotated tag: `git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"`
-   - Push commits and tags to origin
-   - Create a release if required by running the prompt [release.prompt.md](./release.prompt.md)
-3. For a patch bump: update the `VERSION` file to the new patch version (e.g., 0.79.0 → 0.79.1), commit, push (no tag). Example:
-   ```bash
-   echo "0.79.1" > VERSION
-   ```
-   Or use the helper script:
-   ```bash
-   ./scripts/operational/bump-version.sh patch
-   ```
-
-PRE-COMMIT CHECKLIST
-- Add/modify unit tests covering the change
-- Run `./run-tests.sh --unit <jasypt-password>` and fix failures
-- If all tests pass, push commits and (for minor bumps) annotated tags to origin
-- Ensure no compile warnings or unused imports
-- Update the `VERSION` file contents when required (e.g., `echo "0.80.0" > VERSION`), or run `./scripts/operational/bump-version.sh <minor|patch>`
-
-Enforcement & local hooks
-- To avoid forgetting VERSION updates, enable the local commit hook which validates commit messages and ensures a `VERSION` update is staged for minor-bump commits:
-  ```bash
-  git config core.hooksPath .githooks
-  chmod +x .githooks/commit-msg
-  ```
-- You can run the validator manually before committing:
-  ```bash
-  ./scripts/operational/validate-commit-and-version.sh <commit-msg-file>
-  ```
-- The validator will instruct you to run `./scripts/operational/bump-version.sh minor` if a VERSION update is required but missing.
-
-EXAMPLES
-- feat(selection): add dynamic stock selection algorithm
-- fix: handle null ticker names in telegram parser
-- docs: add usage note for nightly cron job
-- refactor: simplify portfolio valuation logic
-- test: add unit tests for earnings blackout dates
-
-HELPFUL SCRIPTS & COMMANDS
-- Run full test suite: `./run-tests.sh <jasypt-password>`
-- Bump version helper: `./scripts/operational/bump-version.sh <commit-type>`
-
-NOTES
-- Keep commit messages concise and focused — the summary is the release note title.
-- Always follow the Conventional Commits spec for structure and semantic meaning.
+Notes
+- Keep bodies short and explain why, not how
+- Run the validator before committing to avoid blocked pushes
 
 END

@@ -63,7 +63,7 @@ Create the Release via curl
 - Replace `<owner>` and `<repo>` in the URL with the repository owner/name (e.g., `DreamFulFil/Automatic-Equity-Trader`).
 - Use the `GITHUB_TOKEN` environment variable with at least `repo` scope.
 
-> 💡 Tip: If you run these commands from the fish shell, avoid brace-syntax for vars (fish treats `${VAR}` differently). Use `$GITHUB_TOKEN` (no braces) in fish or run the commands in bash (e.g., `bash -lc "..."`).
+> 💡 Tip: When running in fish, use `$GITHUB_TOKEN` (no braces) and fish-native constructs; provide the fish example or a `bash -lc` fallback only when strictly necessary.
 
 ```bash
 # Capture release API output into logs with a timestamp

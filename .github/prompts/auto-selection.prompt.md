@@ -1,23 +1,36 @@
-# Auto-Selection Execution Prompt
+# Auto-selection prompt — concise guide
 
-This guide walks through running the auto-selection process to dynamically select the best-performing strategy and stocks based on backtest results.
+Purpose: Run and validate the auto-selection workflow that picks best strategy+stock combos from backtest results.
 
-## Prerequisites
+Prereqs
+- Backtest results exist (run backtest if needed)
+- Java service healthy: `curl -s http://localhost:16350/actuator/health | jq -r '.status'` -> `UP`
 
-Before running auto-selection:
+Quick run (fish examples)
+1) Verify results count
+- fish: `docker exec -i psql psql -U postgres -d auto_equity_trader -c "SELECT COUNT(*) FROM backtest_results WHERE total_trades > 10;"`
 
-1. **Backtest Results Must Exist**
-   - Auto-selection analyzes backtest_results table to rank strategies
-   - Run backtest first: See [backtest.prompt.md](backtest.prompt.md)
-   - Verify: `SELECT COUNT(*) FROM backtest_results;`
-   - Expected: 2,700+ records (50 stocks × 99 strategies minimum)
+2) Trigger auto-selection
+- fish: `curl -X POST http://localhost:16350/api/auto-selection/run-now | jq '.'`
 
-2. **Java Application Running**
-   - Health check: `curl http://localhost:16350/actuator/health`
-   - Expected response: `{"status":"UP"}`
+3) Validate success
+- Look for `"status":"success"` in response and `AUTO-SELECTION` logs in `logs/java-*.log`
+- DB check: `SELECT stock_code, strategy_name, confidence_score FROM strategy_stock_mapping WHERE is_active = true ORDER BY confidence_score DESC LIMIT 10;`
 
-## Step 1: Verify Backtest Results Available
+Checks & expectations
+- Selection time: typically < 5s
+- Active mapping updated (`is_active = true`) and top 10 shadow strategies set
 
+Troubleshooting (short)
+- No results: run backtest and verify `backtest_results`
+- Selection repeats same strategy: inspect diversity and thresholds
+- Shadow strategies not updating: inspect logs and DB schema
+
+Notes
+- Manual trigger useful post-backtest or CV tuning
+- Scheduled daily by `@Scheduled(cron = "${app.auto-selection.schedule:0 0 1 * * *}")`
+
+END
 ```bash
 docker exec -i psql psql -U postgres -d auto_equity_trader -c \ I
   "SELECT COUNT(*) as total_results, 
