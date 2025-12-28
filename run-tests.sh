@@ -185,7 +185,7 @@ set_phase_count() {
             TOTAL_PHASES=2  # Java Unit + Python Unit
             ;;
         integration)
-            TOTAL_PHASES=4  # Unit tests + Integration tests
+            TOTAL_PHASES=5  # Unit tests + System startup + Integration tests
             ;;
         full)
             TOTAL_PHASES=6  # Unit + Integration + E2E + System startup

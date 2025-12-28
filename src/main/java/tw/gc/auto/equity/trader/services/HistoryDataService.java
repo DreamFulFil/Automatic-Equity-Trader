@@ -54,6 +54,7 @@ public class HistoryDataService {
     private final JdbcTemplate jdbcTemplate;
     private final SystemStatusService systemStatusService;
     private final BacktestService backtestService;
+    private final TelegramService telegramService;
     private final TaiwanStockNameService taiwanStockNameService;
     
     // Flag to ensure truncation happens only once per backtest run
@@ -87,6 +88,7 @@ public class HistoryDataService {
                               org.springframework.transaction.PlatformTransactionManager transactionManager,
                               SystemStatusService systemStatusService,
                               @Lazy BacktestService backtestService,
+                              @Lazy TelegramService telegramService,
                               TaiwanStockNameService taiwanStockNameService) {
         this.barRepository = barRepository;
         this.marketDataRepository = marketDataRepository;
@@ -98,6 +100,7 @@ public class HistoryDataService {
         this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         this.systemStatusService = systemStatusService;
         this.backtestService = backtestService;
+        this.telegramService = telegramService;
         this.taiwanStockNameService = taiwanStockNameService;
     }
     
@@ -114,6 +117,13 @@ public class HistoryDataService {
         log.info("🚀 Starting concurrent download for {} stocks, {} years each", symbols.size(), years);
         
         systemStatusService.startHistoryDownload();
+
+        // Notify that a bulk download is starting with a summary of symbols and years
+        try {
+            notifyDownloadStartedForAll(symbols, years);
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to send download start notification: {}", e.getMessage());
+        }
         
         try {
             truncateTablesIfNeeded();
@@ -122,13 +132,16 @@ public class HistoryDataService {
             AtomicBoolean allDownloadsComplete = new AtomicBoolean(false);
             AtomicInteger totalInserted = new AtomicInteger(0);
             CountDownLatch writerLatch = new CountDownLatch(1);
+            // Map to track inserted counts per symbol
+            java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol = new java.util.concurrent.ConcurrentHashMap<>();
+            symbols.forEach(s -> insertedBySymbol.put(s, new java.util.concurrent.atomic.AtomicInteger(0)));
             
             // Start single global writer thread
             Thread globalWriter = Thread.ofPlatform()
                 .name("GlobalHistoryWriter")
                 .start(() -> {
                     try {
-                        int inserted = runGlobalWriter(globalQueue, allDownloadsComplete);
+                        int inserted = runGlobalWriter(globalQueue, allDownloadsComplete, insertedBySymbol);
                         totalInserted.set(inserted);
                         log.info("✅ Global writer completed. Total inserted: {}", inserted);
                     } catch (Exception e) {
@@ -186,9 +199,28 @@ public class HistoryDataService {
             
             // Update results with actual inserted counts
             int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
+            // populate inserted counts from insertedBySymbol map
+            for (Map.Entry<String, java.util.concurrent.atomic.AtomicInteger> e : insertedBySymbol.entrySet()) {
+                String sym = e.getKey();
+                int inserted = e.getValue().get();
+                DownloadResult prev = results.get(sym);
+                if (prev != null) {
+                    results.put(sym, new DownloadResult(sym, prev.getTotalRecords(), inserted, prev.getSkipped()));
+                } else {
+                    results.put(sym, new DownloadResult(sym, 0, inserted, 0));
+                }
+            }
+
             log.info("✅ Multi-stock download complete. {} stocks, {} downloaded, {} inserted",
                 symbols.size(), totalDownloaded, totalInserted.get());
-            
+
+            // Send Telegram summary notification (if configured)
+            try {
+                notifyDownloadSummary(results);
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to send download summary notification: {}", e.getMessage());
+            }
+
             return results;
         } finally {
             systemStatusService.completeHistoryDownload();
@@ -201,6 +233,13 @@ public class HistoryDataService {
     private int downloadStockData(String symbol, int years, BlockingQueue<HistoricalDataPoint> queue, 
                                    AtomicInteger counter) {
         log.info("📥 Starting download for {} ({} years)", symbol, years);
+
+        // Notify that a per-symbol download is starting
+        try {
+            notifyDownloadStartedForSymbol(symbol, years);
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to send per-symbol start notification for {}: {}", symbol, e.getMessage());
+        }
         
         LocalDateTime endDate = LocalDateTime.now();
         int daysPerBatch = 365;
@@ -235,6 +274,15 @@ public class HistoryDataService {
         }
         
         log.info("✅ {} download complete: {} records", symbol, totalDownloaded);
+
+        // Notify per-symbol completion
+        try {
+            DownloadResult r = new DownloadResult(symbol, totalDownloaded, 0, 0);
+            notifyDownloadComplete(r);
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to send per-symbol download notification for {}: {}", symbol, e.getMessage());
+        }
+
         return totalDownloaded;
     }
     
@@ -242,7 +290,7 @@ public class HistoryDataService {
      * Global writer thread that drains from all producers and performs bulk inserts.
      * Uses PgBulkInsert (COPY protocol) as primary, JdbcTemplate as fallback.
      */
-    private int runGlobalWriter(BlockingQueue<HistoricalDataPoint> queue, AtomicBoolean complete) {
+    private int runGlobalWriter(BlockingQueue<HistoricalDataPoint> queue, AtomicBoolean complete, java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol) {
         List<Bar> barBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
         List<MarketData> marketDataBatch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
         int totalInserted = 0;
@@ -261,8 +309,19 @@ public class HistoryDataService {
                 boolean timeoutReached = System.currentTimeMillis() - lastFlush > FLUSH_TIMEOUT_MS;
                 
                 if ((batchFull || (timeoutReached && !barBatch.isEmpty())) && !barBatch.isEmpty()) {
+                    // compute per-symbol counts for this batch
+                    Map<String, Integer> batchCounts = new HashMap<>();
+                    for (Bar b : barBatch) {
+                        batchCounts.merge(b.getSymbol(), 1, Integer::sum);
+                    }
+
                     int inserted = flushBatchWithFallback(barBatch, marketDataBatch);
                     totalInserted += inserted;
+
+                    // attribute inserted counts by symbol (best-effort: attribute by counts in batch)
+                    for (Map.Entry<String, Integer> e : batchCounts.entrySet()) {
+                        insertedBySymbol.computeIfAbsent(e.getKey(), k -> new java.util.concurrent.atomic.AtomicInteger(0)).addAndGet(e.getValue());
+                    }
                     
                     if (totalInserted % 10_000 == 0 || inserted > 1000) {
                         log.info("📊 Global writer: flushed {} (total: {}, queue: {})", 
@@ -282,8 +341,15 @@ public class HistoryDataService {
         
         // Final flush
         if (!barBatch.isEmpty()) {
+            Map<String, Integer> batchCounts = new HashMap<>();
+            for (Bar b : barBatch) {
+                batchCounts.merge(b.getSymbol(), 1, Integer::sum);
+            }
             int inserted = flushBatchWithFallback(barBatch, marketDataBatch);
             totalInserted += inserted;
+            for (Map.Entry<String, Integer> e : batchCounts.entrySet()) {
+                insertedBySymbol.computeIfAbsent(e.getKey(), k -> new java.util.concurrent.atomic.AtomicInteger(0)).addAndGet(e.getValue());
+            }
             log.info("📊 Global writer: final flush {} (total: {})", inserted, totalInserted);
         }
         
@@ -337,15 +403,65 @@ public class HistoryDataService {
      */
     private int pgBulkInsert(List<Bar> bars, List<MarketData> marketDataList) throws SQLException {
         initBulkInsertMappings();
-        
         try (Connection conn = dataSource.getConnection()) {
             PGConnection pgConn = conn.unwrap(PGConnection.class);
-            
+
             barBulkInsert.saveAll(pgConn, bars.stream());
             marketDataBulkInsert.saveAll(pgConn, marketDataList.stream());
-            
+
             return bars.size();
         }
+    }
+
+    // -------------------- Telegram notifications --------------------
+
+    void notifyDownloadComplete(DownloadResult r) {
+        // Intentionally no-op: do not send per-symbol completion messages to reduce noise.
+        // Use notifyDownloadSummary for an aggregated completion message instead.
+        if (r == null) return;
+        log.debug("Per-symbol completion: {} records (inserted/skipped: {}/{}) — telegram suppressed", r.getSymbol(), r.getTotalRecords(), r.getInserted(), r.getSkipped());
+    }
+
+    void notifyDownloadSummary(Map<String, DownloadResult> results) {
+        if (results == null || results.isEmpty() || telegramService == null) return;
+        String msg = formatSummaryForAll(results);
+        log.info("📣 Telegram summary (pre-send): {}", msg.replaceAll("\n", " "));
+        telegramService.sendMessage(msg);
+    }
+
+    String formatIndividualSummary(DownloadResult r) {
+        return String.format("📥 Download complete: %s — records: %d, inserted: %d, skipped: %d", r.getSymbol(), r.getTotalRecords(), r.getInserted(), r.getSkipped());
+    }
+
+    String formatSummaryForAll(Map<String, DownloadResult> results) {
+        int symbols = results.size();
+        int totalRecords = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
+        int totalInserted = results.values().stream().mapToInt(DownloadResult::getInserted).sum();
+        int totalSkipped = results.values().stream().mapToInt(DownloadResult::getSkipped).sum();
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("📥 Historical download complete: symbols=%d, records=%d, inserted=%d, skipped=%d", symbols, totalRecords, totalInserted, totalSkipped));
+        sb.append('\n');
+        sb.append("Details:\n");
+        results.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(e -> sb.append(String.format("%s - inserted %d\n", e.getKey(), e.getValue().getInserted())));
+        return sb.toString();
+    }
+
+    // Start notifications
+    void notifyDownloadStartedForSymbol(String symbol, int years) {
+        // Intentionally no-op: suppress per-symbol start notifications to reduce noise.
+        log.debug("Per-symbol start: {} ({} years) — telegram suppressed", symbol, years);
+    }
+
+    void notifyDownloadStartedForAll(java.util.List<String> symbols, int years) {
+        if (telegramService == null || symbols == null || symbols.isEmpty()) return;
+        int n = symbols.size();
+        // Provide full listing of symbols (do not truncate)
+        String listFull = String.join(", ", symbols);
+        String msg = String.format("📥 Starting historical download for %d symbols (%d years): %s", n, years, listFull);
+        log.info("📣 Telegram start (pre-send): {}", msg);
+        telegramService.sendMessage(msg);
     }
     
     private synchronized void initBulkInsertMappings() {

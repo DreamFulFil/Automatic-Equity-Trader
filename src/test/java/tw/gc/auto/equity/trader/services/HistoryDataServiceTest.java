@@ -53,6 +53,9 @@ class HistoryDataServiceTest {
 
     @Mock
     private TaiwanStockNameService taiwanStockNameService;
+
+    @Mock
+    private TelegramService telegramService;
     
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
@@ -78,6 +81,7 @@ class HistoryDataServiceTest {
             transactionManager,
             systemStatusService,
             backtestService,
+            telegramService,
             taiwanStockNameService
         );
     }
