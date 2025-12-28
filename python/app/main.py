@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+import json
 from contextlib import asynccontextmanager
 import sys
 import os
@@ -294,8 +295,7 @@ def place_order_dry_run(order: OrderRequest):
 @app.get("/earnings/scrape")
 def scrape_earnings_endpoint(force: bool = False):
     try:
-        # If a cached file exists and force is not set, return cached results quickly to avoid
-long external scrapes in tests and fast health checks.
+        # If a cached file exists and force is not set, return cached results quickly to avoid long external scrapes in tests and fast health checks.
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
         config_dir = os.path.join(project_root, 'config')
