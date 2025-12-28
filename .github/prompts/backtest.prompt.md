@@ -2,30 +2,20 @@
 
 Purpose: Run and validate comprehensive backtests for configured stocks/strategies.
 
-Prerequisites
-- Provide JASYPT password for DB creds
-- Ensure historical data is loaded (use `download-historical-data.prompt.md` first)
-- Java service running and healthy (`http://localhost:16350/actuator/health`)
+**Runtime logs:** All runtime logs and temporary outputs are written to the repository's `logs/` directory (not `/tmp`).
 
-Quick steps
-1) Verify data
-- SQL: `SELECT COUNT(*) FROM bar;` (expect large dataset for configured stocks)
+Quick steps (non-interactive)
 
-2) Ensure Java service is UP (fish example)
-- fish: `curl -s http://localhost:16350/actuator/health | jq -r '.status'`
+This prompt is non-interactive and provides a ready-to-run fish script to verify prerequisites, trigger a backtest, and validate results. If the Java service is not running, the script will attempt to start it automatically (requires `JASYPT_PASSWORD` exported in the environment).
 
-3) Trigger backtest
-- fish: 
-  set LOG_TS (date -u +%Y%m%dT%H%M%SZ)
-  curl -s -X POST "http://localhost:16350/api/backtest/run" -o "logs/backtest-result-${LOG_TS}.json" &
+Run the canonical non-interactive backtest script:
 
-4) Monitor progress
-- `tail -f logs/java-*.log | rg -i "(backtest|strategy|stock)"`
-- Watch for `Parallelized backtest completed` and final summary
+```fish
+# Run the canonical backtest wrapper (non-interactive)
+fish scripts/operational/run_backtest.fish &
+```
 
-5) Validate results
-- Inspect latest result file: `ls -1 logs/backtest-result-*.json | tail -n1` then `jq` summary
-- DB check: `SELECT COUNT(*) FROM backtest_result;`
+> Note: This script is non-interactive and intended to be invoked either directly or by the post-download verifier in `download-historical-data.prompt.md`. The canonical script is located at `scripts/operational/run_backtest.fish`.
 
 Checks & expectations
 - Total results ≈ 2,700 (50 stocks × ~54 strategies)

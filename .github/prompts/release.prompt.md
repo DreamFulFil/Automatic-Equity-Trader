@@ -5,6 +5,10 @@ Release instructions — Create GitHub release via REST API (curl)
 
 **Note:** This file is an operational prompt template for maintainers. Ensure you have run unit tests and used `./scripts/operational/bump-version.sh` to update `VERSION` (and create the tag) before creating the release.
 
+**Runtime logs:** This prompt and helper scripts write runtime logs and temporary files under the repository `logs/` directory (not `/tmp`).
+
+**Non-interactive:** This release workflow is non-interactive. If run as part of an automated pipeline, any required secrets (e.g. `GITHUB_TOKEN`, `JASYPT_PASSWORD` for tests) must be exported as environment variables; the assistant will not prompt for them.
+
 This document describes the exact steps to create a GitHub Release using the GitHub Releases REST API (`2022-11-28`) with curl. Follow these steps only when a release is required by the rules in `.github/instructions/commit.instructions.md` (i.e., **minor bumps**: commit types `feat`, `perf`, `refactor`).
 
 Prerequisites
@@ -207,7 +211,7 @@ Troubleshooting & Tips
 
 Assistant automation — AI-run semantics
 - Invocation: When instructed to **"Run release.prompt.md"** or when automatically invoked by `commit.prompt.md` after a minor bump, the assistant will perform a non-interactive release creation run following these rules:
-  1. Preconditions: verify `GITHUB_TOKEN` is present; if missing, abort release creation and record `SKIPPED` in `logs/releases-summary.csv` with a note.
+  1. Preconditions: verify `GITHUB_TOKEN` is present; also ensure any secrets required for test execution (e.g. `JASYPT_PASSWORD`) are exported in the environment. If `GITHUB_TOKEN` is missing, abort release creation and record `SKIPPED` in `logs/releases-summary.csv` with a note; if required test secrets are missing, the assistant will abort and report the failure.
   2. Build the required release `BODY` per the project format. If the commit versus changed-files produce fewer than 3 bullets for `## Changes`, the assistant will synthesize concise bullets using the commit message, files changed, and test outcomes to meet the minimum requirement.
   3. Escape the body using `jq -Rs .` and POST the release via the Releases REST API (use `curl` per project policy), capturing full API request/response to `logs/release-<TS>-${TAG}.log`.
   4. On success (HTTP 201): parse the returned `html_url`, append `tag,commit,html_url` to `logs/releases-summary.csv`, and return the `html_url` in the assistant response.

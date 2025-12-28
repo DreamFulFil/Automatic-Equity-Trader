@@ -3,10 +3,14 @@
 ## Context
 This prompt guides the AI agent through downloading historical data for Taiwan stocks using the Automatic-Equity-Trader system.
 
+**Non-interactive:** This document includes runnable, non-interactive fish scripts to automate the full download, verification of 5-year coverage, and auto-triggering of the backtest.
+
+**Runtime logs:** All runtime logs and temporary outputs are written to the repository's `logs/` directory (not `/tmp`).
+
 ## Prerequisites
 User must provide:
-- **JASYPT Password**: Required for decrypting database credentials
-- **Years of data**: Number of years to download (default: 10)
+- **JASYPT Password**: Must be exported as environment variable `JASYPT_PASSWORD` (fish example: `set -x JASYPT_PASSWORD mysecret`) — required for decrypting database credentials
+- **Years of data**: Number of years to download (default: 5)
 
 ## Execution Steps
 
@@ -24,19 +28,33 @@ lsof -i :8888
 
 ### 2. Start Services (if not running)
 
-**Start Java Application:**
-```bash
+**Start Java Application (fish):**
+```fish
+# Ensure JASYPT_PASSWORD is exported in fish (e.g. `set -x JASYPT_PASSWORD mysecret`)
+if not set -q JASYPT_PASSWORD
+    echo "❌ JASYPT_PASSWORD not set in environment; aborting non-interactive run"
+    exit 1
+end
+
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader
 mkdir -p logs
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-nohup jenv exec java -Djasypt.encryptor.password=<JASYPT_PASSWORD> -jar target/auto-equity-trader.jar > "logs/java-${LOG_TS}.log" 2>&1 &
+set -l LOG_TS (date -u +%Y%m%dT%H%M%SZ)
+nohup jenv exec java -Djasypt.encryptor.password=$JASYPT_PASSWORD -jar target/auto-equity-trader.jar > "logs/java-${LOG_TS}.log" 2>&1 &
 ```
 
-**Start Python Bridge:**
-```bash
+**Start Python Bridge (fish):**
+```fish
+# Ensure JASYPT_PASSWORD is exported in fish (e.g. `set -x JASYPT_PASSWORD mysecret`)
+if not set -q JASYPT_PASSWORD
+    echo "❌ JASYPT_PASSWORD not set in environment; aborting non-interactive run"
+    exit 1
+end
+
 cd /Users/gc/Downloads/work/stock/Automatic-Equity-Trader/python
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
-JASYPT_PASSWORD=<JASYPT_PASSWORD> TRADING_MODE=stock ../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > "logs/bridge-${LOG_TS}.log" 2>&1 &
+set -l LOG_TS (date -u +%Y%m%dT%H%M%SZ)
+# Export TRADING_MODE for the uvicorn process and run (JASYPT_PASSWORD should already be exported)
+set -x TRADING_MODE stock
+../python/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 > "logs/bridge-${LOG_TS}.log" 2>&1 &
 ```
 
 ### 3. Wait for Services to be Healthy
@@ -58,14 +76,61 @@ end
 curl -s http://localhost:8888/health | jq '.'
 ```
 
-### 4. Trigger Historical Data Download
+### 4. Trigger Historical Data Download (non-interactive)
 
-Replace `<YEARS>` with desired number of years (e.g., 10):
+Replace `<YEARS>` with desired number of years (e.g., 5):
 
-```bash
-LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+```fish
+# Non-interactive: trigger the historical download in background and save the response
+set -l LOG_TS (date -u +%Y%m%dT%H%M%SZ)
 curl -s -X POST "http://localhost:16350/api/history/download?years=<YEARS>" -o "logs/history-download-${LOG_TS}.json" &
 ```
+
+#### 4b. Verify 5-year coverage and auto-trigger backtest (non-interactive)
+
+This script polls the DB until it detects at least **5 years** of history (MIN(timestamp) <= CURRENT_DATE - INTERVAL '5 years') and at least **50 symbols** (expected coverage). If checks pass, it automatically triggers the backtest endpoint.
+
+```fish
+# Poll DB (up to max attempts) and on success trigger backtest automatically
+set -l attempts 0
+set -l max_attempts 40         # 40 * 30s = 20 minutes
+set -l sleep_secs 30
+set -l expected_symbols 50
+
+while test $attempts -lt $max_attempts
+    echo "Checking historical coverage (attempt $attempts)..."
+    set -l row (docker exec psql psql -U dreamer -d auto_equity_trader -t -A -c "SELECT (MIN(timestamp::date) <= (CURRENT_DATE - INTERVAL '5 years'))::text || '|' || COUNT(*) || '|' || COUNT(DISTINCT symbol) FROM bar;")
+    if test -n "$row"
+        set -l parts (string split '|' $row)
+        set -l has_5yr $parts[1]
+        set -l records $parts[2]
+        set -l symbols $parts[3]
+        echo "DB rows: $records, symbols: $symbols, has_5yr: $has_5yr"
+
+        # Check if any symbol is missing 5 years of data
+        set -l missing_count (docker exec psql psql -U dreamer -d auto_equity_trader -t -A -c "SELECT COUNT(*) FROM (SELECT symbol, MIN(timestamp::date) as earliest FROM bar GROUP BY symbol HAVING MIN(timestamp::date) > (CURRENT_DATE - INTERVAL '5 years')) t;")
+        echo "Symbols missing 5-year coverage: $missing_count"
+
+        if test "$has_5yr" = 't' -a $symbols -ge $expected_symbols -a $missing_count -eq 0
+            echo "✅ 5-year coverage detected for all symbols (symbols: $symbols). Triggering backtest wrapper script..."
+            set -l BT_TS (date -u +%Y%m%dT%H%M%SZ)
+            # Launch the canonical non-interactive backtest script and detach; log output
+            mkdir -p logs
+            fish scripts/operational/run_backtest.fish > "logs/backtest-run-${BT_TS}.log" 2>&1 &
+            echo "Backtest wrapper started: logs/backtest-run-${BT_TS}.log"
+            exit 0
+        else
+            echo "⚠️ Coverage incomplete: has_5yr=$has_5yr, symbols=$symbols, missing_symbols=$missing_count — will retry"
+        end
+    end
+    sleep $sleep_secs
+    set attempts (math $attempts + 1)
+end
+
+echo "⚠️ Timeout waiting for 5-year coverage after (math $max_attempts * $sleep_secs) seconds. Check logs and retry."; exit 2
+```
+
+> Note: This check is non-interactive and intended for automated runs; adjust `expected_symbols` / `max_attempts` as needed.
 
 ### 5. Monitor Download Progress
 
@@ -95,12 +160,12 @@ tail -100 logs/bridge-*.log | rg "✅ Merged"
 ## Expected Results
 
 - **Date Range**: Should see data from ~2018-2020 to current date (depending on stock availability)
-  - Most stocks achieve 7+ years of historical coverage
+  - Most stocks achieve 5+ years of historical coverage
   - Actual coverage depends on when each stock was listed
 - **Coverage**: All 50 configured stocks should have data
 - **Sources**: Data primarily from Yahoo Finance (multi-year historical), supplemented by Shioaji (recent data) and TWSE
-- **Duration**: Full 10-year download takes approximately 5-10 minutes for 50 stocks
-- **Expected Total**: ~130,000-140,000 records for 50 stocks over 7 years
+- **Duration**: Full 5-year download takes approximately 5-10 minutes for 50 stocks
+- **Expected Total**: ~130,000-140,000 records for 50 stocks over 5 years
 
 ## Data Source Priority
 

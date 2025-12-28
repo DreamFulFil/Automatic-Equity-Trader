@@ -20,6 +20,37 @@ Purpose: Provide strict, concise rules for contributors and automation agents so
   - Interactive: `fzf`
   - Code analysis: `ast-grep`
 
+- Database access (PostgreSQL in Docker) ✅:
+  - Our database runs in a Docker container named `psql` and uses **PostgreSQL**.
+  - Access via `docker exec` for quick queries or interactive psql shell. fish examples:
+    ```fish
+    # open an interactive psql shell
+    docker exec -it psql psql -U $POSTGRES_USER -d $POSTGRES_DB
+
+    # run a single query
+    docker exec psql psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT COUNT(*) FROM bar;"
+    ```
+  - Or write a Python helper that reads `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` from the environment and connects using `psycopg2` (place helpers under `scripts/support/`):
+    ```python
+    # scripts/support/psql_client.py
+    #!/usr/bin/env python3
+    import os
+    import psycopg2
+
+    db = os.environ['POSTGRES_DB']
+    user = os.environ['POSTGRES_USER']
+    pw = os.environ['POSTGRES_PASSWORD']
+
+    # If running outside the container, ensure the host/port are accessible or run inside the container via `docker exec`.
+    conn = psycopg2.connect(dbname=db, user=user, password=pw, host='localhost')
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM bar;")
+        print(cur.fetchone())
+    ```
+  - Notes:
+    - If you run the Python script outside the `psql` container, either run it inside the container (`docker exec -i psql python /path/to/script.py`) or configure access to the database host/port. For most one-off tasks we prefer `docker exec` to avoid host networking issues.
+    - Ensure `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` are set in your environment (e.g. `set -x POSTGRES_DB ...`).
+
 - If a task is difficult to express in shell or using the preferred tools, write a small Python helper script under `scripts/support/` (e.g., `scripts/support/my_task.py`). After the script has been used, **evaluate** whether to move it to `scripts/automation/`, `scripts/operational/`, or `scripts/setup/` for long-term use; if it was a one-off, delete it.
 
 ## Python venv
