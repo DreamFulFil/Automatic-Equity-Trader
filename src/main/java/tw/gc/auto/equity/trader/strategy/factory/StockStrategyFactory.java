@@ -75,6 +75,8 @@ public class StockStrategyFactory implements StrategyFactory {
         strategies.add(new PriceRateOfChangeStrategy());
         strategies.add(new StandardDeviationStrategy());
         strategies.add(new LinearRegressionStrategy());
+        // New strategy to bring total to 100
+        strategies.add(new OnBalanceVolumeStrategy(20, 0.0));
 
         return strategies;
     }

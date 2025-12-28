@@ -59,6 +59,8 @@ Purpose: Provide strict, concise rules for contributors and automation agents so
 
 ## Commit & Release Workflow
 - For every commit: run the checklist in `.github/prompts/commit.prompt.md` (unit tests + validator). ✅
+- The AI assistant **must NOT** automatically commit, tag, or push changes without explicit user approval. The assistant may prepare commit messages, run validations, and propose the exact git commands, but it must always request and receive confirmation from a human operator before performing `git commit`, `git tag`, or `git push` operations.
+- The assistant will not invoke `.github/prompts/commit.prompt.md` or execute any part of the commit workflow unless explicitly asked by the user and the user confirms execution; commits and pushes must be manually triggered by the user after reviewing test results and the proposed commit message.
 - Only run `.github/prompts/release.prompt.md` when a release is required (minor bumps: `feat`, `perf`, `refactor`).
 - Use `./scripts/operational/bump-version.sh` to manage `VERSION` bumps and tags.
 
