@@ -205,4 +205,16 @@ Troubleshooting & Tips
 - Shells: if using fish, prefer `$GITHUB_TOKEN` (no braces) in curl header values, or run the commands via `bash -lc "..."`.
 - Validation: the API returns HTTP 201 for successful creation (POST) and HTTP 200 for successful updates (PATCH). The response includes `html_url` and `published_at` when published.
 
+Assistant automation — AI-run semantics
+- Invocation: When instructed to **"Run release.prompt.md"** or when automatically invoked by `commit.prompt.md` after a minor bump, the assistant will perform a non-interactive release creation run following these rules:
+  1. Preconditions: verify `GITHUB_TOKEN` is present; if missing, abort release creation and record `SKIPPED` in `logs/releases-summary.csv` with a note.
+  2. Build the required release `BODY` per the project format. If the commit versus changed-files produce fewer than 3 bullets for `## Changes`, the assistant will synthesize concise bullets using the commit message, files changed, and test outcomes to meet the minimum requirement.
+  3. Escape the body using `jq -Rs .` and POST the release via the Releases REST API (use `curl` per project policy), capturing full API request/response to `logs/release-<TS>-${TAG}.log`.
+  4. On success (HTTP 201): parse the returned `html_url`, append `tag,commit,html_url` to `logs/releases-summary.csv`, and return the `html_url` in the assistant response.
+  5. On failure: save the full API response to the log file and return a concise error report (HTTP code + message). The assistant will not prompt interactively for corrective action.
+
+Non-interactive & safety notes
+- The assistant will not ask for secrets; if `GITHUB_TOKEN` is not available it will skip release creation and report `SKIPPED`. The assistant will redact tokens and sensitive headers from any chat output.
+- Logs with raw API responses are stored locally in `logs/` and referenced in the assistant summary for auditing.
+
 End of instructions

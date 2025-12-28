@@ -5,11 +5,13 @@ Purpose: Provide strict, concise rules for contributors and automation agents so
 ## Quick Rules
 - Follow Conventional Commits for commit messages (see `.github/prompts/commit.prompt.md`).
 - All code must compile and tests must pass. Do not remove tests to make builds pass.
-- Use `exec` for command execution; prefer small Python helpers in `/tmp` if shell tools are insufficient.
+- Use `jenv exec` for Java/Maven command execution and ensure you set the local JDK first with `jenv local 21.0` (example: `jenv local 21.0 && jenv exec mvn compile`). Examples:
+  - Test: `jenv exec mvn compile`
+  - Clean: `jenv exec mvn clean`
 
 ## Shell & Tooling
-- Development shell: **fish** on macOS — prefer fish syntax.
-  - Example (fish): `set -x GITHUB_TOKEN <token>`
+- Development shell: **fish** on macOS — prefer fish syntax. **Do not** invoke commands via `bash -lc`; prefer fish-native commands and the repository's preferred tools instead.
+  - Reference: consult the official fish shell documentation for examples and usage: https://fishshell.com/docs/2.4/index.html
 - Preferred tools:
   - Find files: `fd`
   - Search text: `rg`
@@ -17,6 +19,8 @@ Purpose: Provide strict, concise rules for contributors and automation agents so
   - YAML/XML: `yq`
   - Interactive: `fzf`
   - Code analysis: `ast-grep`
+
+- If a task is difficult to express in shell or using the preferred tools, write a small Python helper script under `scripts/support/` (e.g., `scripts/support/my_task.py`). After the script has been used, **evaluate** whether to move it to `scripts/automation/`, `scripts/operational/`, or `scripts/setup/` for long-term use; if it was a one-off, delete it.
 
 ## Python venv
 - Use `python/venv`. Activate with: `source python/venv/bin/activate`.
