@@ -31,6 +31,12 @@ fi
 
 echo "Continuing from dry-run: $DRY" | tee "$LOG"
 
+# Require Java 21 for running tests
+if ! java -version 2>&1 | awk -F\" '/version/ {print $2}' | cut -d. -f1 | grep -q '^21'; then
+  echo "ERROR: Java 21 is required to run unit tests. Set with jenv (e.g., 'jenv local 21.0')." | tee -a "$LOG"
+  exit 3
+fi
+
 # Helper to check if commit processed
 is_processed(){
   local c="$1"
@@ -60,7 +66,10 @@ tail -n +2 "$DRY" | while IFS=',' read -r commit type header touched current pro
         untracked=""
       else
         untracked="$filtered"
-      fi    BACKUP_DIR="logs/rewrite-backups-${TS}"
+      fi
+
+  if [ -n "$untracked" ]; then
+    BACKUP_DIR="logs/rewrite-backups-${TS}"
     mkdir -p "$BACKUP_DIR"
     echo "Found untracked files; moving to $BACKUP_DIR to avoid cherry-pick conflicts" | tee -a "$LOG"
     echo "$untracked" | while read -r uf; do
@@ -69,6 +78,7 @@ tail -n +2 "$DRY" | while IFS=',' read -r commit type header touched current pro
       echo "Moved $uf -> $BACKUP_DIR/$uf" | tee -a "$LOG"
     done
   fi
+fi
 
   # If an equivalent commit already exists in this branch (same header), mark as processed and skip
   # Look for a matching commit in the current history by header
