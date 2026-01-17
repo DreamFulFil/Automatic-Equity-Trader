@@ -230,4 +230,99 @@ class RiskManagementServiceTest {
         assertEquals(800, riskManagementService.getDailyPnL()); // Only day 3
         assertEquals(1300, riskManagementService.getWeeklyPnL()); // 1000 - 500 + 800
     }
+
+    @Test
+    void getWeeklyPnL_perSymbol_shouldReturnCorrectValue() {
+        riskManagementService.recordPnL("2330.TW", 1500, 15000);
+        riskManagementService.recordPnL("2454.TW", -800, 15000);
+
+        assertEquals(1500, riskManagementService.getWeeklyPnL("2330.TW"));
+        assertEquals(-800, riskManagementService.getWeeklyPnL("2454.TW"));
+        assertEquals(0.0, riskManagementService.getWeeklyPnL("UNKNOWN"));
+    }
+
+    @Test
+    void refreshEarningsBlackoutState_withException_shouldNotThrow() {
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenThrow(new RuntimeException("Service error"));
+
+        // Should handle exception gracefully
+        assertDoesNotThrow(() -> riskManagementService.isEarningsBlackout());
+        assertFalse(riskManagementService.isEarningsBlackout());
+    }
+
+    @Test
+    void deriveEarningsBlackoutStock_withEmptyTickers_shouldReturnNull() {
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(OffsetDateTime.now())
+                .tickersChecked(new LinkedHashSet<>())
+                .source("test")
+                .build();
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.of(meta));
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Collections.emptySet());
+
+        assertNull(riskManagementService.getEarningsBlackoutStock());
+    }
+
+    @Test
+    void deriveEarningsBlackoutStock_withBlankTickers_shouldFilterThem() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(OffsetDateTime.now())
+                .tickersChecked(new LinkedHashSet<>(Arrays.asList("TSM", "", "2317.TW", null, "  ")))
+                .source("test")
+                .build();
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.of(meta));
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Set.of(today));
+
+        riskManagementService.isEarningsBlackout();
+        String result = riskManagementService.getEarningsBlackoutStock();
+        assertEquals("TSM, 2317.TW", result);
+    }
+
+    @Test
+    void deriveEarningsBlackoutStock_withMoreThanThreeTickers_shouldLimitToThree() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(OffsetDateTime.now())
+                .tickersChecked(new LinkedHashSet<>(Arrays.asList("A", "B", "C", "D", "E")))
+                .source("test")
+                .build();
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.of(meta));
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Set.of(today));
+
+        riskManagementService.isEarningsBlackout();
+        String result = riskManagementService.getEarningsBlackoutStock();
+        assertEquals("A, B, C", result);
+    }
+
+    @Test
+    void isEarningsBlackout_whenMetaIsNull_shouldReturnFalse() {
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.empty());
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Collections.emptySet());
+
+        assertFalse(riskManagementService.isEarningsBlackout());
+        assertNull(riskManagementService.getEarningsBlackoutStock());
+    }
+
+    @Test
+    void isEarningsBlackout_whenBlackoutDatesEmpty_shouldReturnFalse() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(OffsetDateTime.now())
+                .tickersChecked(new LinkedHashSet<>(Arrays.asList("TSM")))
+                .source("test")
+                .build();
+        when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.of(meta));
+        // Set blackout dates to trigger state update with stock name
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Set.of(today));
+
+        assertTrue(riskManagementService.isEarningsBlackout()); // Should be true when date matches
+        assertEquals("TSM", riskManagementService.getEarningsBlackoutStock());
+        
+        // Now check with different date (not blackout)
+        when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Collections.emptySet());
+        assertFalse(riskManagementService.isEarningsBlackout()); // Should be false when dates empty
+        // Stock name is cleared when blackout dates are empty
+        assertNull(riskManagementService.getEarningsBlackoutStock());
+    }
 }

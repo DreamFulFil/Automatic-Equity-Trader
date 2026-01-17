@@ -76,4 +76,13 @@ class TradingModeTypeTest {
         assertNotNull(TradingModeType.TW_FUTURE.getDescription());
         assertFalse(TradingModeType.TW_FUTURE.getDescription().isEmpty());
     }
+
+    @Test
+    void fromStringIgnoreCase_shouldParseCodeOrName_orReturnNull() {
+        assertNull(TradingModeType.fromStringIgnoreCase(null));
+        assertEquals(TradingModeType.TW_STOCK, TradingModeType.fromStringIgnoreCase("stock"));
+        assertEquals(TradingModeType.TW_FUTURE, TradingModeType.fromStringIgnoreCase("TW_FUTURE"));
+        assertEquals(TradingModeType.TW_STOCK_AND_FUTURE, TradingModeType.fromStringIgnoreCase("StOcK_AnD_FuTuReS"));
+        assertNull(TradingModeType.fromStringIgnoreCase("unknown"));
+    }
 }

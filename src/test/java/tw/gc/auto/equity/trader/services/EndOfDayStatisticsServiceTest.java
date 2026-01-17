@@ -367,4 +367,310 @@ class EndOfDayStatisticsServiceTest {
         // Should only count closed trades
         assertEquals(1, stats.getTotalTrades());
     }
+
+    @Test
+    void calculateStatisticsForDay_calculatesConsecutiveWins() {
+        Trade winningTrade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevWin1 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(50.0)
+                .build();
+        
+        DailyStatistics prevWin2 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .realizedPnL(75.0)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(winningTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Arrays.asList(prevWin1, prevWin2));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(3, stats.getConsecutiveWins());
+        assertEquals(0, stats.getConsecutiveLosses());
+    }
+
+    @Test
+    void calculateStatisticsForDay_calculatesConsecutiveLosses() {
+        Trade losingTrade = Trade.builder()
+                .realizedPnL(-100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevLoss1 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(-50.0)
+                .build();
+        
+        DailyStatistics prevLoss2 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .realizedPnL(-75.0)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(losingTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Arrays.asList(prevLoss1, prevLoss2));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(0, stats.getConsecutiveWins());
+        assertEquals(3, stats.getConsecutiveLosses());
+    }
+
+    @Test
+    void calculateStatisticsForDay_streakBreaksOnOppositeResult() {
+        Trade losingTrade = Trade.builder()
+                .realizedPnL(-100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevLoss = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(-50.0)
+                .build();
+        
+        DailyStatistics prevWin = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .realizedPnL(75.0) // Win breaks loss streak
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(losingTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Arrays.asList(prevLoss, prevWin));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(2, stats.getConsecutiveLosses()); // Today + prev day only
+    }
+
+    @Test
+    void calculateStatisticsForDay_calculatesCumulativeFromPastYear() {
+        Trade todayTrade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(todayTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(eq(symbol), any())).thenReturn(5000.0);
+        when(dailyStatisticsRepository.sumTradesSince(eq(symbol), any())).thenReturn(50L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(5100.0, stats.getCumulativePnL()); // 5000 + 100
+        assertEquals(51, stats.getCumulativeTrades()); // 50 + 1
+    }
+
+    @Test
+    void calculateStatisticsForDay_handleNullCumulatives() {
+        Trade todayTrade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(todayTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(eq(symbol), any())).thenReturn(null);
+        when(dailyStatisticsRepository.sumTradesSince(eq(symbol), any())).thenReturn(null);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(100.0, stats.getCumulativePnL()); // Handles null
+        assertEquals(1, stats.getCumulativeTrades());
+    }
+
+    @Test
+    void calculateStatisticsForDay_profitFactorInfinity_whenNoLosses() {
+        Trade winner1 = Trade.builder()
+                .realizedPnL(1000.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade winner2 = Trade.builder()
+                .realizedPnL(500.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(winner1, winner2));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(Double.MAX_VALUE, stats.getProfitFactor());
+    }
+
+    @Test
+    void calculateStatisticsForDay_profitFactorZero_whenNoWins() {
+        Trade loser1 = Trade.builder()
+                .realizedPnL(-1000.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade loser2 = Trade.builder()
+                .realizedPnL(-500.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(loser1, loser2));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(0.0, stats.getProfitFactor());
+    }
+
+    @Test
+    void calculateAndSaveStatisticsForDay_savesAndReturnsStats() {
+        Trade trade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Arrays.asList(trade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics result = service.calculateAndSaveStatisticsForDay(testDate, symbol);
+
+        assertNotNull(result);
+        verify(dailyStatisticsRepository).save(any(DailyStatistics.class));
+        assertEquals(100.0, result.getRealizedPnL());
+    }
+
+    @Test
+    void calculateEndOfDayStatistics_handlesException() {
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn(symbol);
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenThrow(new RuntimeException("Database error"));
+
+        // Should not throw, just log error
+        assertDoesNotThrow(() -> service.calculateEndOfDayStatistics());
+
+        verify(dailyStatisticsRepository, never()).save(any());
+    }
+
+    @Test
+    void getStatisticsSummary_calculatesCorrectAverages() {
+        DailyStatistics stat1 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .symbol(symbol)
+                .totalTrades(2)
+                .winRate(50.0)
+                .realizedPnL(100.0)
+                .build();
+
+        DailyStatistics stat2 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(3)
+                .winRate(66.67)
+                .realizedPnL(200.0)
+                .build();
+
+        DailyStatistics stat3 = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winRate(100.0)
+                .realizedPnL(-50.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(stat1, stat2, stat3));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        assertEquals(3, summary.get("tradingDays"));
+        assertEquals(2L, summary.get("profitableDays"));
+        assertEquals(250.0, summary.get("totalPnL")); // 100 + 200 - 50
+        assertEquals(6, summary.get("totalTrades")); // 2 + 3 + 1
+        assertEquals(72.22, (Double)summary.get("avgWinRate"), 0.1); // (50 + 66.67 + 100) / 3
+        assertEquals(83.33, (Double)summary.get("avgDailyPnL"), 0.1); // 250 / 3
+    }
+
+    @Test
+    void getStatisticsSummary_handlesEmptyResults() {
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        assertEquals(0, summary.get("tradingDays"));
+        assertEquals(0.0, summary.get("totalPnL"));
+        assertEquals(0.0, summary.get("avgDailyPnL"));
+    }
+
+    @Test
+    void calculateStatisticsForDay_signalFiltering_bySymbol() {
+        Signal matchingSignal = Signal.builder()
+                .timestamp(testDate.atTime(11, 35))
+                .direction(Signal.SignalDirection.LONG)
+                .confidence(0.75)
+                .symbol(symbol)
+                .newsVeto(false)
+                .build();
+
+        Signal otherSignal = Signal.builder()
+                .timestamp(testDate.atTime(12, 0))
+                .direction(Signal.SignalDirection.SHORT)
+                .confidence(0.65)
+                .symbol("OTHER.TW")
+                .newsVeto(false)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Collections.emptyList());
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(matchingSignal, otherSignal));
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(1, stats.getSignalsGenerated()); // Only matching signal
+        assertEquals(1, stats.getSignalsLong());
+        assertEquals(0, stats.getSignalsShort());
+    }
 }

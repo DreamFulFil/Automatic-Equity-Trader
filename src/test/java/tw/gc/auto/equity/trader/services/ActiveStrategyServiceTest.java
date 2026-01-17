@@ -170,4 +170,57 @@ class ActiveStrategyServiceTest {
             config.getParametersJson().equals("{\"period\":30}")
         ));
     }
+
+    @Test
+    void testGetActiveStrategyParameters_NullJson() throws Exception {
+        testConfig.setParametersJson(null);
+        when(repository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(testConfig));
+
+        Map<String, Object> result = service.getActiveStrategyParameters();
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void testSwitchStrategy_JsonSerializationError() throws Exception {
+        when(repository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(testConfig));
+        when(objectMapper.writeValueAsString(any()))
+            .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Serialization error") {});
+        when(repository.save(any(ActiveStrategyConfig.class))).thenReturn(testConfig);
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("period", 20);
+
+        service.switchStrategy("MACDStrategy", params, "Test switch", false);
+
+        // Should still save with empty JSON on serialization error
+        verify(repository, times(1)).save(any(ActiveStrategyConfig.class));
+    }
+
+    @Test
+    void testUpdateParameters_JsonSerializationError() throws Exception {
+        when(repository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(testConfig));
+        when(objectMapper.writeValueAsString(any()))
+            .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Serialization error") {});
+
+        Map<String, Object> newParams = new HashMap<>();
+        newParams.put("period", 30);
+
+        service.updateParameters(newParams);
+
+        // Should NOT save on serialization error (method returns early)
+        verify(repository, never()).save(any(ActiveStrategyConfig.class));
+    }
+
+    @Test
+    void testSwitchStrategy_NullParameters() throws Exception {
+        when(repository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(testConfig));
+        when(objectMapper.writeValueAsString(isNull())).thenReturn("{}");
+        when(repository.save(any(ActiveStrategyConfig.class))).thenReturn(testConfig);
+
+        service.switchStrategy("MACDStrategy", null, "Test switch", false);
+
+        verify(repository, times(1)).save(any(ActiveStrategyConfig.class));
+    }
 }

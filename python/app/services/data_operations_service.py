@@ -37,16 +37,13 @@ def get_source_stats() -> dict:
         }
 
 def reset_source_stats():
-    """Reset data source statistics"""
-    global _source_stats
+    """Reset data source statistics."""
     with _source_stats_lock:
-        _source_stats = {
-            "shioaji": {"success": 0, "failed": 0, "records": 0},
-            "yahoo": {"success": 0, "failed": 0, "records": 0},
-            "twse": {"success": 0, "failed": 0, "records": 0},
-            "last_fetch": {},
-            "total_fetches": 0
-        }
+        _source_stats["shioaji"].update({"success": 0, "failed": 0, "records": 0})
+        _source_stats["yahoo"].update({"success": 0, "failed": 0, "records": 0})
+        _source_stats["twse"].update({"success": 0, "failed": 0, "records": 0})
+        _source_stats["last_fetch"].clear()
+        _source_stats["total_fetches"] = 0
 
 
 class DataOperationsService:

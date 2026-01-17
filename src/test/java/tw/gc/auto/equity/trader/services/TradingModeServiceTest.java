@@ -147,4 +147,44 @@ class TradingModeServiceTest {
             config.getKey().equals("CURRENT_TRADING_MODE") && config.getValue().equals("futures")
         ));
     }
+    
+    @Test
+    void init_shouldLoadModeFromDBAndSwitch() {
+        // Setup: DB returns "futures"
+        when(systemConfigRepository.findByKey("CURRENT_TRADING_MODE"))
+                .thenReturn(Optional.of(SystemConfig.builder().key("CURRENT_TRADING_MODE").value("futures").build()));
+        
+        // Create new instance and call init()
+        TradingModeService service = new TradingModeService(
+            systemConfigRepository,
+            tradingStateService,
+            strategyManager,
+            restTemplate
+        );
+        service.init();
+        
+        // Verify state was set
+        verify(tradingStateService).setTradingMode("futures");
+        verify(strategyManager).reinitializeStrategies(any());
+    }
+    
+    @Test
+    void init_whenNoConfigInDB_shouldDefaultToStock() {
+        // Setup: DB returns empty (no config)
+        when(systemConfigRepository.findByKey("CURRENT_TRADING_MODE"))
+                .thenReturn(Optional.empty());
+        
+        // Create new instance and call init()
+        TradingModeService service = new TradingModeService(
+            systemConfigRepository,
+            tradingStateService,
+            strategyManager,
+            restTemplate
+        );
+        service.init();
+        
+        // Verify stock mode was set
+        verify(tradingStateService).setTradingMode("stock");
+        verify(strategyManager).reinitializeStrategies(any());
+    }
 }

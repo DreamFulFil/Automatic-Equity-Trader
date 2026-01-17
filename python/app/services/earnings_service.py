@@ -11,10 +11,8 @@ def scrape_earnings_dates(jasypt_password: str = None):
     Sends Telegram notification on start and completion.
     """
     
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Assuming we are in python/app/services, project root is ../../../
-    project_root = os.path.abspath(os.path.join(script_dir, '../../../'))
-    config_dir = os.path.join(project_root, 'config')
+    # Write under the current working directory so callers/tests can control the output location.
+    config_dir = os.path.join(os.getcwd(), 'config')
     output_file = os.path.join(config_dir, 'earnings-blackout-dates.json')
     
     # Major Taiwan stocks to track (Yahoo Finance tickers)
@@ -58,8 +56,8 @@ def scrape_earnings_dates(jasypt_password: str = None):
                 earnings_list = [earnings_list]
             
             for dt in earnings_list:
-                if hasattr(dt, 'date'):
-                    dt = dt if isinstance(dt, type(today)) else dt.date() if hasattr(dt, 'date') else dt
+                if isinstance(dt, datetime):
+                    dt = dt.date()
                 if isinstance(dt, type(today)) and today <= dt <= one_year_later:
                     date_str = dt.isoformat()
                     earnings_dates.add(date_str)

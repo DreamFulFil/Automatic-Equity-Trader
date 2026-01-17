@@ -220,4 +220,74 @@ class DrawdownMonitorServiceTest {
             eq("MACDStrategy"), any(), anyString(), anyBoolean(), any(), any(), any(), any()
         );
     }
+
+    @Test
+    void testMonitorDrawdown_NullMaxDrawdown() {
+        StrategyPerformance performance = StrategyPerformance.builder()
+            .strategyName("RSIStrategy")
+            .maxDrawdownPct(null) // Null max drawdown
+            .sharpeRatio(1.5)
+            .build();
+
+        when(strategyPerformanceService.calculatePerformance(
+            eq("RSIStrategy"),
+            eq(StrategyPerformance.PerformanceMode.MAIN),
+            any(LocalDateTime.class),
+            any(LocalDateTime.class),
+            isNull(),
+            any(Map.class)
+        )).thenReturn(performance);
+
+        service.monitorDrawdown();
+
+        // Should not trigger any actions when maxDrawdownPct is null
+        verify(telegramService, never()).sendMessage(anyString());
+        verify(orderExecutionService, never()).flattenPosition(anyString(), anyString(), anyString(), anyBoolean());
+    }
+
+    @Test
+    void testMonitorDrawdown_ExceptionHandling() {
+        when(activeStrategyService.getActiveStrategyName()).thenThrow(new RuntimeException("Test exception"));
+
+        service.monitorDrawdown();
+
+        // Should handle exception gracefully
+        verify(telegramService, never()).sendMessage(anyString());
+    }
+
+    @Test
+    void testMonitorDrawdown_SameStrategyAsAlternative() {
+        StrategyPerformance currentPerformance = StrategyPerformance.builder()
+            .strategyName("RSIStrategy")
+            .maxDrawdownPct(20.0)
+            .sharpeRatio(1.0)
+            .build();
+
+        when(strategyPerformanceService.calculatePerformance(
+            eq("RSIStrategy"),
+            eq(StrategyPerformance.PerformanceMode.MAIN),
+            any(LocalDateTime.class),
+            any(LocalDateTime.class),
+            isNull(),
+            any(Map.class)
+        )).thenReturn(currentPerformance);
+
+        when(positionManager.getPosition("2454.TW")).thenReturn(100);
+
+        // Best alternative is same as current strategy
+        StrategyPerformance sameStrategy = StrategyPerformance.builder()
+            .strategyName("RSIStrategy")
+            .maxDrawdownPct(20.0)
+            .sharpeRatio(1.0)
+            .build();
+
+        when(strategyPerformanceService.getBestPerformer(30)).thenReturn(sameStrategy);
+
+        service.monitorDrawdown();
+
+        // Should flatten but not switch (same strategy)
+        verify(telegramService, times(2)).sendMessage(anyString()); // alert + no alternative message
+        verify(orderExecutionService, times(1)).flattenPosition(anyString(), anyString(), anyString(), anyBoolean());
+        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+    }
 }

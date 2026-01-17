@@ -54,11 +54,15 @@ class TestStrategyPerformanceAnalysis:
         # High risk: low Sharpe, high drawdown
         high_risk = {'sharpe_ratio': 0.3, 'max_drawdown_pct': -18}
         assert ai_insights._assess_risk_level(high_risk) == "HIGH"
-        
+
         # Medium risk
         medium_risk = {'sharpe_ratio': 0.8, 'max_drawdown_pct': -11}
         assert ai_insights._assess_risk_level(medium_risk) == "MEDIUM"
-        
+
+        # Medium via drawdown
+        medium_risk2 = {'sharpe_ratio': 1.5, 'max_drawdown_pct': -12}
+        assert ai_insights._assess_risk_level(medium_risk2) == "MEDIUM"
+
         # Low risk
         low_risk = {'sharpe_ratio': 1.5, 'max_drawdown_pct': -5}
         assert ai_insights._assess_risk_level(low_risk) == "LOW"
@@ -167,6 +171,22 @@ class TestRiskAnalysis:
 
 class TestDailyReports:
     """Tests for daily report analysis"""
+
+    def test_analyze_daily_report(self, ai_insights, mock_ollama):
+        report_data = {
+            "main_strategy": "RSI",
+            "daily_return_pct": 1.2,
+            "weekly_return_pct": 2.0,
+            "total_trades": 3,
+            "win_rate_pct": 61.0,
+            "max_drawdown_pct": -2.0,
+        }
+
+        out = ai_insights.analyze_daily_report(report_data)
+        assert out["summary"]
+        assert out["sentiment"] in {"POSITIVE", "NEGATIVE", "NEUTRAL"}
+        assert isinstance(out["action_needed"], bool)
+        assert mock_ollama.generate.called
     
     def test_positive_sentiment(self, ai_insights):
         """Should detect positive performance"""
@@ -196,16 +216,25 @@ class TestDailyReports:
             'daily_return_pct': -3.5,
             'max_drawdown_pct': -16
         }
-        
+
         assert ai_insights._needs_attention(report_data)
-        
+
         # Normal scenario
         normal_report = {
             'daily_return_pct': 1.0,
             'max_drawdown_pct': -5
         }
-        
+
         assert not ai_insights._needs_attention(normal_report)
+
+    def test_neutral_sentiment(self, ai_insights):
+        report_data = {
+            'daily_return_pct': 0.2,
+            'win_rate_pct': 50,
+            'total_trades': 1
+        }
+        assert ai_insights._determine_sentiment(report_data) == "NEUTRAL"
+        assert not ai_insights._needs_attention(report_data)
 
 
 class TestStrategyExplanations:

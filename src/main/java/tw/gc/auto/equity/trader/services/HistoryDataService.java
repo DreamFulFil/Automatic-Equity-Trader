@@ -114,8 +114,12 @@ public class HistoryDataService {
      * @return Map of symbol to download results
      */
     public Map<String, DownloadResult> downloadHistoricalDataForMultipleStocks(List<String> symbols, int years) {
+        return downloadHistoricalDataForMultipleStocks(symbols, years, 10, TimeUnit.MINUTES);
+    }
+
+    Map<String, DownloadResult> downloadHistoricalDataForMultipleStocks(List<String> symbols, int years, long writerTimeout, TimeUnit writerTimeoutUnit) {
         log.info("🚀 Starting concurrent download for {} stocks, {} years each", symbols.size(), years);
-        
+
         systemStatusService.startHistoryDownload();
 
         // Notify that a bulk download is starting with a summary of symbols and years
@@ -124,10 +128,10 @@ public class HistoryDataService {
         } catch (Exception e) {
             log.warn("⚠️ Failed to send download start notification: {}", e.getMessage());
         }
-        
+
         try {
             truncateTablesIfNeeded();
-            
+
             BlockingQueue<HistoricalDataPoint> globalQueue = new ArrayBlockingQueue<>(GLOBAL_QUEUE_CAPACITY);
             AtomicBoolean allDownloadsComplete = new AtomicBoolean(false);
             AtomicInteger totalInserted = new AtomicInteger(0);
@@ -135,7 +139,7 @@ public class HistoryDataService {
             // Map to track inserted counts per symbol
             java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol = new java.util.concurrent.ConcurrentHashMap<>();
             symbols.forEach(s -> insertedBySymbol.put(s, new java.util.concurrent.atomic.AtomicInteger(0)));
-            
+
             // Start single global writer thread
             Thread globalWriter = Thread.ofPlatform()
                 .name("GlobalHistoryWriter")
@@ -150,53 +154,27 @@ public class HistoryDataService {
                         writerLatch.countDown();
                     }
                 });
-            
+
             // Semaphore to limit concurrent downloads
             Semaphore downloadPermits = new Semaphore(MAX_CONCURRENT_DOWNLOADS);
             Map<String, DownloadResult> results = new HashMap<>();
             Map<String, AtomicInteger> symbolCounts = new HashMap<>();
-            
+
             symbols.forEach(s -> symbolCounts.put(s, new AtomicInteger(0)));
-            
+
             // Launch Virtual Threads for each stock download
             try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
                 List<CompletableFuture<Void>> futures = symbols.stream()
-                    .map(symbol -> CompletableFuture.runAsync(() -> {
-                        try {
-                            downloadPermits.acquire();
-                            try {
-                                int downloaded = downloadStockData(symbol, years, globalQueue, symbolCounts.get(symbol));
-                                synchronized (results) {
-                                    results.put(symbol, new DownloadResult(symbol, downloaded, 0, 0));
-                                }
-                            } finally {
-                                downloadPermits.release();
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            log.error("❌ Download interrupted for {}", symbol);
-                        } catch (Exception e) {
-                            log.error("❌ Download failed for {}: {}", symbol, e.getMessage());
-                            synchronized (results) {
-                                results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
-                            }
-                        }
-                    }, virtualExecutor))
+                    .map(symbol -> CompletableFuture.runAsync(() -> runMultiStockDownloadTask(symbol, years, globalQueue, downloadPermits, results, symbolCounts.get(symbol)), virtualExecutor))
                     .collect(Collectors.toList());
-                
+
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             }
-            
+
             allDownloadsComplete.set(true);
-            
-            try {
-                if (!writerLatch.await(10, TimeUnit.MINUTES)) {
-                    log.warn("⚠️ Global writer timed out");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            
+
+            awaitWriterLatch(writerLatch, writerTimeout, writerTimeoutUnit);
+
             // Update results with actual inserted counts
             int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
             // populate inserted counts from insertedBySymbol map
@@ -224,6 +202,47 @@ public class HistoryDataService {
             return results;
         } finally {
             systemStatusService.completeHistoryDownload();
+        }
+    }
+
+    void runMultiStockDownloadTask(String symbol, int years, BlockingQueue<HistoricalDataPoint> globalQueue, Semaphore downloadPermits,
+                                  Map<String, DownloadResult> results, AtomicInteger symbolCounter) {
+        boolean acquired = false;
+        try {
+            downloadPermits.acquire();
+            acquired = true;
+            int downloaded = downloadStockData(symbol, years, globalQueue, symbolCounter);
+            synchronized (results) {
+                results.put(symbol, new DownloadResult(symbol, downloaded, 0, 0));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("❌ Download interrupted for {}", symbol);
+            synchronized (results) {
+                results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
+            }
+        } catch (Exception e) {
+            log.error("❌ Download failed for {}: {}", symbol, e.getMessage());
+            synchronized (results) {
+                results.put(symbol, new DownloadResult(symbol, 0, 0, 0));
+            }
+        } finally {
+            if (acquired) {
+                downloadPermits.release();
+            }
+        }
+    }
+
+    boolean awaitWriterLatch(CountDownLatch writerLatch, long timeout, TimeUnit unit) {
+        try {
+            if (!writerLatch.await(timeout, unit)) {
+                log.warn("⚠️ Global writer timed out");
+                return false;
+            }
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
     

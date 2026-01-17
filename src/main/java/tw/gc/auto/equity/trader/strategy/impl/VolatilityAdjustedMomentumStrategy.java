@@ -46,8 +46,13 @@ public class VolatilityAdjustedMomentumStrategy implements IStrategy {
             prices.removeFirst();
         }
         
-        if (prices.size() < maxPeriod) {
-            return TradeSignal.neutral("Warming up - need " + maxPeriod + " prices");
+        if (momentumPeriod < 1 || volatilityPeriod < 2) {
+            return TradeSignal.neutral("Invalid momentum/volatility periods");
+        }
+
+        // Need at least maxPeriod + 1 prices to reference N periods ago and compute returns (i-1)
+        if (prices.size() <= maxPeriod) {
+            return TradeSignal.neutral("Warming up - need " + (maxPeriod + 1) + " prices");
         }
         
         Double[] priceArray = prices.toArray(new Double[0]);

@@ -215,4 +215,61 @@ class StrategyPerformanceServiceTest {
         assertEquals(2, result.size());
         assertEquals("Strategy1", result.get(0).getStrategyName());
     }
+
+    @Test
+    void testCalculatePerformance_JsonSerializationError() throws Exception {
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(mockTrades);
+
+        // Mock JSON serialization failure
+        when(objectMapper.writeValueAsString(any()))
+            .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Test error") {});
+
+        // Mock repository save
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("key", "value");
+
+        StrategyPerformance performance = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.MAIN,
+            periodStart,
+            periodEnd,
+            "2330.TW",
+            params
+        );
+
+        // Should still save performance with default "{}" parameters
+        assertNotNull(performance);
+        verify(performanceRepository).save(any(StrategyPerformance.class));
+    }
+
+    @Test
+    void testCalculatePerformance_NullParametersHandling() throws Exception {
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(mockTrades);
+
+        when(objectMapper.writeValueAsString(isNull()))
+            .thenReturn("{}");
+
+        // Mock repository save
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance performance = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            null,
+            null
+        );
+
+        assertNotNull(performance);
+        verify(performanceRepository).save(any(StrategyPerformance.class));
+    }
 }

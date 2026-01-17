@@ -186,4 +186,36 @@ class StrategyStockMappingServiceTest {
         verify(mappingRepository).save(testMapping);
         assertEquals("This is a good combination", testMapping.getAiInsights());
     }
+    
+    @Test
+    void getTopCombinations_shouldReturnLimitedResults() {
+        List<StrategyStockMapping> topMappings = Arrays.asList(
+            StrategyStockMapping.builder().strategyName("RSI").sharpeRatio(2.0).build(),
+            StrategyStockMapping.builder().strategyName("MACD").sharpeRatio(1.8).build(),
+            StrategyStockMapping.builder().strategyName("BB").sharpeRatio(1.5).build()
+        );
+        
+        when(mappingRepository.findTopPerformingCombinations())
+            .thenReturn(topMappings);
+        
+        List<StrategyStockMapping> result = mappingService.getTopCombinations(2);
+        
+        assertEquals(2, result.size());
+    }
+    
+    @Test
+    void getSteadyReturnCombinations_shouldReturnLimitedResults() {
+        List<StrategyStockMapping> steadyMappings = Arrays.asList(
+            StrategyStockMapping.builder().strategyName("DCA").winRatePct(70.0).build(),
+            StrategyStockMapping.builder().strategyName("MA").winRatePct(65.0).build(),
+            StrategyStockMapping.builder().strategyName("RSI").winRatePct(60.0).build()
+        );
+        
+        when(mappingRepository.findSteadyReturnCombinations())
+            .thenReturn(steadyMappings);
+        
+        List<StrategyStockMapping> result = mappingService.getSteadyReturnCombinations(2);
+        
+        assertEquals(2, result.size());
+    }
 }

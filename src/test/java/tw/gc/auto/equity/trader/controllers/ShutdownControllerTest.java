@@ -12,7 +12,10 @@ import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 import tw.gc.auto.equity.trader.services.TradingEngineService;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,7 +41,8 @@ class ShutdownControllerTest {
     
     @BeforeEach
     void setUp() {
-        // Disable System.exit during tests
+        // Prevent Spring from closing the test context and disable System.exit.
+        shutdownController.setSpringExitHandler(() -> 0);
         shutdownController.setExitEnabled(false);
     }
 
@@ -48,6 +52,22 @@ class ShutdownControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(
                         "Graceful shutdown initiated - flattening positions and stopping application"));
+    }
+
+    @Test
+    void triggerShutdown_exitEnabled_shouldInvokeExitHandler_andHandleException() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        shutdownController.setExitEnabled(true);
+        shutdownController.setExitHandler(code -> {
+            latch.countDown();
+            throw new RuntimeException("blocked exit");
+        });
+
+        mockMvc.perform(post("/api/shutdown"))
+                .andExpect(status().isOk());
+
+        verify(tradingEngine, timeout(2_000)).flattenPosition(anyString());
+        assertTrue(latch.await(2, TimeUnit.SECONDS));
     }
 
     @Test

@@ -48,10 +48,6 @@ public enum TradingModeType {
                 return mode;
             }
         }
-        // Legacy compatibility: map old "stock" to TW_STOCK
-        if ("stock".equalsIgnoreCase(code)) {
-            return TW_STOCK;
-        }
         throw new IllegalArgumentException("Unknown trading mode code: " + code);
     }
 

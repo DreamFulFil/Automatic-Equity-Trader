@@ -271,22 +271,35 @@ public class RiskManagerAgent extends BaseAgent {
 
     public Map<String, Object> handleStart(String mode) {
         state = BotState.RUNNING;
-        return Map.of("success", true, "state", state.name(), "mode", mode);
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("state", state.name());
+        result.put("mode", mode);
+        return result;
     }
 
     public Map<String, Object> handlePause() {
         state = BotState.PAUSED;
-        return Map.of("success", true, "state", state.name());
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("state", state.name());
+        return result;
     }
 
     public Map<String, Object> handleResume() {
         state = BotState.RUNNING;
-        return Map.of("success", true, "state", state.name());
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("state", state.name());
+        return result;
     }
 
     public Map<String, Object> handleStop() {
         state = BotState.STOPPED;
-        return Map.of("success", true, "state", state.name());
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("state", state.name());
+        return result;
     }
     
     @Override

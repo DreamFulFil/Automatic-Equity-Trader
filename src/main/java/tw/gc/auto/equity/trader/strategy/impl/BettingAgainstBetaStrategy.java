@@ -47,8 +47,13 @@ public class BettingAgainstBetaStrategy implements IStrategy {
             prices.removeFirst();
         }
         
-        if (prices.size() < betaWindow) {
-            return TradeSignal.neutral("Warming up - need " + betaWindow + " days");
+        if (betaWindow < 2) {
+            return TradeSignal.neutral("Invalid beta window");
+        }
+
+        // Need at least betaWindow + 1 prices to compute betaWindow returns
+        if (prices.size() <= betaWindow) {
+            return TradeSignal.neutral("Warming up - need " + (betaWindow + 1) + " days");
         }
         
         Double[] priceArray = prices.toArray(new Double[0]);

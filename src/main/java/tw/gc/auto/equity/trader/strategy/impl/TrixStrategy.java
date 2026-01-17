@@ -17,6 +17,7 @@ public class TrixStrategy implements IStrategy {
     
     private final int period;
     private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
+    private final Map<String, Double> previousTripleEMA = new HashMap<>();
     private final Map<String, Double> previousTrix = new HashMap<>();
     
     public TrixStrategy() {
@@ -47,7 +48,12 @@ public class TrixStrategy implements IStrategy {
         ema2List.add(ema2);
         double ema3 = calculateEMA(ema2List, period);
         
-        double trix = ((ema3 - ema3) / ema3) * 10000;
+        Double prevEma3 = previousTripleEMA.get(symbol);
+        double trix = 0.0;
+        if (prevEma3 != null && prevEma3 != 0.0) {
+            trix = 10000.0 * (ema3 - prevEma3) / prevEma3;
+        }
+        previousTripleEMA.put(symbol, ema3);
         
         Double prevTrix = previousTrix.get(symbol);
         previousTrix.put(symbol, trix);
@@ -56,16 +62,16 @@ public class TrixStrategy implements IStrategy {
         
         int position = portfolio.getPosition(symbol);
         
-        if (trix > 0 && prevTrix < 0 && position <= 0) {
+        if (trix > 0 && prevTrix <= 0 && position <= 0) {
             return TradeSignal.longSignal(0.75, "TRIX bullish crossover");
-        } else if (trix < 0 && prevTrix > 0 && position >= 0) {
+        } else if (trix < 0 && prevTrix >= 0 && position >= 0) {
             return TradeSignal.shortSignal(0.75, "TRIX bearish crossover");
         }
         
         return TradeSignal.neutral(String.format("TRIX=%.2f", trix));
     }
     
-    private double calculateEMA(Deque<Double> values, int period) {
+    public double calculateEMA(Deque<Double> values, int period) {
         Double[] v = values.toArray(new Double[0]);
         if (v.length < 1) return 0;
         double k = 2.0 / (period + 1);
@@ -89,6 +95,7 @@ public class TrixStrategy implements IStrategy {
     @Override
     public void reset() {
         priceHistory.clear();
+        previousTripleEMA.clear();
         previousTrix.clear();
     }
 }

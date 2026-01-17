@@ -204,7 +204,11 @@ public class TelegramService {
      * commands (backtest, strategy switching, etc.) without tight coupling.</p>
      */
     public void registerCustomCommand(String command, Consumer<String> handler) {
-        customCommands.put(command.toLowerCase(), handler);
+        String key = command.toLowerCase();
+        if (key.startsWith("/")) {
+            key = key.substring(1);
+        }
+        customCommands.put(key, handler);
         log.info("✅ Registered custom command: {}", command);
     }
 

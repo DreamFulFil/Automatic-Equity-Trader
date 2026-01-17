@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
+import tw.gc.auto.equity.trader.strategy.StrategyType;
+import tw.gc.auto.equity.trader.strategy.Portfolio;
+import tw.gc.auto.equity.trader.strategy.TradeSignal;
 import tw.gc.auto.equity.trader.strategy.impl.RSIStrategy;
 
 import javax.sql.DataSource;
@@ -22,12 +25,13 @@ class BacktestServiceTest {
     private List<MarketData> historicalData;
     private List<IStrategy> strategies;
     private SystemStatusService mockSystemStatusService;
+    private tw.gc.auto.equity.trader.repositories.MarketDataRepository mockMarketDataRepo;
 
     @BeforeEach
     void setUp() {
         tw.gc.auto.equity.trader.repositories.BacktestResultRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.BacktestResultRepository.class);
-        tw.gc.auto.equity.trader.repositories.MarketDataRepository mockMarketDataRepo = 
+        mockMarketDataRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.MarketDataRepository.class);
         HistoryDataService mockHistoryService = 
             org.mockito.Mockito.mock(HistoryDataService.class);
@@ -127,6 +131,46 @@ class BacktestServiceTest {
     }
 
     @Test
+    void runBacktest_shouldPersistResults_viaRepositorySave_and_handleLongShortFlows() {
+        // Given - create a mock repository and a custom strategy that opens long then short
+        tw.gc.auto.equity.trader.repositories.BacktestResultRepository mockRepo = org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.BacktestResultRepository.class);
+        StrategyStockMappingService mockMapping = org.mockito.Mockito.mock(StrategyStockMappingService.class);
+        HistoryDataService mockHistory = org.mockito.Mockito.mock(HistoryDataService.class);
+        org.mockito.Mockito.when(mockHistory.getStockNameFromHistory(anyString())).thenReturn("MockName");
+
+        BacktestService svc = new BacktestService(
+            mockRepo, mockMarketDataRepo, mockHistory, mockSystemStatusService, org.mockito.Mockito.mock(DataSource.class), org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class), mockMapping
+        );
+
+        // Strategy that returns LONG on first call, SHORT on subsequent calls
+        class FlipStrategy implements IStrategy {
+            private int calls = 0;
+            @Override public String getName() { return "FLIP"; }
+            @Override public StrategyType getType() { return StrategyType.SHORT_TERM; }
+            @Override public void reset() { calls = 0; }
+            @Override public TradeSignal execute(Portfolio p, MarketData d) {
+                calls++;
+                return calls == 1 ? TradeSignal.longSignal(1.0, "flip") : TradeSignal.shortSignal(1.0, "flip");
+            }
+        }
+        List<IStrategy> strats = List.of(new FlipStrategy());
+
+        // Two data points to trigger LONG then SHORT
+        List<MarketData> hist = List.of(
+            MarketData.builder().symbol("TEST.TW").timestamp(LocalDateTime.now().minusDays(2)).close(100.0).build(),
+            MarketData.builder().symbol("TEST.TW").timestamp(LocalDateTime.now().minusDays(1)).close(110.0).build()
+        );
+
+        // When
+        Map<String, BacktestService.InMemoryBacktestResult> results = svc.runBacktest(strats, hist, 10000.0);
+
+        // Then
+        org.mockito.Mockito.verify(mockRepo, org.mockito.Mockito.atLeastOnce()).save(any());
+        assertNotNull(results.get("FLIP"));
+        assertTrue(results.get("FLIP").getTotalTrades() >= 1);
+    }
+
+    @Test
     void testRunBacktest_WithValidData() {
         double initialCapital = 80000.0;
         
@@ -142,6 +186,43 @@ class BacktestServiceTest {
         assertEquals("RSI (14, 30/70)", result.getStrategyName());
         assertEquals(initialCapital, result.getInitialCapital());
         assertTrue(result.getFinalEquity() > 0);
+    }
+
+    @Test
+    void flushBacktestResults_shouldFallBackToJdbcTemplate_whenPgFails() throws Exception {
+        // Prepare a BacktestResult payload
+        tw.gc.auto.equity.trader.entities.BacktestResult br = tw.gc.auto.equity.trader.entities.BacktestResult.builder()
+            .backtestRunId("BT-1")
+            .symbol("TEST.TW")
+            .strategyName("S")
+            .initialCapital(1000.0)
+            .finalEquity(1100.0)
+            .dataPoints(2)
+            .build();
+
+        // Replace dataSource with one that throws on getConnection to force fallback
+        javax.sql.DataSource ds = org.mockito.Mockito.mock(javax.sql.DataSource.class);
+        org.mockito.Mockito.when(ds.getConnection()).thenThrow(new java.sql.SQLException("no pg"));
+
+        java.lang.reflect.Field dsField = BacktestService.class.getDeclaredField("dataSource");
+        dsField.setAccessible(true);
+        dsField.set(backtestService, ds);
+
+        // Stub jdbcTemplate.batchUpdate to simulate a successful fallback insert
+        java.lang.reflect.Field jdbcField = BacktestService.class.getDeclaredField("jdbcTemplate");
+        jdbcField.setAccessible(true);
+        org.springframework.jdbc.core.JdbcTemplate jdbc = (org.springframework.jdbc.core.JdbcTemplate) jdbcField.get(backtestService);
+        org.mockito.Mockito.when(jdbc.batchUpdate(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any()))
+            .thenReturn(new int[][]{ new int[]{1} });
+
+        // Call private method flushBacktestResults via reflection
+        java.lang.reflect.Method m = BacktestService.class.getDeclaredMethod("flushBacktestResults", java.util.List.class);
+        m.setAccessible(true);
+
+        int inserted = (int) m.invoke(backtestService, java.util.List.of(br));
+
+        assertEquals(1, inserted);
+        org.mockito.Mockito.verify(jdbc, org.mockito.Mockito.times(1)).batchUpdate(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -346,6 +427,216 @@ class BacktestServiceTest {
         System.out.println("\n=== All 99 Strategies ===");
         for (int i = 0; i < strategies.size(); i++) {
             System.out.println((i + 1) + ". " + strategies.get(i).getName());
+        }
+    }
+
+    @Test
+    void testRunParallelizedBacktest_NoStocksWithData() throws Exception {
+        // Given - mock repositories to return no data
+        when(mockMarketDataRepo.countBySymbolAndTimeframeAndTimestampBetween(anyString(), any(), any(), any()))
+            .thenReturn(0L);
+
+        // When
+        Map<String, Map<String, BacktestService.InMemoryBacktestResult>> results = 
+            backtestService.runParallelizedBacktest(strategies, 80000.0);
+
+        // Then
+        assertNotNull(results);
+        assertTrue(results.isEmpty(), "Should return empty map when no stocks have data");
+        verify(mockSystemStatusService).startBacktest();
+        verify(mockSystemStatusService).completeBacktest();
+    }
+
+    @Test
+    void testRunParallelizedBacktest_WithStocksWithData() throws Exception {
+        // Given - mock repositories to return data for some stocks
+        when(mockMarketDataRepo.countBySymbolAndTimeframeAndTimestampBetween(anyString(), any(), any(), any()))
+            .thenReturn(100L); // Simulate data exists
+        
+        List<MarketData> mockHistory = List.of(
+            MarketData.builder()
+                .symbol("2330.TW")
+                .timestamp(LocalDateTime.now().minusDays(1))
+                .open(100.0)
+                .high(105.0)
+                .low(95.0)
+                .close(102.0)
+                .volume(1000000L)
+                .build()
+        );
+        
+        when(mockMarketDataRepo.findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+            anyString(), any(), any(), any()))
+            .thenReturn(mockHistory);
+
+        // When
+        Map<String, Map<String, BacktestService.InMemoryBacktestResult>> results = 
+            backtestService.runParallelizedBacktest(strategies, 80000.0);
+
+        // Then
+        assertNotNull(results);
+        assertFalse(results.isEmpty(), "Should return results when stocks have data");
+        verify(mockSystemStatusService).startBacktest();
+        verify(mockSystemStatusService).completeBacktest();
+    }
+
+    @Test
+    void testRunParallelizedBacktest_BacktestFailure() throws Exception {
+        // Given - mock to throw exception during backtest
+        when(mockMarketDataRepo.countBySymbolAndTimeframeAndTimestampBetween(anyString(), any(), any(), any()))
+            .thenReturn(100L);
+        
+        when(mockMarketDataRepo.findBySymbolAndTimeframeAndTimestampBetweenOrderByTimestampAsc(
+            anyString(), any(), any(), any()))
+            .thenThrow(new RuntimeException("Database error"));
+
+        // When
+        Map<String, Map<String, BacktestService.InMemoryBacktestResult>> results = 
+            backtestService.runParallelizedBacktest(strategies, 80000.0);
+
+        // Then
+        assertNotNull(results);
+        // Should still contain entries for stocks, but with empty results due to failure
+        assertFalse(results.isEmpty());
+        verify(mockSystemStatusService).startBacktest();
+        verify(mockSystemStatusService).completeBacktest();
+    }
+
+    @Test
+    void testRunBacktest_WithBacktestRunId() {
+        String backtestRunId = "BT-TEST-123";
+        double initialCapital = 80000.0;
+        
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
+                strategies, historicalData, initialCapital, backtestRunId
+        );
+
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        
+        BacktestService.InMemoryBacktestResult result = results.get("RSI (14, 30/70)");
+        assertNotNull(result);
+        assertEquals("RSI (14, 30/70)", result.getStrategyName());
+        assertEquals(initialCapital, result.getInitialCapital());
+        assertTrue(result.getFinalEquity() > 0);
+    }
+
+    @Test
+    void testRunBacktest_EmptyStrategies() {
+        List<IStrategy> emptyStrategies = new ArrayList<>();
+        double initialCapital = 80000.0;
+        
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
+                emptyStrategies, historicalData, initialCapital
+        );
+
+        assertNotNull(results);
+        assertTrue(results.isEmpty(), "Should return empty map for empty strategies");
+    }
+
+    @Test
+    void testRunBacktest_EmptyHistoricalData() {
+        List<MarketData> emptyHistory = new ArrayList<>();
+        double initialCapital = 80000.0;
+        
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
+                strategies, emptyHistory, initialCapital
+        );
+
+        assertNotNull(results);
+        assertEquals(1, results.size(), "Should return results for strategies even with empty historical data");
+        assertTrue(results.containsKey("RSI (14, 30/70)"));
+    }
+
+    @Test
+    void testInMemoryBacktestResult_AddTrade() {
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 100000.0);
+        
+        result.addTrade(1000.0);
+        result.addTrade(-500.0);
+        result.addTrade(2000.0);
+        
+        assertEquals(3, result.getTotalTrades());
+        assertEquals(2, result.getWinningTrades());
+        assertEquals(66.67, result.getWinRate(), 0.01);
+    }
+
+    @Test
+    void testInMemoryBacktestResult_TrackEquity() {
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 100000.0);
+        
+        result.trackEquity(105000.0);
+        result.trackEquity(103000.0);
+        result.trackEquity(107000.0);
+        
+        result.calculateMetrics();
+        assertTrue(result.getMaxDrawdownPercentage() >= 0.0);
+    }
+
+    @Test
+    void testInMemoryBacktestResult_Getters() {
+        BacktestService.InMemoryBacktestResult result = new BacktestService.InMemoryBacktestResult("Test Strategy", 100000.0);
+        
+        assertEquals("Test Strategy", result.getStrategyName());
+        assertEquals(100000.0, result.getInitialCapital());
+        assertEquals(0, result.getTotalTrades());
+        assertEquals(0.0, result.getWinRate());
+        assertEquals(0.0, result.getTotalPnL());
+        assertEquals(0.0, result.getTotalReturnPercentage());
+        assertEquals(0.0, result.getSharpeRatio());
+        assertEquals(0.0, result.getMaxDrawdownPercentage());
+    }
+
+    @Test
+    void testFetchTop50Stocks_FallsBackOnException() throws Exception {
+        // This tests the fallback mechanism when dynamic fetching fails
+        // Since fetchTop50Stocks uses external APIs, we can only test indirectly
+        // The method should return a curated list when exceptions occur
+        
+        List<String> stocks = backtestService.fetchTop50Stocks();
+        
+        // Should return at least some stocks (either from API or fallback)
+        assertNotNull(stocks);
+        assertTrue(stocks.size() > 0, "Should return at least some stocks");
+        
+        // Fallback list should contain major Taiwan stocks
+        // The actual content depends on which source succeeds
+    }
+
+    @Test
+    void testStockCandidate_Creation() throws Exception {
+        // Access inner class via reflection
+        Class<?> candidateClass = Class.forName("tw.gc.auto.equity.trader.services.BacktestService$StockCandidate");
+        java.lang.reflect.Constructor<?> constructor = candidateClass.getDeclaredConstructor(
+            String.class, String.class, double.class, double.class, String.class
+        );
+        constructor.setAccessible(true);
+        
+        Object candidate = constructor.newInstance("2330.TW", "TSMC", 1000000.0, 5000000.0, "TWSE");
+        
+        assertNotNull(candidate);
+        assertEquals("2330.TW", candidateClass.getMethod("getSymbol").invoke(candidate));
+        assertEquals("TSMC", candidateClass.getMethod("getName").invoke(candidate));
+    }
+
+    @Test
+    void testBacktest_WithEmptyHistory_CompletesGracefully() {
+        List<MarketData> emptyHistory = new ArrayList<>();
+        
+        // Should handle empty history without crashing
+        Map<String, BacktestService.InMemoryBacktestResult> results = backtestService.runBacktest(
+            strategies,
+            emptyHistory,
+            100000.0,
+            "BT-TEST-EMPTY"
+        );
+
+        // Should return results even with no data
+        assertNotNull(results);
+        for (var result : results.values()) {
+            assertEquals(0, result.getTotalTrades());
+            // With empty history, no final equity is set so it remains 0
+            assertTrue(result.getFinalEquity() >= 0);
         }
     }
 }

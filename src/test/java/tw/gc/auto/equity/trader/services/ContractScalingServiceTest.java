@@ -202,4 +202,14 @@ class ContractScalingServiceTest {
         verify(restTemplate, atLeastOnce()).getForObject(anyString(), eq(String.class));
         assertEquals(2, contractScalingService.getMaxContracts());
     }
+    
+    @Test
+    void initialize_shouldNotPerformAnyAction() {
+        // initialize() is a no-op by design
+        contractScalingService.initialize();
+        
+        // Verify no external calls were made
+        verify(restTemplate, never()).getForObject(anyString(), any());
+        verify(telegramService, never()).sendMessage(anyString());
+    }
 }

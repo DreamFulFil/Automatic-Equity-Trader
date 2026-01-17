@@ -101,3 +101,11 @@ data/
 python/shioaji.log
 scripts/shioaji.log
 shioaji.log
+
+# Coverage files
+.coverage
+.coverage.*
+
+# Coverage files inside python/ (explicit)
+python/.coverage
+python/.coverage.*

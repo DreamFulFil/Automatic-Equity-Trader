@@ -14,6 +14,9 @@ import tw.gc.auto.equity.trader.entities.ShioajiSettings;
 import tw.gc.auto.equity.trader.services.TradingEngineService;
 import tw.gc.auto.equity.trader.services.ShioajiSettingsService;
 
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
+
 /**
  * REST endpoint for graceful application shutdown
  * 
@@ -37,6 +40,12 @@ public class ShutdownController {
     // For testing: allows disabling actual System.exit
     @Setter
     private boolean exitEnabled = true;
+
+    @Setter
+    private IntConsumer exitHandler = System::exit;
+
+    @Setter
+    private IntSupplier springExitHandler;
     
     /**
      * Gracefully shutdown the application
@@ -54,9 +63,11 @@ public class ShutdownController {
                 tradingEngine.flattenPosition("Manual shutdown via endpoint");
                 
                 log.info("🛑 Closing Spring application context...");
-                int exitCode = SpringApplication.exit(applicationContext, () -> 0);
+                int exitCode = springExitHandler != null
+                        ? springExitHandler.getAsInt()
+                        : SpringApplication.exit(applicationContext, () -> 0);
                 if (exitEnabled) {
-                    System.exit(exitCode);
+                    exitHandler.accept(exitCode);
                 }
             } catch (Exception e) {
                 log.error("❌ Error during graceful shutdown", e);

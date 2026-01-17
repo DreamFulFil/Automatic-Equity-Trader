@@ -5,6 +5,7 @@ import tw.gc.auto.equity.trader.entities.Agent.AgentStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -306,5 +307,400 @@ class EntityTest {
         assertTrue(stats.getLlamaInsight().contains("momentum"));
         assertEquals(now, stats.getInsightGeneratedAt());
         assertEquals("Manual observation: High volume day", stats.getNotes());
+    }
+    
+    @Test
+    void testFutureSettingsBuilder() {
+        FutureSettings settings = FutureSettings.builder()
+                .contractCode("MTX")
+                .contractsPerTrade(2)
+                .maxOpenContracts(5)
+                .leverage(5.0)
+                .minMarginPerContract(50000.0)
+                .orderType("LIMIT")
+                .timeInForce("GTC")
+                .stopLoss(1000.0)
+                .takeProfit(2000.0)
+                .dailyLossLimit(10000.0)
+                .weeklyLossLimit(30000.0)
+                .commissionPerContract(100.0)
+                .estimatedSlippage(50.0)
+                .autoRollover(true)
+                .allowHedging(false)
+                .tradingSession("DAY")
+                .description("Test settings")
+                .build();
+        
+        assertEquals("MTX", settings.getContractCode());
+        assertEquals(2, settings.getContractsPerTrade());
+        assertEquals(5, settings.getMaxOpenContracts());
+        assertEquals(5.0, settings.getLeverage());
+        assertEquals(50000.0, settings.getMinMarginPerContract());
+        assertEquals("LIMIT", settings.getOrderType());
+        assertEquals("GTC", settings.getTimeInForce());
+        assertEquals(1000.0, settings.getStopLoss());
+        assertEquals(2000.0, settings.getTakeProfit());
+        assertEquals(10000.0, settings.getDailyLossLimit());
+        assertEquals(30000.0, settings.getWeeklyLossLimit());
+        assertEquals(100.0, settings.getCommissionPerContract());
+        assertEquals(50.0, settings.getEstimatedSlippage());
+        assertTrue(settings.getAutoRollover());
+        assertFalse(settings.getAllowHedging());
+        assertEquals("DAY", settings.getTradingSession());
+        assertEquals("Test settings", settings.getDescription());
+        assertNotNull(settings.getUpdatedAt());
+    }
+    
+    @Test
+    void testFutureSettingsPreUpdate() {
+        FutureSettings settings = FutureSettings.builder()
+                .contractCode("MTX")
+                .contractsPerTrade(2)
+                .maxOpenContracts(5)
+                .leverage(5.0)
+                .minMarginPerContract(50000.0)
+                .orderType("LIMIT")
+                .timeInForce("GTC")
+                .stopLoss(1000.0)
+                .takeProfit(2000.0)
+                .dailyLossLimit(10000.0)
+                .weeklyLossLimit(30000.0)
+                .commissionPerContract(100.0)
+                .estimatedSlippage(50.0)
+                .autoRollover(true)
+                .allowHedging(false)
+                .tradingSession("DAY")
+                .build();
+        
+        LocalDateTime beforeUpdate = settings.getUpdatedAt();
+        settings.preUpdate();
+        assertNotEquals(beforeUpdate, settings.getUpdatedAt());
+    }
+    
+    @Test
+    void testStockUniverseBuilder() {
+        LocalDateTime now = LocalDateTime.now();
+        StockUniverse stock = StockUniverse.builder()
+                .symbol("2454")
+                .stockName("MediaTek")
+                .sector("Technology")
+                .marketCap(1000000000.0)
+                .avgDailyVolume(5000000L)
+                .selectionReason("High liquidity and strong fundamentals")
+                .selectionScore(8.5)
+                .enabled(true)
+                .build();
+        
+        assertEquals("2454", stock.getSymbol());
+        assertEquals("MediaTek", stock.getStockName());
+        assertEquals("Technology", stock.getSector());
+        assertEquals(1000000000.0, stock.getMarketCap());
+        assertEquals(5000000L, stock.getAvgDailyVolume());
+        assertEquals("High liquidity and strong fundamentals", stock.getSelectionReason());
+        assertEquals(8.5, stock.getSelectionScore());
+        assertTrue(stock.getEnabled());
+        assertNotNull(stock.getCreatedAt());
+        assertNotNull(stock.getUpdatedAt());
+    }
+    
+    @Test
+    void testStockUniverseOnUpdate() {
+        StockUniverse stock = StockUniverse.builder()
+                .symbol("2454")
+                .stockName("MediaTek")
+                .sector("Technology")
+                .marketCap(1000000000.0)
+                .avgDailyVolume(5000000L)
+                .selectionScore(8.5)
+                .build();
+        
+        LocalDateTime beforeUpdate = stock.getUpdatedAt();
+        stock.onUpdate();
+        assertNotEquals(beforeUpdate, stock.getUpdatedAt());
+    }
+    
+    @Test
+    void testAgentPreUpdate() {
+        Agent agent = Agent.builder()
+                .name("TestAgent")
+                .description("Test")
+                .agentType("TEST")
+                .build();
+        
+        assertNull(agent.getUpdatedAt());
+        agent.preUpdate();
+        assertNotNull(agent.getUpdatedAt());
+    }
+    
+    @Test
+    void testAgentStatusEnum() {
+        assertEquals(3, Agent.AgentStatus.values().length);
+        assertNotNull(Agent.AgentStatus.ACTIVE);
+        assertNotNull(Agent.AgentStatus.INACTIVE);
+        assertNotNull(Agent.AgentStatus.ERROR);
+    }
+    
+    @Test
+    void testActiveShadowSelectionBuilder() {
+        LocalDateTime now = LocalDateTime.now();
+        ActiveShadowSelection selection = ActiveShadowSelection.builder()
+                .rankPosition(1)
+                .isActive(true)
+                .symbol("2330")
+                .stockName("TSMC")
+                .strategyName("MomentumStrategy")
+                .source(ActiveShadowSelection.SelectionSource.BACKTEST)
+                .sharpeRatio(1.5)
+                .totalReturnPct(15.5)
+                .winRatePct(60.0)
+                .maxDrawdownPct(-5.5)
+                .compositeScore(85.0)
+                .build();
+        
+        assertEquals(1, selection.getRankPosition());
+        assertTrue(selection.getIsActive());
+        assertEquals("2330", selection.getSymbol());
+        assertEquals("TSMC", selection.getStockName());
+        assertEquals("MomentumStrategy", selection.getStrategyName());
+        assertEquals(ActiveShadowSelection.SelectionSource.BACKTEST, selection.getSource());
+        assertEquals(1.5, selection.getSharpeRatio());
+        assertEquals(15.5, selection.getTotalReturnPct());
+        assertEquals(60.0, selection.getWinRatePct());
+        assertEquals(-5.5, selection.getMaxDrawdownPct());
+        assertEquals(85.0, selection.getCompositeScore());
+        assertNotNull(selection.getSelectedAt());
+        assertNotNull(selection.getUpdatedAt());
+    }
+    
+    @Test
+    void testActiveShadowSelectionOnUpdate() {
+        ActiveShadowSelection selection = ActiveShadowSelection.builder()
+                .rankPosition(1)
+                .symbol("2330")
+                .stockName("TSMC")
+                .strategyName("Test")
+                .source(ActiveShadowSelection.SelectionSource.BACKTEST)
+                .build();
+        
+        LocalDateTime beforeUpdate = selection.getUpdatedAt();
+        selection.onUpdate();
+        assertNotEquals(beforeUpdate, selection.getUpdatedAt());
+    }
+    
+    @Test
+    void testActiveShadowSelectionSourceEnum() {
+        assertEquals(3, ActiveShadowSelection.SelectionSource.values().length);
+        assertNotNull(ActiveShadowSelection.SelectionSource.BACKTEST);
+        assertNotNull(ActiveShadowSelection.SelectionSource.FRONTTEST);
+        assertNotNull(ActiveShadowSelection.SelectionSource.COMBINATION);
+    }
+    
+    @Test
+    void testBotSettingsPreUpdate() {
+        BotSettings settings = BotSettings.builder()
+                .key("test")
+                .value("value")
+                .build();
+        
+        LocalDateTime beforeUpdate = settings.getUpdatedAt();
+        settings.preUpdate();
+        assertNotEquals(beforeUpdate, settings.getUpdatedAt());
+    }
+    
+    @Test
+    void testBotSettingsAllConstants() {
+        assertEquals("trading_mode", BotSettings.TRADING_MODE);
+        assertEquals("market_mode", BotSettings.MARKET_MODE);
+        assertEquals("ollama_model", BotSettings.OLLAMA_MODEL);
+        assertEquals("daily_loss_limit", BotSettings.DAILY_LOSS_LIMIT);
+        assertEquals("weekly_loss_limit", BotSettings.WEEKLY_LOSS_LIMIT);
+        assertEquals("monthly_loss_limit", BotSettings.MONTHLY_LOSS_LIMIT);
+        assertEquals("weekly_profit_limit", BotSettings.WEEKLY_PROFIT_LIMIT);
+        assertEquals("monthly_profit_limit", BotSettings.MONTHLY_PROFIT_LIMIT);
+        assertEquals("tutor_questions_per_day", BotSettings.TUTOR_QUESTIONS_PER_DAY);
+        assertEquals("tutor_insights_per_day", BotSettings.TUTOR_INSIGHTS_PER_DAY);
+    }
+    
+    @Test
+    void testEarningsBlackoutMetaBuilder() {
+        OffsetDateTime now = OffsetDateTime.now();
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .lastUpdated(now)
+                .source("test-source")
+                .ttlDays(7)
+                .build();
+        
+        assertEquals(now, meta.getLastUpdated());
+        assertEquals("test-source", meta.getSource());
+        assertEquals(7, meta.getTtlDays());
+        assertNotNull(meta.getTickersChecked());
+        assertNotNull(meta.getDates());
+    }
+    
+    @Test
+    void testEarningsBlackoutMetaOnCreate() {
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .source("test")
+                .build();
+        
+        assertNull(meta.getCreatedAt());
+        meta.onCreate();
+        assertNotNull(meta.getCreatedAt());
+        assertNotNull(meta.getUpdatedAt());
+        assertNotNull(meta.getLastUpdated());
+    }
+    
+    @Test
+    void testEarningsBlackoutMetaOnUpdate() {
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .source("test")
+                .build();
+        
+        meta.onCreate();
+        OffsetDateTime beforeUpdate = meta.getUpdatedAt();
+        meta.onUpdate();
+        assertNotEquals(beforeUpdate, meta.getUpdatedAt());
+    }
+    
+    @Test
+    void testEarningsBlackoutMetaAddDate() {
+        EarningsBlackoutMeta meta = EarningsBlackoutMeta.builder()
+                .source("test")
+                .build();
+        
+        EarningsBlackoutDate date = EarningsBlackoutDate.builder()
+                .blackoutDate(LocalDate.now())
+                .build();
+        
+        meta.addDate(date);
+        assertTrue(meta.getDates().contains(date));
+        assertEquals(meta, date.getMeta());
+    }
+    
+    @Test
+    void testEarningsBlackoutMetaEquals() {
+        OffsetDateTime now = OffsetDateTime.now();
+        EarningsBlackoutMeta meta1 = EarningsBlackoutMeta.builder()
+                .lastUpdated(now)
+                .source("test")
+                .build();
+        
+        EarningsBlackoutMeta meta2 = EarningsBlackoutMeta.builder()
+                .lastUpdated(now)
+                .source("test")
+                .build();
+        
+        assertEquals(meta1, meta2);
+        assertEquals(meta1.hashCode(), meta2.hashCode());
+    }
+    
+    @Test
+    void testEarningsBlackoutDateBuilder() {
+        LocalDate date = LocalDate.now();
+        EarningsBlackoutDate blackoutDate = EarningsBlackoutDate.builder()
+                .blackoutDate(date)
+                .build();
+        
+        assertEquals(date, blackoutDate.getBlackoutDate());
+    }
+    
+    @Test
+    void testEarningsBlackoutDateOnCreate() {
+        EarningsBlackoutDate date = EarningsBlackoutDate.builder()
+                .blackoutDate(LocalDate.now())
+                .build();
+        
+        assertNull(date.getCreatedAt());
+        date.onCreate();
+        assertNotNull(date.getCreatedAt());
+    }
+    
+    @Test
+    void testEarningsBlackoutDateEquals() {
+        LocalDate today = LocalDate.now();
+        EarningsBlackoutDate date1 = EarningsBlackoutDate.builder()
+                .blackoutDate(today)
+                .build();
+        
+        EarningsBlackoutDate date2 = EarningsBlackoutDate.builder()
+                .blackoutDate(today)
+                .build();
+        
+        assertEquals(date1, date2);
+        assertEquals(date1.hashCode(), date2.hashCode());
+    }
+    
+    @Test
+    void testStrategyStockMappingBuilder() {
+        StrategyStockMapping mapping = StrategyStockMapping.builder()
+                .symbol("2330.TW")
+                .stockName("TSMC")
+                .strategyName("MomentumStrategy")
+                .sharpeRatio(1.5)
+                .totalReturnPct(15.5)
+                .winRatePct(60.0)
+                .maxDrawdownPct(-5.0)
+                .totalTrades(100)
+                .avgProfitPerTrade(150.0)
+                .recommended(true)
+                .build();
+        
+        assertEquals("2330.TW", mapping.getSymbol());
+        assertEquals("TSMC", mapping.getStockName());
+        assertEquals("MomentumStrategy", mapping.getStrategyName());
+        assertEquals(1.5, mapping.getSharpeRatio());
+        assertEquals(15.5, mapping.getTotalReturnPct());
+        assertEquals(60.0, mapping.getWinRatePct());
+        assertEquals(-5.0, mapping.getMaxDrawdownPct());
+        assertEquals(100, mapping.getTotalTrades());
+        assertEquals(150.0, mapping.getAvgProfitPerTrade());
+        assertTrue(mapping.isRecommended());
+    }
+    
+    @Test
+    void testStrategyStockMappingRiskLevelCalculation() {
+        // LOW risk
+        StrategyStockMapping lowRisk = StrategyStockMapping.builder()
+                .symbol("2330")
+                .strategyName("Test")
+                .maxDrawdownPct(-5.0)
+                .sharpeRatio(1.5)
+                .build();
+        lowRisk.onUpdate();
+        assertEquals("LOW", lowRisk.getRiskLevel());
+        
+        // MEDIUM risk
+        StrategyStockMapping mediumRisk = StrategyStockMapping.builder()
+                .symbol("2330")
+                .strategyName("Test")
+                .maxDrawdownPct(-12.0)
+                .sharpeRatio(0.8)
+                .build();
+        mediumRisk.onUpdate();
+        assertEquals("MEDIUM", mediumRisk.getRiskLevel());
+        
+        // HIGH risk
+        StrategyStockMapping highRisk = StrategyStockMapping.builder()
+                .symbol("2330")
+                .strategyName("Test")
+                .maxDrawdownPct(-20.0)
+                .sharpeRatio(0.3)
+                .build();
+        highRisk.onUpdate();
+        assertEquals("HIGH", highRisk.getRiskLevel());
+    }
+    
+    @Test
+    void testStrategyStockMappingUpdatedAtSet() {
+        StrategyStockMapping mapping = StrategyStockMapping.builder()
+                .symbol("2330")
+                .strategyName("Test")
+                .maxDrawdownPct(-5.0)
+                .sharpeRatio(1.5)
+                .build();
+        
+        assertNull(mapping.getUpdatedAt());
+        mapping.onUpdate();
+        assertNotNull(mapping.getUpdatedAt());
     }
 }

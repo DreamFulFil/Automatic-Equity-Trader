@@ -267,4 +267,50 @@ class SystemConfigServiceTest {
         // Then
         verify(configRepository, atLeast(10)).save(any(SystemConfig.class));
     }
+    
+    @Test
+    void initialize_shouldCallInitializeDefaults() {
+        // Given
+        when(configRepository.findByKey(anyString())).thenReturn(Optional.empty());
+        when(configRepository.save(any(SystemConfig.class))).thenAnswer(i -> i.getArgument(0));
+        
+        // When
+        systemConfigService.initialize();
+        
+        // Then - verify that initializeDefaults was called by checking saves
+        verify(configRepository, atLeast(10)).save(any(SystemConfig.class));
+    }
+    
+    @Test
+    void getDouble_shouldReturnDefault_whenNumberFormatException() {
+        // Given
+        String key = "min_sharpe_ratio";
+        SystemConfig config = SystemConfig.builder()
+            .key(key)
+            .value("not_a_double")
+            .build();
+        
+        when(configRepository.findByKey(key)).thenReturn(Optional.of(config));
+        
+        // When
+        double result = systemConfigService.getDouble(key, 1.5);
+        
+        // Then
+        assertThat(result).isEqualTo(1.5);
+    }
+    
+    @Test
+    void validateAndSetConfig_shouldHandleDoubleValidation() {
+        // Given
+        String key = "min_sharpe_ratio";
+        when(configRepository.findByKey(key)).thenReturn(Optional.empty());
+        when(configRepository.save(any(SystemConfig.class))).thenAnswer(i -> i.getArgument(0));
+        
+        // When
+        String error = systemConfigService.validateAndSetConfig(key, "1.5");
+        
+        // Then
+        assertThat(error).isNull();
+        verify(configRepository).save(any(SystemConfig.class));
+    }
 }

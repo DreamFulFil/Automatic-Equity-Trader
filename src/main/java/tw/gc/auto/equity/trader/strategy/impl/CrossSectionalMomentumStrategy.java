@@ -58,7 +58,7 @@ public class CrossSectionalMomentumStrategy implements IStrategy {
             prices.removeFirst();
         }
         
-        if (prices.size() < rankPeriod) {
+        if (prices.size() <= rankPeriod) {
             return TradeSignal.neutral("Warming up - need " + rankPeriod + " prices");
         }
         

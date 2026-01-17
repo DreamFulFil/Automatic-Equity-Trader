@@ -1,4 +1,5 @@
 [tool.pytest.ini_options]
+addopts = "--cov=app.core.config --cov=app.services.earnings_service --cov=app.services.ollama_service --cov=app.services.ai_insights_service --cov=bridge --cov-report=term-missing --cov-fail-under=100"
 markers = [
     "e2e: End-to-end tests that require full system setup",
 ]

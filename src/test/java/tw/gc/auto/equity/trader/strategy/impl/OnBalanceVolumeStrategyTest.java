@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
+import tw.gc.auto.equity.trader.strategy.StrategyType;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
 
 import java.time.LocalDateTime;
@@ -66,6 +67,85 @@ class OnBalanceVolumeStrategyTest {
         }
         TradeSignal finalSig = strategy.execute(portfolio, createMarketData(192.0, 2000L));
         assertEquals(TradeSignal.SignalDirection.SHORT, finalSig.getDirection());
+    }
+
+    @Test
+    void testNullDataReturnsNeutral() {
+        TradeSignal signal = strategy.execute(portfolio, null);
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertEquals("No market data", signal.getReason());
+    }
+
+    @Test
+    void testEqualCloseDoesNotChangeOBV() {
+        // First call to set prevClose
+        strategy.execute(portfolio, createMarketData(100.0, 1000L));
+        // Second call with same close
+        TradeSignal signal = strategy.execute(portfolio, createMarketData(100.0, 1000L));
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertTrue(signal.getReason().contains("Warming up"));
+    }
+
+    @Test
+    void testSlopeZeroReturnsNeutral() {
+        // Create flat OBV by keeping price constant
+        double price = 100.0;
+        long volume = 1000L;
+        for (int i = 0; i < 6; i++) {
+            strategy.execute(portfolio, createMarketData(price, volume));
+        }
+        // OBV should be 0 for all
+        TradeSignal signal = strategy.execute(portfolio, createMarketData(price, volume));
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertTrue(signal.getReason().contains("OBV slope 0.0000"));
+    }
+
+    @Test
+    void testLongNotGeneratedWhenPositionPositive() {
+        // Set position to positive
+        portfolio.getPositions().put("AUTO_EQUITY_TRADER", 1);
+        // Simulate increasing OBV
+        double price = 100.0;
+        for (int i = 0; i < 6; i++) {
+            price += 1.0;
+            strategy.execute(portfolio, createMarketData(price, 1000L + i * 100));
+        }
+        TradeSignal signal = strategy.execute(portfolio, createMarketData(107.0, 2000L));
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+    }
+
+    @Test
+    void testShortNotGeneratedWhenPositionNegative() {
+        // Set position to negative
+        portfolio.getPositions().put("AUTO_EQUITY_TRADER", -1);
+        // Simulate decreasing OBV
+        double price = 200.0;
+        for (int i = 0; i < 6; i++) {
+            price -= 1.0;
+            strategy.execute(portfolio, createMarketData(price, 1000L + i * 100));
+        }
+        TradeSignal signal = strategy.execute(portfolio, createMarketData(193.0, 2000L));
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+    }
+
+    @Test
+    void testGetName() {
+        assertEquals("OnBalanceVolume (5)", strategy.getName());
+    }
+
+    @Test
+    void testGetType() {
+        assertEquals(StrategyType.SWING, strategy.getType());
+    }
+
+    @Test
+    void testReset() {
+        strategy.execute(portfolio, createMarketData(100.0, 1000L));
+        strategy.reset();
+        // After reset, should behave like new
+        TradeSignal signal = strategy.execute(portfolio, createMarketData(100.0, 1000L));
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertTrue(signal.getReason().contains("Warming up"));
     }
 
     private MarketData createMarketData(double price, long volume) {

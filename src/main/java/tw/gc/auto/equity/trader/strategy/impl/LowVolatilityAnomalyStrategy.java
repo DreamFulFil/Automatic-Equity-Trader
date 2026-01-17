@@ -47,8 +47,13 @@ public class LowVolatilityAnomalyStrategy implements IStrategy {
             prices.removeFirst();
         }
         
-        if (prices.size() < volatilityWindow) {
-            return TradeSignal.neutral("Warming up - need " + volatilityWindow + " days");
+        if (volatilityWindow < 2) {
+            return TradeSignal.neutral("Invalid volatility window");
+        }
+
+        // Need at least volatilityWindow + 1 prices to compute volatilityWindow returns
+        if (prices.size() <= volatilityWindow) {
+            return TradeSignal.neutral("Warming up - need " + (volatilityWindow + 1) + " days");
         }
         
         Double[] priceArray = prices.toArray(new Double[0]);

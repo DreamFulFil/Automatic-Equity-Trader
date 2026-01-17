@@ -80,6 +80,11 @@ class StrategyDefinitionTypeTest {
     }
 
     @Test
+    void isCompatibleWith_incompatibleMode_shouldReturnFalse() {
+        assertFalse(StrategyDefinitionType.AUTOMATIC_REBALANCING.isCompatibleWith(TradingModeType.TW_FUTURE));
+    }
+
+    @Test
     void allStrategies_shouldHaveUniqueClassNames() {
         long uniqueCount = java.util.Arrays.stream(StrategyDefinitionType.values())
             .map(StrategyDefinitionType::getClassName)

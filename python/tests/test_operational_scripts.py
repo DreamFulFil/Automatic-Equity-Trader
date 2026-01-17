@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
+import sys
 import pandas as pd
 import pytest
+
+# Add parent directory to path to import scripts
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import scripts.operational.check_yahoo_rate_limits as yahoo
 import scripts.operational.check_shioaji_config as shioaji

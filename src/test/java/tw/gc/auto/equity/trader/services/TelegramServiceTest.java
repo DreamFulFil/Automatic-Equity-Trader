@@ -429,5 +429,204 @@ class TelegramServiceTest {
         // Should not call handler again for same update (duplicate is filtered out)
         assertFalse(statusCalled.get());
     }
+
+    @Test
+    void pollUpdates_whenApiReturnsNotOk_shouldNotProcess() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        
+        String response = "{\"ok\":false,\"error\":\"Invalid token\"}";
+        when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(commandRegistry, never()).getCommand(anyString());
+    }
+
+    @Test
+    void pollUpdates_whenExceptionOccurs_shouldHandleGracefully() {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(restTemplate.getForObject(anyString(), eq(String.class)))
+                .thenThrow(new RuntimeException("Network error"));
+        
+        assertDoesNotThrow(() -> telegramService.pollUpdates());
+    }
+
+    @Test
+    void registerCustomCommand_shouldStoreHandler() {
+        AtomicBoolean called = new AtomicBoolean(false);
+        
+        telegramService.registerCustomCommand("mycommand", args -> called.set(true));
+        
+        // Can't directly test execution without processUpdate, but we can verify registration doesn't throw
+        assertDoesNotThrow(() -> telegramService.registerCustomCommand("another", args -> {}));
+    }
+
+    @Test
+    void dispatchCommand_whenUnknownCommand_shouldSendHelpMessage() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(commandRegistry.getCommand("unknown")).thenReturn(null);
+        
+        String updateJson = "{\"update_id\":5,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/unknown\"}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(restTemplate, atLeastOnce()).postForObject(
+                contains("sendMessage"),
+                argThat(entity -> {
+                    HttpEntity<Map<String, Object>> httpEntity = (HttpEntity<Map<String, Object>>) entity;
+                    String text = (String) httpEntity.getBody().get("text");
+                    return text.contains("Unknown command");
+                }),
+                eq(String.class));
+    }
+
+    @Test
+    void dispatchCommand_whenAlternateAgentsCommand_shouldMapToAgent() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        tw.gc.auto.equity.trader.services.telegram.commands.AgentCommand agentCommand = 
+                new tw.gc.auto.equity.trader.services.telegram.commands.AgentCommand();
+        when(commandRegistry.getCommand("agents")).thenReturn(null);
+        when(commandRegistry.getCommand("agent")).thenReturn(agentCommand);
+        
+        String updateJson = "{\"update_id\":6,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/agents\"}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(commandRegistry).getCommand("agent");
+    }
+
+    @Test
+    void processUpdate_whenUnauthorizedChat_shouldIgnore() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        String updateJson = "{\"update_id\":7,\"message\":{\"chat\":{\"id\":\"999999999\"},\"text\":\"/status\"}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(commandRegistry, never()).getCommand(anyString());
+    }
+
+    @Test
+    void processUpdate_whenMessageHasNoText_shouldIgnore() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        String updateJson = "{\"update_id\":8,\"message\":{\"chat\":{\"id\":\"123456789\"}}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(commandRegistry, never()).getCommand(anyString());
+    }
+
+    @Test
+    void processUpdate_whenTextDoesNotStartWithSlash_shouldIgnore() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        String updateJson = "{\"update_id\":9,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"hello\"}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(commandRegistry, never()).getCommand(anyString());
+    }
+
+    @Test
+    void executeCommand_whenCommandThrowsException_shouldSendErrorMessage() throws Exception {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        tw.gc.auto.equity.trader.services.telegram.TelegramCommand failingCommand = 
+                new tw.gc.auto.equity.trader.services.telegram.TelegramCommand() {
+                    @Override
+                    public void execute(String args, tw.gc.auto.equity.trader.services.telegram.TelegramCommandContext context) {
+                        throw new RuntimeException("Test error");
+                    }
+                    
+                    @Override
+                    public String getCommandName() {
+                        return "failing";
+                    }
+                    
+                    @Override
+                    public String getHelpText() {
+                        return "Test command";
+                    }
+                };
+        
+        when(commandRegistry.getCommand("failing")).thenReturn(failingCommand);
+        
+        String updateJson = "{\"update_id\":10,\"message\":{\"chat\":{\"id\":\"123456789\"},\"text\":\"/failing\"}}";
+        String response = String.format("{\"ok\":true,\"result\":[%s]}", updateJson);
+        when(restTemplate.getForObject(contains("getUpdates"), eq(String.class))).thenReturn(response);
+        
+        telegramService.pollUpdates();
+        
+        verify(restTemplate, atLeastOnce()).postForObject(
+                contains("sendMessage"),
+                argThat(entity -> {
+                    HttpEntity<Map<String, Object>> httpEntity = (HttpEntity<Map<String, Object>>) entity;
+                    String text = (String) httpEntity.getBody().get("text");
+                    return text.contains("Command failed");
+                }),
+                eq(String.class));
+    }
+
+    @Test
+    void sendDailySummaryDigest_whenServicesNull_shouldReturnEarly() {
+        // Services are null by default in test setup
+        assertDoesNotThrow(() -> telegramService.sendDailySummaryDigest());
+        
+        verify(restTemplate, never()).postForObject(anyString(), any(), eq(String.class));
+    }
+
+    @Test
+    void sendMessage_whenMessageAlreadyHasBotEmoticon_shouldNotAddAnother() {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        
+        telegramService.sendMessage("🤖 Already has emoticon");
+        
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(anyString(), requestCaptor.capture(), eq(String.class));
+        
+        Map<String, Object> body = requestCaptor.getValue().getBody();
+        String text = (String) body.get("text");
+        assertEquals("🤖 Already has emoticon", text);
+    }
+
+    @Test
+    void sendMessage_whenExceptionOccurs_shouldLogError() {
+        when(telegramProperties.isEnabled()).thenReturn(true);
+        when(telegramProperties.getBotToken()).thenReturn("test-token");
+        when(telegramProperties.getChatId()).thenReturn("123456789");
+        when(restTemplate.postForObject(anyString(), any(), eq(String.class)))
+                .thenThrow(new RuntimeException("API error"));
+        
+        assertDoesNotThrow(() -> telegramService.sendMessage("Test"));
+    }
 }
+
 

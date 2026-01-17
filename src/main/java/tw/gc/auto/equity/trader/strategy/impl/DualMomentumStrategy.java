@@ -48,8 +48,13 @@ public class DualMomentumStrategy implements IStrategy {
             prices.removeFirst();
         }
         
-        if (prices.size() < maxPeriod) {
-            return TradeSignal.neutral("Warming up - need " + maxPeriod + " prices");
+        if (absolutePeriod < 1 || relativePeriod < 2) {
+            return TradeSignal.neutral("Invalid momentum periods");
+        }
+
+        // Need at least maxPeriod + 1 prices to reference N periods ago (inclusive of current)
+        if (prices.size() <= maxPeriod) {
+            return TradeSignal.neutral("Warming up - need " + (maxPeriod + 1) + " prices");
         }
         
         Double[] priceArray = prices.toArray(new Double[0]);

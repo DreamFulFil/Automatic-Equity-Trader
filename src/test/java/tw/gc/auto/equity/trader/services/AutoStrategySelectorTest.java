@@ -235,4 +235,228 @@ class AutoStrategySelectorTest {
             .totalTrades(50) // Required for filtering (> 10)
             .build();
     }
+
+    @Test
+    void selectBestStrategyAndStock_shouldSwitch_whenCurrentComboNotTested() {
+        // Given
+        BacktestResult bestResult = createBacktestResult("2330.TW", "TSMC", "BollingerBandStrategy", 15.0, 1.5, 60.0, -8.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(bestResult));
+        when(activeStrategyService.getActiveStrategyName()).thenReturn("UntestedStrategy");
+        when(activeStockService.getActiveStock()).thenReturn("9999.TW");
+        when(mappingRepository.findBySymbolAndStrategyName("9999.TW", "UntestedStrategy")).thenReturn(Optional.empty());
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should switch because current combo not tested
+        verify(activeStrategyService).switchStrategy(anyString(), any(), anyString(), eq(true), any(), any(), any(), any());
+    }
+
+    @Test
+    void selectBestStrategyAndStock_shouldSwitch_whenNullCurrentStrategy() {
+        // Given
+        BacktestResult bestResult = createBacktestResult("2330.TW", "TSMC", "BollingerBandStrategy", 15.0, 1.5, 60.0, -8.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(bestResult));
+        when(activeStrategyService.getActiveStrategyName()).thenReturn(null);
+        when(activeStockService.getActiveStock()).thenReturn(null);
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should switch because no current strategy
+        verify(activeStrategyService).switchStrategy(anyString(), any(), anyString(), eq(true), any(), any(), any(), any());
+    }
+
+    @Test
+    void selectBestStrategyAndStock_filtersLowPerformance() {
+        // Given - All results below threshold
+        BacktestResult lowReturn = createBacktestResult("2330.TW", "TSMC", "Strategy1", 4.0, 1.5, 60.0, -8.0); // Return < 5
+        BacktestResult lowSharpe = createBacktestResult("2454.TW", "MediaTek", "Strategy2", 10.0, 0.8, 60.0, -8.0); // Sharpe < 1
+        BacktestResult lowWinRate = createBacktestResult("2317.TW", "Hon Hai", "Strategy3", 10.0, 1.5, 45.0, -8.0); // WinRate < 50
+        BacktestResult highDD = createBacktestResult("2303.TW", "UMC", "Strategy4", 10.0, 1.5, 60.0, -25.0); // Drawdown < -20
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(lowReturn, lowSharpe, lowWinRate, highDD));
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should skip because no valid results
+        verify(telegramService).sendMessage(contains("No backtest results"));
+        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+    }
+
+    @Test
+    void selectBestStrategyAndStock_filtersIntradayForOddLot() {
+        // Given - Intraday strategy with odd-lot mode
+        BacktestResult intradayResult = createBacktestResult("2330.TW", "TSMC", "IntradayStrategy", 15.0, 1.5, 60.0, -8.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(intradayResult));
+        when(stockSettingsRepository.findFirstByOrderByIdDesc())
+            .thenReturn(Optional.of(StockSettings.builder().shareIncrement(27).build())); // Odd-lot (not divisible by 1000)
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should skip intraday strategy
+        verify(telegramService).sendMessage(contains("No backtest results"));
+    }
+
+    @Test
+    void selectBestStrategyAndStock_allowsIntradayForRoundLot() {
+        // Given - Intraday strategy with round-lot mode
+        BacktestResult intradayResult = createBacktestResult("2330.TW", "TSMC", "VWAPStrategy", 15.0, 1.5, 60.0, -8.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(intradayResult));
+        when(stockSettingsRepository.findFirstByOrderByIdDesc())
+            .thenReturn(Optional.of(StockSettings.builder().shareIncrement(1000).build())); // Round-lot (divisible by 1000)
+        when(activeStrategyService.getActiveStrategyName()).thenReturn(null);
+        when(activeStockService.getActiveStock()).thenReturn(null);
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should allow intraday strategy
+        verify(activeStrategyService).switchStrategy(eq("VWAPStrategy"), any(), anyString(), eq(true), any(), any(), any(), any());
+    }
+
+    @Test
+    void selectBestStrategyAndStock_filtersInsufficientTrades() {
+        // Given - Result with too few trades
+        BacktestResult fewTrades = BacktestResult.builder()
+            .symbol("2330.TW")
+            .stockName("TSMC")
+            .strategyName("Strategy1")
+            .totalReturnPct(15.0)
+            .sharpeRatio(1.5)
+            .winRatePct(60.0)
+            .maxDrawdownPct(-8.0)
+            .totalTrades(5) // < 10
+            .build();
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(fewTrades));
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then - should skip due to insufficient sample size
+        verify(telegramService).sendMessage(contains("No backtest results"));
+    }
+
+    @Test
+    void selectBestStrategyAndStock_handlesException() {
+        // Given
+        when(backtestResultRepository.findAll()).thenThrow(new RuntimeException("Database error"));
+        
+        // When
+        autoStrategySelector.selectBestStrategyAndStock();
+        
+        // Then
+        verify(telegramService).sendMessage(contains("Auto-selection failed"));
+    }
+
+    @Test
+    void selectShadowModeStrategiesAndPopulateTable_excludesActiveStock() {
+        // Given
+        StrategyStockMapping activeMapping = createMappingFromResult(
+            createBacktestResult("2330.TW", "TSMC", "ActiveStrategy", 15.0, 1.5, 60.0, -8.0)
+        );
+        
+        BacktestResult shadowResult1 = createBacktestResult("2454.TW", "MediaTek", "Strategy1", 12.0, 1.4, 58.0, -9.0);
+        BacktestResult shadowResult2 = createBacktestResult("2330.TW", "TSMC", "Strategy2", 14.0, 1.6, 62.0, -7.0); // Same stock as active
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(shadowResult1, shadowResult2));
+        when(mappingRepository.findAll()).thenReturn(Arrays.asList(
+            createMappingFromResult(shadowResult1),
+            createMappingFromResult(shadowResult2)
+        ));
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
+        tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository mockRepo = 
+            org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
+        
+        AutoStrategySelector selector = new AutoStrategySelector(
+            mappingRepository,
+            backtestResultRepository,
+            stockSettingsRepository,
+            activeStrategyService,
+            activeStockService,
+            shadowModeStockService,
+            telegramService,
+            complianceService,
+            mockRepo
+        );
+        
+        // When
+        selector.selectShadowModeStrategiesAndPopulateTable(activeMapping);
+        
+        // Then - should save active as rank 1
+        verify(mockRepo).save(argThat(selection -> 
+            selection.getRankPosition() == 1 && selection.getSymbol().equals("2330.TW") && selection.getIsActive()
+        ));
+        // Shadow should only have 2454.TW (not 2330.TW which is active)
+        verify(mockRepo).save(argThat(selection -> 
+            selection.getRankPosition() == 2 && selection.getSymbol().equals("2454.TW") && !selection.getIsActive()
+        ));
+        // Verify it calls selectShadowModeStrategies for backward compatibility
+        verify(shadowModeStockService).upsertTopCandidates(any());
+    }
+
+    @Test
+    void selectShadowModeStrategies_filtersIntradayForOddLot() {
+        // Given - Mix of intraday and non-intraday with odd-lot mode
+        BacktestResult intradayResult = createBacktestResult("2330.TW", "TSMC", "TWAPStrategy", 12.0, 1.3, 58.0, -9.0);
+        BacktestResult normalResult = createBacktestResult("2454.TW", "MediaTek", "BollingerBandStrategy", 10.0, 1.2, 56.0, -10.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(intradayResult, normalResult));
+        when(stockSettingsRepository.findFirstByOrderByIdDesc())
+            .thenReturn(Optional.of(StockSettings.builder().shareIncrement(27).build())); // Odd-lot
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
+        
+        // When
+        autoStrategySelector.selectShadowModeStrategies();
+        
+        // Then - should only include non-intraday strategy
+        verify(shadowModeStockService).upsertTopCandidates(argThat(configs -> 
+            configs.size() == 1 && configs.get(0).getSymbol().equals("2454.TW")
+        ));
+    }
+
+    @Test
+    void selectShadowModeStrategies_allowsAllStrategiesForRoundLot() {
+        // Given - Mix of intraday and non-intraday with round-lot mode
+        BacktestResult intradayResult = createBacktestResult("2330.TW", "TSMC", "VWAPStrategy", 12.0, 1.3, 58.0, -9.0);
+        BacktestResult normalResult = createBacktestResult("2454.TW", "MediaTek", "BollingerBandStrategy", 10.0, 1.2, 56.0, -10.0);
+        
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(intradayResult, normalResult));
+        when(stockSettingsRepository.findFirstByOrderByIdDesc())
+            .thenReturn(Optional.of(StockSettings.builder().shareIncrement(1000).build())); // Round-lot
+        when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
+        
+        // When
+        autoStrategySelector.selectShadowModeStrategies();
+        
+        // Then - should include both strategies
+        verify(shadowModeStockService).upsertTopCandidates(argThat(configs -> configs.size() == 2));
+    }
+
+    @Test
+    void isIntradayStrategy_identifiesVariousPatterns() throws Exception {
+        // Use reflection to test private method
+        java.lang.reflect.Method method = AutoStrategySelector.class.getDeclaredMethod("isIntradayStrategy", String.class);
+        method.setAccessible(true);
+        
+        // Test various intraday patterns
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "IntradayStrategy")).isTrue();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "Pivot Points Strategy")).isTrue();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "VWAPStrategy")).isTrue();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "TWAPStrategy")).isTrue();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "Day Trading Strategy")).isTrue();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "Price Volume Rank")).isTrue();
+        
+        // Test non-intraday
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "BollingerBandStrategy")).isFalse();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, "RSIStrategy")).isFalse();
+        org.assertj.core.api.Assertions.assertThat((Boolean) method.invoke(autoStrategySelector, new Object[]{null})).isFalse();
+    }
 }

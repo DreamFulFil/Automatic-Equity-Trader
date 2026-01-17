@@ -83,7 +83,7 @@ public class ShioajiReconnectWrapperService {
                 try {
                     long delay = 2000L * (1L << (attempt - 1));
                     log.info("⏳ Retrying in {}ms...", delay);
-                    Thread.sleep(delay);
+                    sleep(delay);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new Exception("Interrupted during retry", ie);
@@ -143,5 +143,9 @@ public class ShioajiReconnectWrapperService {
             isConnected = false;
             return false;
         }
+    }
+
+    void sleep(long delayMs) throws InterruptedException {
+        Thread.sleep(delayMs);
     }
 }

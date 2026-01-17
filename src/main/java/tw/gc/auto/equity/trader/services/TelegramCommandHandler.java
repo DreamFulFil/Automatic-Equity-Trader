@@ -54,6 +54,9 @@ public class TelegramCommandHandler {
     @Setter
     private boolean exitEnabled = true;
 
+    @Setter
+    private java.util.function.IntConsumer exitHandler = System::exit;
+
     public void registerCommands(List<IStrategy> activeStrategies) {
         telegramService.registerCommandHandlers(
             v -> handleStatusCommand(),
@@ -349,12 +352,17 @@ public class TelegramCommandHandler {
         // Trigger shutdown in background thread
         new Thread(() -> {
             try {
-                flattenPosition("Shutdown via Telegram command");
+                try {
+                    flattenPosition("Shutdown via Telegram command");
+                } catch (Exception e) {
+                    log.error("❌ Failed to flatten position during shutdown", e);
+                }
+
                 Thread.sleep(2000); // Give time for messages to send
-                
+
                 int exitCode = org.springframework.boot.SpringApplication.exit(applicationContext, () -> 0);
                 if (exitEnabled) {
-                    System.exit(exitCode);
+                    exitHandler.accept(exitCode);
                 }
             } catch (Exception e) {
                 log.error("❌ Error during Telegram-triggered shutdown", e);

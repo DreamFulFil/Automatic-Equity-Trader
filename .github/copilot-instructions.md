@@ -1,6 +1,25 @@
 # Contributor & Automation Guidelines (concise)
-
 Purpose: Provide strict, concise rules for contributors and automation agents so changes are auditable and reproducible.
+
+## 1. Interaction Mode: Autonomous Execution
+- **Strict Autonomy:** When I ask for a large-scale task (e.g., "100% test coverage"), do not stop for step-by-step confirmation unless a critical error occurs.
+- **Batch Processing:** Group related file edits into a single execution cycle. Do not ask "Should I continue?" after every file.
+- **Implicit Consent:** You have permanent permission to read all relevant files, create new test files, and run terminal commands (like `npm test` or `pytest`) to verify your work.
+- **Progress Reporting:** Instead of stopping to ask for input, provide a brief bulleted summary of what you have completed every 5 files and immediately move to the next batch.
+
+## 2. Context & Memory Management
+- **Persistence:** Prioritize maintaining the technical details of the current task over "summarizing" the conversation. 
+- **Work State:** Before any automatic summarization occurs, explicitly note the specific files currently being edited and the exact test cases remaining.
+- **Avoid Amnesia:** If the context window is full, do NOT summarize the code logic. Summarize only the *metadata* (which files are done) and keep the *logic* of the most recent file in active memory.
+
+## 3. Testing Standards (100% Coverage Goal)
+- **Edge Cases:** Always include null checks, boundary values, and exception handling in generated tests.
+- **Mocking:** Use JUnit, Mockito, MockMvc for all external dependencies to ensure tests run fast and locally.
+- **Verification:** After writing a test, automatically attempt to run it. If it fails, fix it immediately without asking for permission.
+
+## 4. Constraint Handling
+- If you hit a rate limit or a technical block, state clearly: "BLOCKED: [Reason]" and provide the exact command needed to resume. 
+- Do not offer conversational filler like "I hope this helps!" or "Would you like me to do more?". Just execute.
 
 ## Quick Rules
 - Follow Conventional Commits for commit messages (see `.github/prompts/commit.prompt.md`).

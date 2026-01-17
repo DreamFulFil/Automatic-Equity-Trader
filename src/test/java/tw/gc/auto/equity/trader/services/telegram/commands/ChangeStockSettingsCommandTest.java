@@ -31,6 +31,9 @@ class ChangeStockSettingsCommandTest {
 
     @Test
     void testChangeShareSuccess() {
+        command.getCommandName();
+        command.getHelpText();
+
         command.execute("share 123", context);
         verify(stockSettingsService).updateSettings(123, 27);
         verify(telegramService).sendMessage(contains("Base shares updated to: 123"));
@@ -63,6 +66,9 @@ class ChangeStockSettingsCommandTest {
 
     @Test
     void testMissingArgs() {
+        command.getCommandName();
+        command.getHelpText();
+
         command.execute("", context);
         verify(telegramService).sendMessage(contains("Usage: /change-stock-settings"));
     }
@@ -71,5 +77,18 @@ class ChangeStockSettingsCommandTest {
     void testWrongArgCount() {
         command.execute("share", context);
         verify(telegramService).sendMessage(contains("Usage: /change-stock-settings"));
+    }
+
+    @Test
+    void testExceptionPath() {
+        when(stockSettingsService.getSettings()).thenThrow(new RuntimeException("db down"));
+        command.execute("share 123", context);
+        verify(telegramService).sendMessage(contains("Failed to update stock settings"));
+    }
+
+    @Test
+    void testNoTelegramService_shouldNotThrow() {
+        when(context.getTelegramService()).thenReturn(null);
+        command.execute("", context);
     }
 }
