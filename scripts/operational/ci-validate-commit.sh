@@ -11,8 +11,15 @@ HEADER=$(git log -1 --pretty=%s "$COMMIT")
 
 echo "Validating commit $COMMIT: $HEADER"
 
+# Create a temporary file for the commit message
+TEMP_MSG=$(mktemp)
+trap 'rm -f "$TEMP_MSG"' EXIT
+
+# Write commit message to the temporary file
+git log -1 --pretty=%B "$COMMIT" > "$TEMP_MSG"
+
 # Use the same validator as local hooks
-scripts/operational/validate-commit-and-version.sh <(git log -1 --pretty=%B "$COMMIT")
+scripts/operational/validate-commit-and-version.sh "$TEMP_MSG"
 
 # Additional CI checks: for minor bumps, ensure the VERSION file changed in the commit
 TYPE=$(echo "$HEADER" | sed -E 's/^([^(:]+).*$/\1/')
