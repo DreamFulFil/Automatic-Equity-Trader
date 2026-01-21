@@ -1,8 +1,8 @@
 # CI configuration - uses PostgreSQL database
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/lunchbot
-    username: lunchbotuser
+    url: jdbc:postgresql://localhost:5432/auto_equity_trader
+    username: dreamer
     password: testpassword123
     driver-class-name: org.postgresql.Driver
   jpa:

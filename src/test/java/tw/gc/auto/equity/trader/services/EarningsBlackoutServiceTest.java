@@ -30,6 +30,49 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 public class EarningsBlackoutServiceTest {
 
+    private static final java.nio.file.Path LEGACY_PATH = java.nio.file.Paths.get("config/earnings-blackout-dates.json");
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private void withLegacyFileContent(String content, ThrowingRunnable body) throws Exception {
+        String original = null;
+        if (java.nio.file.Files.exists(LEGACY_PATH)) {
+            original = java.nio.file.Files.readString(LEGACY_PATH);
+        }
+
+        try {
+            java.nio.file.Files.createDirectories(LEGACY_PATH.getParent());
+            java.nio.file.Files.writeString(LEGACY_PATH, content);
+            body.run();
+        } finally {
+            if (original != null) {
+                java.nio.file.Files.writeString(LEGACY_PATH, original);
+            } else {
+                java.nio.file.Files.deleteIfExists(LEGACY_PATH);
+            }
+        }
+    }
+
+    private void withLegacyFileMissing(ThrowingRunnable body) throws Exception {
+        String original = null;
+        if (java.nio.file.Files.exists(LEGACY_PATH)) {
+            original = java.nio.file.Files.readString(LEGACY_PATH);
+        }
+
+        try {
+            java.nio.file.Files.deleteIfExists(LEGACY_PATH);
+            body.run();
+        } finally {
+            if (original != null) {
+                java.nio.file.Files.createDirectories(LEGACY_PATH.getParent());
+                java.nio.file.Files.writeString(LEGACY_PATH, original);
+            }
+        }
+    }
+
     @Mock
     private EarningsBlackoutMetaRepository metaRepository;
     @Mock
@@ -170,10 +213,17 @@ public class EarningsBlackoutServiceTest {
 
     @Test
     void seedFromLegacyFileIfPresent_readsRepoConfigFile() {
-        Optional<EarningsBlackoutMeta> seeded = service.seedFromLegacyFileIfPresent();
+        String payload = "{" +
+                "\"tickers_checked\":[\"TSM\"]," +
+                "\"dates\":[\"2026-01-05\"]," +
+                "\"last_updated\":\"2026-01-01T10:00:00+08:00\"" +
+                "}";
 
-        assertTrue(seeded.isPresent());
-        assertFalse(seeded.get().getDates().isEmpty());
+        assertDoesNotThrow(() -> withLegacyFileContent(payload, () -> {
+            Optional<EarningsBlackoutMeta> seeded = service.seedFromLegacyFileIfPresent();
+            assertTrue(seeded.isPresent());
+            assertFalse(seeded.get().getDates().isEmpty());
+        }));
     }
 
     @Test
@@ -458,30 +508,12 @@ public class EarningsBlackoutServiceTest {
 
     @Test
     void seedFromLegacyFileIfPresent_missingFile_returnsEmpty() throws Exception {
-        java.nio.file.Path path = java.nio.file.Paths.get("config/earnings-blackout-dates.json");
-        java.nio.file.Path backup = java.nio.file.Paths.get("config/earnings-blackout-dates.json.bak");
-        if (java.nio.file.Files.exists(backup)) {
-            java.nio.file.Files.delete(backup);
-        }
-
-        java.nio.file.Files.move(path, backup);
-        try {
-            assertTrue(service.seedFromLegacyFileIfPresent().isEmpty());
-        } finally {
-            java.nio.file.Files.move(backup, path);
-        }
+        withLegacyFileMissing(() -> assertTrue(service.seedFromLegacyFileIfPresent().isEmpty()));
     }
 
     @Test
     void seedFromLegacyFileIfPresent_invalidJson_hitsCatch() throws Exception {
-        java.nio.file.Path path = java.nio.file.Paths.get("config/earnings-blackout-dates.json");
-        String original = java.nio.file.Files.readString(path);
-        try {
-            java.nio.file.Files.writeString(path, "not-json");
-            assertTrue(service.seedFromLegacyFileIfPresent().isEmpty());
-        } finally {
-            java.nio.file.Files.writeString(path, original);
-        }
+        withLegacyFileContent("not-json", () -> assertTrue(service.seedFromLegacyFileIfPresent().isEmpty()));
     }
 
     @Test
@@ -489,18 +521,7 @@ public class EarningsBlackoutServiceTest {
         when(metaRepository.findFirstByOrderByLastUpdatedDesc()).thenReturn(Optional.empty());
         earningsProperties.getRefresh().setEnabled(false);
 
-        java.nio.file.Path path = java.nio.file.Paths.get("config/earnings-blackout-dates.json");
-        java.nio.file.Path backup = java.nio.file.Paths.get("config/earnings-blackout-dates.json.bak2");
-        if (java.nio.file.Files.exists(backup)) {
-            java.nio.file.Files.delete(backup);
-        }
-
-        java.nio.file.Files.move(path, backup);
-        try {
-            assertTrue(service.getCurrentBlackoutDates().isEmpty());
-        } finally {
-            java.nio.file.Files.move(backup, path);
-        }
+        withLegacyFileMissing(() -> assertTrue(service.getCurrentBlackoutDates().isEmpty()));
     }
 
     @Test
@@ -522,19 +543,10 @@ public class EarningsBlackoutServiceTest {
         when(restTemplate.getForObject(eq("http://localhost:8888/earnings/scrape"), eq(String.class)))
                 .thenReturn("{\"dates\":[]}");
 
-        java.nio.file.Path path = java.nio.file.Paths.get("config/earnings-blackout-dates.json");
-        java.nio.file.Path backup = java.nio.file.Paths.get("config/earnings-blackout-dates.json.bak3");
-        if (java.nio.file.Files.exists(backup)) {
-            java.nio.file.Files.delete(backup);
-        }
-
-        java.nio.file.Files.move(path, backup);
-        try {
+        withLegacyFileMissing(() -> {
             assertTrue(service.getCurrentBlackoutDates().isEmpty());
             verify(metaRepository, atLeastOnce()).save(any(EarningsBlackoutMeta.class));
-        } finally {
-            java.nio.file.Files.move(backup, path);
-        }
+        });
     }
 
     // ==================== Coverage tests for lines 232, 246, 250 ====================
