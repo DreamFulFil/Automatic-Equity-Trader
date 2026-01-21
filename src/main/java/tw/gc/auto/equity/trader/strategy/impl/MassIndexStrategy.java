@@ -15,7 +15,9 @@ import java.util.Map;
 @Slf4j
 public class MassIndexStrategy implements IStrategy {
     
-    private final Map<String, Deque<Double>> emaRangeHistory = new HashMap<>();
+    private final Map<String, Deque<Double>> rangeHistory = new HashMap<>();
+    private final Map<String, Deque<Double>> ema9History = new HashMap<>();
+    private final Map<String, Deque<Double>> ratioHistory = new HashMap<>();
     private final Map<String, Double> previousMI = new HashMap<>();
     
     public MassIndexStrategy() {
@@ -24,20 +26,30 @@ public class MassIndexStrategy implements IStrategy {
     @Override
     public TradeSignal execute(Portfolio portfolio, MarketData data) {
         String symbol = data.getSymbol();
-        Deque<Double> emaRanges = emaRangeHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
+        Deque<Double> ranges = rangeHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
+        Deque<Double> ema9s = ema9History.computeIfAbsent(symbol, k -> new ArrayDeque<>());
+        Deque<Double> ratios = ratioHistory.computeIfAbsent(symbol, k -> new ArrayDeque<>());
         
         double range = data.getHigh() - data.getLow();
-        emaRanges.addLast(range);
+        ranges.addLast(range);
+        if (ranges.size() > 60) ranges.removeFirst();
         
-        if (emaRanges.size() > 25) emaRanges.removeFirst();
+        // Mass Index (Donald Dorsey): sum over 25 periods of EMA9(range) / EMA9(EMA9(range))
+        double ema9 = calculateEMA(ranges, 9);
+        ema9s.addLast(ema9);
+        if (ema9s.size() > 60) ema9s.removeFirst();
         
-        if (emaRanges.size() < 25) {
+        double ema9of9 = calculateEMA(ema9s, 9);
+        double ratio = ema9of9 == 0 ? 1.0 : ema9 / ema9of9;
+        
+        ratios.addLast(ratio);
+        if (ratios.size() > 25) ratios.removeFirst();
+        
+        if (ratios.size() < 25) {
             return TradeSignal.neutral("Warming up Mass Index");
         }
         
-        double ema9 = calculateEMA(emaRanges, 9);
-        double ema9of9 = ema9;
-        double massIndex = ema9 / ema9of9;
+        double massIndex = ratios.stream().mapToDouble(Double::doubleValue).sum();
         
         Double prevMI = previousMI.get(symbol);
         previousMI.put(symbol, massIndex);
@@ -78,7 +90,9 @@ public class MassIndexStrategy implements IStrategy {
 
     @Override
     public void reset() {
-        emaRangeHistory.clear();
+        rangeHistory.clear();
+        ema9History.clear();
+        ratioHistory.clear();
         previousMI.clear();
     }
 }

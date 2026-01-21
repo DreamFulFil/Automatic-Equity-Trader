@@ -166,4 +166,81 @@ class TaiwanStockComplianceServiceTest {
         
         assertEquals(80_000.0, capital);
     }
+
+    @Test
+    void testFetchCurrentCapitalWithNullResponse() {
+        // Covers lines 66, 71-72: response is null, defaults to 80,000
+        when(restTemplate.getForObject(eq("http://localhost:8888/account"), any())).thenReturn(null);
+        
+        double capital = service.fetchCurrentCapital();
+        
+        assertEquals(80_000.0, capital);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testFetchCurrentCapitalWithValidResponse() throws Exception {
+        // Covers lines 64, 66-68: successful response with valid equity
+        // Use doAnswer to create the AccountResponse with reflection and setAccessible
+        doAnswer(invocation -> {
+            Class<?> accountResponseClass = Class.forName("tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService$AccountResponse");
+            java.lang.reflect.Constructor<?> constructor = accountResponseClass.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            Object accountResponse = constructor.newInstance();
+            
+            java.lang.reflect.Field equityField = accountResponseClass.getDeclaredField("equity");
+            equityField.setAccessible(true);
+            equityField.set(accountResponse, 150_000.0);
+            
+            return accountResponse;
+        }).when(restTemplate).getForObject(eq("http://localhost:8888/account"), any(Class.class));
+        
+        double capital = service.fetchCurrentCapital();
+        
+        assertEquals(150_000.0, capital);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testFetchCurrentCapitalWithZeroEquity() throws Exception {
+        // Covers lines 71-72: response.equity == 0, defaults to 80,000
+        doAnswer(invocation -> {
+            Class<?> accountResponseClass = Class.forName("tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService$AccountResponse");
+            java.lang.reflect.Constructor<?> constructor = accountResponseClass.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            Object accountResponse = constructor.newInstance();
+            
+            java.lang.reflect.Field equityField = accountResponseClass.getDeclaredField("equity");
+            equityField.setAccessible(true);
+            equityField.set(accountResponse, 0.0);
+            
+            return accountResponse;
+        }).when(restTemplate).getForObject(eq("http://localhost:8888/account"), any(Class.class));
+        
+        double capital = service.fetchCurrentCapital();
+        
+        assertEquals(80_000.0, capital);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testFetchCurrentCapitalWithNegativeEquity() throws Exception {
+        // Covers lines 71-72: response.equity < 0 (negative), defaults to 80,000
+        doAnswer(invocation -> {
+            Class<?> accountResponseClass = Class.forName("tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService$AccountResponse");
+            java.lang.reflect.Constructor<?> constructor = accountResponseClass.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            Object accountResponse = constructor.newInstance();
+            
+            java.lang.reflect.Field equityField = accountResponseClass.getDeclaredField("equity");
+            equityField.setAccessible(true);
+            equityField.set(accountResponse, -100.0);
+            
+            return accountResponse;
+        }).when(restTemplate).getForObject(eq("http://localhost:8888/account"), any(Class.class));
+        
+        double capital = service.fetchCurrentCapital();
+        
+        assertEquals(80_000.0, capital);
+    }
 }

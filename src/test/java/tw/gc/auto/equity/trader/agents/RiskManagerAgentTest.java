@@ -266,6 +266,7 @@ class RiskManagerAgentTest {
         
         assertFalse((boolean) result.get("success"));
         assertEquals("Unknown command: invalid", result.get("error"));
+        assertEquals("RiskManager", result.get("agent"));
     }
 
     @Test
@@ -518,5 +519,33 @@ class RiskManagerAgentTest {
         assertTrue(prompt.contains("APPROVE"));
         assertTrue(prompt.contains("VETO"));
         assertTrue(prompt.contains("capital preservation"));
+    }
+
+    @Test
+    void testSetMonthlyLossLimit() {
+        riskManager.setMonthlyLossLimit(15000);
+        
+        // At -14000, should not hit new 15000 limit
+        when(mockTradeRepo.sumPnLSince(any(), any())).thenReturn(-1000.0, -3000.0, -14000.0);
+        
+        Map<String, Object> result = riskManager.checkLimits(TradingMode.SIMULATION);
+        
+        assertFalse((boolean) result.get("monthly_limit_hit"));
+    }
+
+    @Test
+    void testBuildStateSnapshot_ZeroLimits() {
+        // When limits are 0, drawdown percentage calculation should handle divide by zero
+        when(botSettingsRepository.findByKey(BotSettings.DAILY_LOSS_LIMIT))
+                .thenReturn(Optional.of(BotSettings.builder().key(BotSettings.DAILY_LOSS_LIMIT).value("0").build()));
+        when(botSettingsRepository.findByKey(BotSettings.WEEKLY_LOSS_LIMIT))
+                .thenReturn(Optional.of(BotSettings.builder().key(BotSettings.WEEKLY_LOSS_LIMIT).value("0").build()));
+        when(mockTradeRepo.sumPnLSince(any(), any())).thenReturn(-500.0, -1500.0, -2000.0);
+        when(mockTradeRepo.countTradesSince(any(), any())).thenReturn(5L);
+        
+        Map<String, Object> snapshot = riskManager.buildStateSnapshot(TradingMode.SIMULATION);
+        
+        assertEquals(0.0, snapshot.get("daily_drawdown_pct"));
+        assertEquals(0.0, snapshot.get("weekly_drawdown_pct"));
     }
 }

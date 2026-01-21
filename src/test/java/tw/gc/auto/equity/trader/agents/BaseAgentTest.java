@@ -78,6 +78,35 @@ class BaseAgentTest {
     }
     
     @Test
+    void testExecuteWithRetry_InterruptedDuringBackoff() {
+        testAgent.shouldFail = true;
+        testAgent.maxRetries = 3;
+        
+        // Interrupt the thread before execution
+        Thread.currentThread().interrupt();
+        
+        // Should catch InterruptedException and re-interrupt thread
+        assertThrows(RuntimeException.class, () -> testAgent.executeWithRetry(Map.of()));
+        
+        // Clear interrupt flag
+        assertTrue(Thread.interrupted());
+    }
+    
+    @Test
+    void testExecuteWithRetry_ExponentialBackoff() {
+        // Test that retries happen with backoff (indirectly through multiple failures)
+        testAgent.shouldFail = true;
+        testAgent.maxRetries = 2;
+        
+        long startTime = System.currentTimeMillis();
+        assertThrows(RuntimeException.class, () -> testAgent.executeWithRetry(Map.of()));
+        long elapsed = System.currentTimeMillis() - startTime;
+        
+        // Should have waited at least 100ms (first backoff)
+        assertTrue(elapsed >= 100, "Should have exponential backoff delay");
+    }
+    
+    @Test
     void testFallbackResponseWhenCircuitOpen() {
         testAgent.shouldFail = true;
         testAgent.circuitBreakerThreshold = 1;

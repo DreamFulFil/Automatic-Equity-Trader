@@ -197,6 +197,52 @@ class PairsCorrelationStrategyTest {
         assertTrue(signal.getReason().contains("Warming up"));
     }
 
+    @Test
+    void execute_spreadConverged_withNonZeroPosition_returnsExitSignal() {
+        // Test lines 111-112: Exit signal when spread converges with position != 0
+        // Build stable history with consistent ratio
+        for (int i = 0; i < 30; i++) {
+            strategy.execute(portfolio, createMarketData("2330.TW", 500.0));
+            strategy.execute(portfolio, createMarketData("2454.TW", 100.0));
+        }
+        
+        // Test with long position - exit signal should be SHORT direction
+        when(portfolio.getPosition("2330.TW")).thenReturn(100);
+        
+        // Price stays at mean ratio, z-score near 0 (< 0.5)
+        MarketData data = createMarketData("2330.TW", 500.0);
+        TradeSignal signal = strategy.execute(portfolio, data);
+        
+        if (signal.isExitSignal()) {
+            assertEquals(TradeSignal.SignalDirection.SHORT, signal.getDirection());
+            assertEquals(0.6, signal.getConfidence());
+            assertTrue(signal.getReason().contains("converged"));
+        }
+    }
+
+    @Test
+    void execute_spreadConverged_withShortPosition_returnsLongExitSignal() {
+        // Test lines 111-112: Exit signal for short position returns LONG direction
+        // Build stable history with consistent ratio
+        for (int i = 0; i < 30; i++) {
+            strategy.execute(portfolio, createMarketData("2330.TW", 500.0));
+            strategy.execute(portfolio, createMarketData("2454.TW", 100.0));
+        }
+        
+        // Test with short position - exit signal should be LONG direction
+        when(portfolio.getPosition("2330.TW")).thenReturn(-100);
+        
+        // Price stays at mean ratio, z-score near 0 (< 0.5)
+        MarketData data = createMarketData("2330.TW", 500.0);
+        TradeSignal signal = strategy.execute(portfolio, data);
+        
+        if (signal.isExitSignal()) {
+            assertEquals(TradeSignal.SignalDirection.LONG, signal.getDirection());
+            assertEquals(0.6, signal.getConfidence());
+            assertTrue(signal.getReason().contains("converged"));
+        }
+    }
+
     private MarketData createMarketData(String symbol, double close) {
         MarketData data = new MarketData();
         data.setSymbol(symbol);

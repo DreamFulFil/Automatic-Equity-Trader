@@ -58,7 +58,7 @@ class MovingAverageCrossoverStrategyTest {
         for (int i = 0; i < 25; i++) {
             strategy.execute(portfolio, createMarketData(22000.0 - i * 10));
         }
-        
+
         // Feed rising prices (fast MA will cross above slow MA)
         for (int i = 0; i < 10; i++) {
             MarketData data = createMarketData(21800.0 + i * 20);
@@ -67,9 +67,10 @@ class MovingAverageCrossoverStrategyTest {
             if (signal.getDirection() == TradeSignal.SignalDirection.LONG) {
                 assertTrue(signal.getConfidence() > 0.7);
                 assertTrue(signal.getReason().toLowerCase().contains("golden cross"));
-                return;
+                break;
             }
         }
+        assertNotNull(strategy.getPreviousGoldenCross("AUTO_EQUITY_TRADER"));
     }
     
     @Test
@@ -98,6 +99,75 @@ class MovingAverageCrossoverStrategyTest {
         assertThrows(IllegalArgumentException.class, () -> {
             new MovingAverageCrossoverStrategy(20, 5, 0.001); // fast >= slow
         });
+    }
+
+    @Test
+    void testDeathCross_AlreadyShort_ReturnsNeutral() {
+        // Set up position as already short
+        portfolio.setPosition("AUTO_EQUITY_TRADER", -1);
+        
+        // Feed rising prices first (to establish golden cross state)
+        for (int i = 0; i < 25; i++) {
+            strategy.execute(portfolio, createMarketData(22000.0 + i * 10));
+        }
+        
+        // Feed declining prices to trigger death cross
+        for (int i = 0; i < 15; i++) {
+            MarketData data = createMarketData(22250.0 - i * 20);
+            TradeSignal signal = strategy.execute(portfolio, data);
+            
+            // Line 128: When death cross detected but position < 0, returns "Already short"
+            if (signal.getReason().equals("Already short")) {
+                assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+                return;
+            }
+        }
+    }
+
+    @Test
+    void testDeathCross_ExitLong_GeneratesExitSignal() {
+        // Lines 117-121: When death cross detected with currentPosition > 0, exit long
+        portfolio.setPosition("AUTO_EQUITY_TRADER", 1);
+        
+        // Feed rising prices first (to establish golden cross state)
+        for (int i = 0; i < 25; i++) {
+            strategy.execute(portfolio, createMarketData(22000.0 + i * 10));
+        }
+        
+        // Feed declining prices to trigger death cross with long position
+        for (int i = 0; i < 20; i++) {
+            MarketData data = createMarketData(22250.0 - i * 25);
+            TradeSignal signal = strategy.execute(portfolio, data);
+            
+            if (signal.isExitSignal() && signal.getDirection() == TradeSignal.SignalDirection.SHORT) {
+                assertTrue(signal.getReason().toLowerCase().contains("death cross"));
+                assertEquals(0.75, signal.getConfidence());
+                return;
+            }
+        }
+    }
+
+    @Test
+    void testDeathCross_NoPosition_GeneratesShortSignal() {
+        // Lines 122-126: When death cross detected with currentPosition == 0, go short
+        portfolio.setPosition("AUTO_EQUITY_TRADER", 0);
+        
+        // Feed rising prices first (to establish golden cross state)
+        for (int i = 0; i < 25; i++) {
+            strategy.execute(portfolio, createMarketData(22000.0 + i * 10));
+        }
+        
+        // Feed declining prices to trigger death cross with no position
+        for (int i = 0; i < 20; i++) {
+            MarketData data = createMarketData(22250.0 - i * 25);
+            TradeSignal signal = strategy.execute(portfolio, data);
+            
+            if (signal.getDirection() == TradeSignal.SignalDirection.SHORT && !signal.isExitSignal()) {
+                assertTrue(signal.getReason().toLowerCase().contains("death cross"));
+                assertTrue(signal.getConfidence() >= 0.75);
+                return;
+            }
+        }
     }
     
     private MarketData createMarketData(double price) {

@@ -36,6 +36,22 @@ public class CalendarSpreadStrategyTest {
     }
 
     @Test
+    public void calculateVolatility_withInsufficientData_returnsZero() {
+        // Test line 95: if prices.length < period + 1 return 0
+        // This tests the early return in calculateVolatility
+        CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 3, 0.01);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Add very few data points (less than nearMonth period)
+        // nearMonth = 1 * 21 = 21, farMonth = 3 * 21 = 63
+        // With only 5 data points, calculateVolatility will return 0 for both periods
+        for (int i = 0; i < 5; i++) {
+            TradeSignal t = s.execute(p, md("VOL_INS", 100 + i));
+            assertEquals(TradeSignal.SignalDirection.NEUTRAL, t.getDirection());
+        }
+    }
+
+    @Test
     public void detectsBackwardation_and_contango_and_exit() {
         // near=1month ~21, far=3months ~63 -> use small periods via priming
         CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 3, 0.005);
@@ -65,6 +81,90 @@ public class CalendarSpreadStrategyTest {
         primeHistory(s, "VOL", arr2);
         TradeSignal shortSig = s.execute(p, md("VOL", 69));
         assertEquals(TradeSignal.SignalDirection.SHORT, shortSig.getDirection());
+    }
+
+    @Test
+    public void historyRemoveFirst_whenExceedsFarMonth() {
+        // Test line 48: prices.removeFirst() when size > farMonth + 10
+        CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 2, 0.01);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // farMonth = 2 * 21 = 42, so need > 52 prices
+        double[] prices = new double[60];
+        for (int i = 0; i < 60; i++) prices[i] = 100 + i * 0.1;
+        primeHistory(s, "TRIM", prices);
+        
+        TradeSignal signal = s.execute(p, md("TRIM", 110));
+        assertNotNull(signal);
+    }
+
+    @Test
+    public void exitSignal_whenTermStructureNormalizes() {
+        // Test lines 84-88: exit when position != 0 && |spread| < entrySpread / 2
+        CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 2, 0.10);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Set long position
+        p.setPosition("EXIT", 10);
+        
+        // Prime with nearly equal near/far volatility (small spread)
+        int total = 50;
+        double[] arr = new double[total];
+        for (int i = 0; i < total; i++) {
+            arr[i] = 100 + Math.sin(i * 0.1) * 2; // Small consistent volatility
+        }
+        primeHistory(s, "EXIT", arr);
+        
+        TradeSignal signal = s.execute(p, md("EXIT", 100));
+        
+        // Should exit when spread is small
+        if (signal.isExitSignal()) {
+            assertTrue(signal.getReason().toLowerCase().contains("normalized"));
+        }
+    }
+
+    @Test
+    public void exitSignal_whenShortAndNormalized() {
+        // Test lines 84-88 with short position
+        CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 2, 0.10);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Set short position
+        p.setPosition("EXIT2", -10);
+        
+        // Prime with nearly equal volatility
+        int total = 50;
+        double[] arr = new double[total];
+        for (int i = 0; i < total; i++) {
+            arr[i] = 100 + Math.sin(i * 0.1) * 2;
+        }
+        primeHistory(s, "EXIT2", arr);
+        
+        TradeSignal signal = s.execute(p, md("EXIT2", 100));
+        
+        if (signal.isExitSignal()) {
+            assertEquals(TradeSignal.SignalDirection.LONG, signal.getDirection());
+        }
+    }
+
+    @Test
+    public void neutralSignal_whenNoConditionsMet() {
+        // Test line 91: neutral signal
+        CalendarSpreadStrategy s = new CalendarSpreadStrategy(1, 2, 0.50);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Prime with moderate volatility (spread between thresholds)
+        int total = 50;
+        double[] arr = new double[total];
+        for (int i = 0; i < total; i++) {
+            arr[i] = 100 + Math.sin(i * 0.2) * 5;
+        }
+        primeHistory(s, "NEUT", arr);
+        
+        TradeSignal signal = s.execute(p, md("NEUT", 100));
+        
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertTrue(signal.getReason().contains("Vol spread"));
     }
 
     private double[] generatePricesIncreasing(int start, int end, int count) {

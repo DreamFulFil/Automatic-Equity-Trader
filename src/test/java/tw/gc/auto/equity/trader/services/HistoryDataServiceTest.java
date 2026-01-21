@@ -1256,6 +1256,660 @@ class HistoryDataServiceTest {
         assertThat(md.getVolume()).isEqualTo(5000000L);
         assertThat(md.getTimeframe()).isEqualTo(MarketData.Timeframe.DAY_1);
     }
+
+    @Test
+    void runGlobalWriter_shouldHandleInterruptedException() throws Exception {
+        // Given - Create a queue that will cause InterruptedException
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.atomic.AtomicBoolean complete = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol = 
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+        // Add a point to process
+        HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint();
+        point.setSymbol("2330.TW");
+        point.setName("TSMC");
+        point.setTimestamp(LocalDateTime.now());
+        point.setOpen(100.0);
+        point.setHigh(105.0);
+        point.setLow(98.0);
+        point.setClose(103.0);
+        point.setVolume(1000L);
+        queue.put(point);
+
+        // Force JdbcTemplate fallback (lenient - may not be called if interrupted first)
+        lenient().when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        lenient().when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // Start writer in separate thread and interrupt it
+        Thread writerThread = new Thread(() -> {
+            try {
+                Thread.currentThread().interrupt(); // Interrupt before polling
+                java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+                    "runGlobalWriter", 
+                    java.util.concurrent.BlockingQueue.class, 
+                    java.util.concurrent.atomic.AtomicBoolean.class, 
+                    java.util.concurrent.ConcurrentHashMap.class
+                );
+                m.setAccessible(true);
+                m.invoke(historyDataService, queue, complete, insertedBySymbol);
+            } catch (Exception e) {
+                // Expected due to interruption
+            }
+        });
+        writerThread.start();
+        writerThread.join(2000);
+
+        // Thread should have been interrupted and stopped
+        assertThat(writerThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void runSingleWriter_shouldHandleInterruptedException() throws Exception {
+        // Given
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.atomic.AtomicBoolean complete = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        // Force JdbcTemplate fallback (lenient - may not be called if interrupted first)
+        lenient().when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        lenient().when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // Start writer and interrupt it
+        Thread writerThread = new Thread(() -> {
+            try {
+                Thread.currentThread().interrupt();
+                java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+                    "runSingleWriter",
+                    String.class,
+                    java.util.concurrent.BlockingQueue.class,
+                    java.util.concurrent.atomic.AtomicBoolean.class
+                );
+                m.setAccessible(true);
+                m.invoke(historyDataService, "2330.TW", queue, complete);
+            } catch (Exception e) {
+                // Expected
+            }
+        });
+        writerThread.start();
+        writerThread.join(2000);
+
+        assertThat(writerThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void downloadStockData_shouldHandleNotificationException() throws Exception {
+        // Given - Create a historyDataService where notification throws
+        HistoryDataService spyService = spy(historyDataService);
+        doThrow(new RuntimeException("notification error")).when(spyService).notifyDownloadStartedForSymbol(anyString(), anyInt());
+        doThrow(new RuntimeException("notification error")).when(spyService).notifyDownloadComplete(any());
+
+        // Mock backtestService
+        when(backtestService.fetchTop50Stocks()).thenReturn(List.of());
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
+            .thenThrow(new RuntimeException("API error"));
+
+        // When - invoke private downloadStockData via reflection
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+            "downloadStockData",
+            String.class,
+            int.class,
+            java.util.concurrent.BlockingQueue.class,
+            java.util.concurrent.atomic.AtomicInteger.class
+        );
+        m.setAccessible(true);
+        int result = (int) m.invoke(spyService, "2330.TW", 1, queue, counter);
+
+        // Then - should return 0 and handle exceptions gracefully
+        assertThat(result).isZero();
+    }
+
+    @Test
+    void downloadHistoricalData_shouldHandleFutureGetException() throws Exception {
+        // Given
+        String symbol = "TEST.TW";
+        historyDataService.resetTruncationFlag();
+
+        // Mock Python API to return valid response
+        Map<String, Object> point = Map.of(
+            "timestamp", LocalDateTime.now().toString(),
+            "name", "TestCorp",
+            "open", 10.0,
+            "high", 11.0,
+            "low", 9.0,
+            "close", 10.5,
+            "volume", 100L
+        );
+        Map<String, Object> body = Map.of("data", List.of(point));
+        ResponseEntity<Map> resp = new ResponseEntity<>(body, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class))).thenReturn(resp);
+
+        // Force PgBulkInsert to fail
+        when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // When
+        HistoryDataService.DownloadResult result = historyDataService.downloadHistoricalData(symbol, 1);
+
+        // Then
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void awaitWriterLatch_shouldReturnTrueWhenLatchCountsDown() {
+        // Given
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        latch.countDown(); // Immediately count down
+
+        // When
+        boolean result = historyDataService.awaitWriterLatch(latch, 1, java.util.concurrent.TimeUnit.SECONDS);
+
+        // Then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void awaitWriterLatch_shouldReturnFalseWhenTimeout() {
+        // Given
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        // Don't count down
+
+        // When
+        boolean result = historyDataService.awaitWriterLatch(latch, 1, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        // Then
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void runMultiStockDownloadTask_shouldHandleInterruptedExceptionDuringAcquire() throws Exception {
+        // Given
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.Semaphore permits = new java.util.concurrent.Semaphore(0); // No permits available
+        java.util.Map<String, HistoryDataService.DownloadResult> results = 
+            java.util.Collections.synchronizedMap(new java.util.HashMap<>());
+        java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        // When - run in thread and interrupt during acquire
+        Thread t = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            historyDataService.runMultiStockDownloadTask("2330.TW", 1, queue, permits, results, counter);
+        });
+        t.start();
+        t.join(2000);
+
+        // Then
+        assertThat(results).containsKey("2330.TW");
+        assertThat(results.get("2330.TW").getTotalRecords()).isZero();
+    }
+
+    @Test
+    void jdbcBatchInsert_shouldExecutePreparedStatementSetterLambdas() throws Exception {
+        // Given
+        Bar bar = Bar.builder()
+            .timestamp(LocalDateTime.now())
+            .symbol("2330.TW")
+            .name("TSMC")
+            .market("TSE")
+            .timeframe("1day")
+            .open(100.0)
+            .high(105.0)
+            .low(98.0)
+            .close(103.0)
+            .volume(1000L)
+            .isComplete(true)
+            .build();
+
+        MarketData md = MarketData.builder()
+            .timestamp(LocalDateTime.now())
+            .symbol("2330.TW")
+            .name("TSMC")
+            .timeframe(MarketData.Timeframe.DAY_1)
+            .open(100.0)
+            .high(105.0)
+            .low(98.0)
+            .close(103.0)
+            .volume(1000L)
+            .assetType(MarketData.AssetType.STOCK)
+            .build();
+
+        List<Bar> bars = List.of(bar);
+        List<MarketData> mds = List.of(md);
+
+        // Mock successful JdbcTemplate
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenAnswer(inv -> {
+            // Execute the lambda to test coverage
+            @SuppressWarnings("unchecked")
+            List<?> data = inv.getArgument(1);
+            org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<?> setter = inv.getArgument(3);
+            java.sql.PreparedStatement ps = mock(java.sql.PreparedStatement.class);
+            for (Object item : data) {
+                @SuppressWarnings("unchecked")
+                org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<Object> typedSetter = 
+                    (org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<Object>) setter;
+                typedSetter.setValues(ps, item);
+            }
+            return new int[][]{{1}};
+        });
+
+        // When - invoke private jdbcBatchInsert
+        java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod("jdbcBatchInsert", List.class, List.class);
+        m.setAccessible(true);
+        int inserted = (int) m.invoke(historyDataService, bars, mds);
+
+        // Then
+        assertThat(inserted).isEqualTo(1);
+        verify(jdbcTemplate, times(2)).batchUpdate(anyString(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void getStockNameFromHistory_shouldReturnNullWhenMarketDataNameIsNull() {
+        // Given
+        String symbol = "2330.TW";
+        Bar bar = Bar.builder().symbol(symbol).timeframe("1day").name(null).build();
+        MarketData md = MarketData.builder().symbol(symbol).timeframe(MarketData.Timeframe.DAY_1).name(null).build();
+
+        when(barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day"))
+            .thenReturn(java.util.Optional.of(bar));
+        when(marketDataRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1))
+            .thenReturn(java.util.Optional.of(md));
+
+        // When
+        String name = historyDataService.getStockNameFromHistory(symbol);
+
+        // Then - should return null since both bar and market data have null names
+        assertThat(name).isNull();
+    }
+
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldPopulateResultsWhenPrevIsNull() {
+        // Given
+        historyDataService.resetTruncationFlag();
+        List<String> symbols = List.of("NEW.TW");
+
+        // Mock to return empty data (simulates no download but insertedBySymbol tracking)
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
+            .thenReturn(new ResponseEntity<>(Map.of("data", List.of()), HttpStatus.OK));
+
+        // When
+        Map<String, HistoryDataService.DownloadResult> results = 
+            historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+
+        // Then - should have result with 0 records
+        assertThat(results).containsKey("NEW.TW");
+        assertThat(results.get("NEW.TW").getTotalRecords()).isZero();
+    }
+
+    @Test
+    void runGlobalWriter_shouldFlushOnTimeout() throws Exception {
+        // Given - Create queue with a single point that won't fill the batch
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.atomic.AtomicBoolean complete = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol = 
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+        // Add one point - won't reach batch size of 2000
+        HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint();
+        point.setSymbol("2330.TW");
+        point.setName("TSMC");
+        point.setTimestamp(LocalDateTime.now());
+        point.setOpen(100.0);
+        point.setHigh(105.0);
+        point.setLow(98.0);
+        point.setClose(103.0);
+        point.setVolume(1000L);
+        queue.put(point);
+
+        // Force JdbcTemplate fallback
+        when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // Signal complete after adding point
+        complete.set(true);
+
+        // When
+        java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+            "runGlobalWriter",
+            java.util.concurrent.BlockingQueue.class,
+            java.util.concurrent.atomic.AtomicBoolean.class,
+            java.util.concurrent.ConcurrentHashMap.class
+        );
+        m.setAccessible(true);
+        int inserted = (int) m.invoke(historyDataService, queue, complete, insertedBySymbol);
+
+        // Then - should flush on final flush
+        assertThat(inserted).isEqualTo(1);
+        assertThat(insertedBySymbol).containsKey("2330.TW");
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldLogWhenNoFallbackAvailable() {
+        // Given
+        Bar bar = Bar.builder().symbol("9999.TW").name(null).build();
+        MarketData md = MarketData.builder().symbol("9999.TW").name(null).build();
+
+        when(taiwanStockNameService.hasStockName("9999.TW")).thenReturn(false);
+
+        // When
+        historyDataService.fillMissingNamesIfMissing(List.of(bar), List.of(md), "9999.TW");
+
+        // Then - name should remain null, service was checked but no fallback
+        assertThat(bar.getName()).isNull();
+        verify(taiwanStockNameService).hasStockName("9999.TW");
+        verify(taiwanStockNameService, never()).getStockName(anyString());
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldFillBarsWithEmptyNames() {
+        // Given - bars with empty string names (not null)
+        Bar bar1 = Bar.builder().symbol("2330.TW").name("").build();
+        Bar bar2 = Bar.builder().symbol("2330.TW").name("   ").build(); // whitespace only
+        MarketData md1 = MarketData.builder().symbol("2330.TW").name("").build();
+        MarketData md2 = MarketData.builder().symbol("2330.TW").name("   ").build();
+
+        when(taiwanStockNameService.hasStockName("2330.TW")).thenReturn(true);
+        when(taiwanStockNameService.getStockName("2330.TW")).thenReturn("TSMC");
+
+        // When
+        historyDataService.fillMissingNamesIfMissing(List.of(bar1, bar2), List.of(md1, md2), "2330.TW");
+
+        // Then - empty/whitespace names should be filled
+        assertThat(bar1.getName()).isEqualTo("TSMC");
+        assertThat(bar2.getName()).isEqualTo("TSMC");
+        assertThat(md1.getName()).isEqualTo("TSMC");
+        assertThat(md2.getName()).isEqualTo("TSMC");
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldNotOverwriteExistingNames() {
+        // Given - bars with some existing names
+        Bar bar1 = Bar.builder().symbol("2330.TW").name("EXISTING").build();
+        Bar bar2 = Bar.builder().symbol("2330.TW").name(null).build();
+        MarketData md1 = MarketData.builder().symbol("2330.TW").name("EXISTING").build();
+        MarketData md2 = MarketData.builder().symbol("2330.TW").name(null).build();
+
+        when(taiwanStockNameService.hasStockName("2330.TW")).thenReturn(true);
+        when(taiwanStockNameService.getStockName("2330.TW")).thenReturn("TSMC");
+
+        // When
+        historyDataService.fillMissingNamesIfMissing(List.of(bar1, bar2), List.of(md1, md2), "2330.TW");
+
+        // Then - existing names should be preserved, missing ones filled
+        assertThat(bar1.getName()).isEqualTo("EXISTING");
+        assertThat(bar2.getName()).isEqualTo("TSMC");
+        assertThat(md1.getName()).isEqualTo("EXISTING");
+        assertThat(md2.getName()).isEqualTo("TSMC");
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldHandleNullTaiwanStockNameService() {
+        // Given - service with null taiwanStockNameService
+        HistoryDataService serviceWithNullNameService = new HistoryDataService(
+            barRepository, marketDataRepository, strategyStockMappingRepository,
+            restTemplate, objectMapper, dataSource, jdbcTemplate,
+            transactionManager, systemStatusService, backtestService,
+            telegramService, null // null taiwanStockNameService
+        );
+
+        Bar bar = Bar.builder().symbol("2330.TW").name(null).build();
+        MarketData md = MarketData.builder().symbol("2330.TW").name(null).build();
+
+        // When - should not throw NPE
+        serviceWithNullNameService.fillMissingNamesIfMissing(List.of(bar), List.of(md), "2330.TW");
+
+        // Then - names remain null since no fallback service
+        assertThat(bar.getName()).isNull();
+    }
+
+    @Test
+    void runSingleWriter_shouldFillMissingNamesWhenBatchFull() throws Exception {
+        // Given - queue with BULK_INSERT_BATCH_SIZE (2000) points with missing names
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(3000);
+        java.util.concurrent.atomic.AtomicBoolean complete = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        // Add 2000+ points to trigger batch flush
+        for (int i = 0; i < 2001; i++) {
+            HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint();
+            point.setSymbol("2330.TW");
+            point.setName(null); // Missing name
+            point.setTimestamp(LocalDateTime.now().minusDays(i));
+            point.setOpen(100.0);
+            point.setHigh(105.0);
+            point.setLow(98.0);
+            point.setClose(103.0);
+            point.setVolume(1000L);
+            queue.put(point);
+        }
+        complete.set(true);
+
+        // Mock TaiwanStockNameService
+        when(taiwanStockNameService.hasStockName("2330.TW")).thenReturn(true);
+        when(taiwanStockNameService.getStockName("2330.TW")).thenReturn("TSMC");
+
+        // Force JdbcTemplate fallback
+        when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // When
+        java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+            "runSingleWriter", String.class, 
+            java.util.concurrent.BlockingQueue.class, 
+            java.util.concurrent.atomic.AtomicBoolean.class
+        );
+        m.setAccessible(true);
+        int inserted = (int) m.invoke(historyDataService, "2330.TW", queue, complete);
+
+        // Then - should have filled names and inserted
+        assertThat(inserted).isGreaterThan(0);
+        verify(taiwanStockNameService, atLeast(1)).hasStockName("2330.TW");
+        verify(taiwanStockNameService, atLeast(1)).getStockName("2330.TW");
+    }
+
+    @Test
+    void jdbcBatchInsert_shouldHandleNullAssetType() throws Exception {
+        // Given - MarketData with null assetType
+        Bar bar = Bar.builder()
+            .timestamp(LocalDateTime.now())
+            .symbol("2330.TW")
+            .name("TSMC")
+            .market("TSE")
+            .timeframe("1day")
+            .open(100.0)
+            .high(105.0)
+            .low(98.0)
+            .close(103.0)
+            .volume(1000L)
+            .isComplete(true)
+            .build();
+
+        MarketData md = MarketData.builder()
+            .timestamp(LocalDateTime.now())
+            .symbol("2330.TW")
+            .name("TSMC")
+            .timeframe(MarketData.Timeframe.DAY_1)
+            .open(100.0)
+            .high(105.0)
+            .low(98.0)
+            .close(103.0)
+            .volume(1000L)
+            .assetType(null) // null assetType - should default to STOCK
+            .build();
+
+        List<Bar> bars = List.of(bar);
+        List<MarketData> mds = List.of(md);
+
+        // Mock JdbcTemplate to verify the lambda execution
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenAnswer(inv -> {
+            @SuppressWarnings("unchecked")
+            List<?> data = inv.getArgument(1);
+            org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<?> setter = inv.getArgument(3);
+            java.sql.PreparedStatement ps = mock(java.sql.PreparedStatement.class);
+            for (Object item : data) {
+                @SuppressWarnings("unchecked")
+                org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<Object> typedSetter = 
+                    (org.springframework.jdbc.core.ParameterizedPreparedStatementSetter<Object>) setter;
+                typedSetter.setValues(ps, item);
+            }
+            return new int[][]{{1}};
+        });
+
+        // When
+        java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod("jdbcBatchInsert", List.class, List.class);
+        m.setAccessible(true);
+        int inserted = (int) m.invoke(historyDataService, bars, mds);
+
+        // Then
+        assertThat(inserted).isEqualTo(1);
+    }
+
+    @Test
+    void downloadHistoricalData_shouldHandleWriterThreadException() throws Exception {
+        // Given
+        String symbol = "ERR.TW";
+        historyDataService.resetTruncationFlag();
+
+        // Mock Python API to return some data
+        Map<String, Object> point = Map.of(
+            "timestamp", LocalDateTime.now().toString(),
+            "name", "TestCorp",
+            "open", 10.0,
+            "high", 11.0,
+            "low", 9.0,
+            "close", 10.5,
+            "volume", 100L
+        );
+        Map<String, Object> body = Map.of("data", List.of(point));
+        ResponseEntity<Map> resp = new ResponseEntity<>(body, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class))).thenReturn(resp);
+
+        // Force JdbcTemplate to throw to trigger writer exception
+        when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any()))
+            .thenThrow(new RuntimeException("DB explosion"));
+
+        // When
+        HistoryDataService.DownloadResult result = historyDataService.downloadHistoricalData(symbol, 1);
+
+        // Then - should return result even with writer failure
+        assertThat(result).isNotNull();
+        assertThat(result.getSymbol()).isEqualTo(symbol);
+    }
+
+    @Test
+    void downloadStockData_shouldHandleInterruptedExceptionDuringQueuePut() throws Exception {
+        // Given
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(1); // Small queue
+        java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        // Fill the queue to cause blocking
+        HistoryDataService.HistoricalDataPoint blocker = new HistoryDataService.HistoricalDataPoint();
+        blocker.setSymbol("BLOCK");
+        blocker.setTimestamp(LocalDateTime.now());
+        blocker.setOpen(1.0);
+        blocker.setHigh(2.0);
+        blocker.setLow(0.5);
+        blocker.setClose(1.5);
+        blocker.setVolume(1L);
+        queue.put(blocker);
+
+        // Mock Python API to return data
+        Map<String, Object> point = Map.of(
+            "timestamp", LocalDateTime.now().toString(),
+            "name", "TestCorp",
+            "open", 10.0,
+            "high", 11.0,
+            "low", 9.0,
+            "close", 10.5,
+            "volume", 100L
+        );
+        Map<String, Object> body = Map.of("data", List.of(point));
+        ResponseEntity<Map> resp = new ResponseEntity<>(body, HttpStatus.OK);
+        lenient().when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class))).thenReturn(resp);
+        lenient().when(backtestService.fetchTop50Stocks()).thenReturn(List.of());
+
+        // When - run in thread and interrupt
+        final int[] result = new int[1];
+        Thread t = new Thread(() -> {
+            try {
+                java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+                    "downloadStockData", String.class, int.class, 
+                    java.util.concurrent.BlockingQueue.class, 
+                    java.util.concurrent.atomic.AtomicInteger.class
+                );
+                m.setAccessible(true);
+                Thread.currentThread().interrupt();
+                result[0] = (int) m.invoke(historyDataService, "2330.TW", 1, queue, counter);
+            } catch (Exception e) {
+                // Expected
+            }
+        });
+        t.start();
+        t.join(3000);
+
+        // Then - should return 0 due to interruption
+        assertThat(t.isAlive()).isFalse();
+    }
+
+    @Test
+    void runGlobalWriter_shouldHandleTimeoutFlushCondition() throws Exception {
+        // Given - queue with single item that won't fill batch
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.atomic.AtomicBoolean complete = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> insertedBySymbol = 
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+        // Add just one point
+        HistoryDataService.HistoricalDataPoint point = new HistoryDataService.HistoricalDataPoint();
+        point.setSymbol("2330.TW");
+        point.setName("TSMC");
+        point.setTimestamp(LocalDateTime.now());
+        point.setOpen(100.0);
+        point.setHigh(105.0);
+        point.setLow(98.0);
+        point.setClose(103.0);
+        point.setVolume(1000L);
+        queue.put(point);
+
+        // Force JdbcTemplate fallback
+        when(dataSource.getConnection()).thenThrow(new SQLException("no pg"));
+        when(jdbcTemplate.batchUpdate(anyString(), anyList(), anyInt(), any())).thenReturn(new int[][]{{1}});
+
+        // Run writer in thread that will timeout flush due to FLUSH_TIMEOUT_MS (500ms)
+        final int[] result = new int[1];
+        Thread writerThread = new Thread(() -> {
+            try {
+                java.lang.reflect.Method m = HistoryDataService.class.getDeclaredMethod(
+                    "runGlobalWriter",
+                    java.util.concurrent.BlockingQueue.class,
+                    java.util.concurrent.atomic.AtomicBoolean.class,
+                    java.util.concurrent.ConcurrentHashMap.class
+                );
+                m.setAccessible(true);
+                result[0] = (int) m.invoke(historyDataService, queue, complete, insertedBySymbol);
+            } catch (Exception e) {
+                // Expected
+            }
+        });
+        writerThread.start();
+
+        // Wait for timeout flush to occur (FLUSH_TIMEOUT_MS = 500)
+        Thread.sleep(700);
+        complete.set(true);
+        writerThread.join(3000);
+
+        // Then - should have flushed due to timeout
+        assertThat(result[0]).isEqualTo(1);
+    }
 }
 
 

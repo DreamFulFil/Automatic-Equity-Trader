@@ -69,6 +69,10 @@ graph TB
 - **Database:** PostgreSQL with TimescaleDB for time-series optimization
 - **Monitoring:** Telegram bot for real-time alerts and control
 
+## 🔍 Static Analysis
+
+Static analysis tools (SonarQube/PMD/Checkstyle) are intentionally not integrated at this time.
+
 ---
 
 ## 🚀 Quickstart

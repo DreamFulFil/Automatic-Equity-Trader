@@ -203,6 +203,31 @@ class GrahamDefensiveStrategyTest {
         }
     }
 
+    @Test
+    void execute_zeroCriteriaMet_withLongPosition_shouldReturnExitSignal() {
+        // Test lines 106-107: Exit signal when position > 0 and criteriamet < 1
+        // Build very volatile history that won't meet any criteria
+        for (int i = 0; i < 70; i++) {
+            double price = 500.0 + Math.pow(-1, i) * (i * 10); // extreme volatility
+            strategy.execute(portfolio, createMarketData("EXIT_TEST", price));
+        }
+        
+        when(portfolio.getPosition("EXIT_TEST")).thenReturn(100); // existing long position
+        
+        // Continue with extreme volatility to ensure no criteria met
+        for (int i = 0; i < 10; i++) {
+            double price = 400.0 + Math.pow(-1, i) * 200; // wild swings
+            MarketData data = createMarketData("EXIT_TEST", price);
+            TradeSignal signal = strategy.execute(portfolio, data);
+            
+            if (signal.isExitSignal()) {
+                assertEquals(0.65, signal.getConfidence());
+                assertTrue(signal.getReason().contains("Graham exit"));
+                return;
+            }
+        }
+    }
+
     private MarketData createMarketData(String symbol, double close) {
         MarketData data = new MarketData();
         data.setSymbol(symbol);

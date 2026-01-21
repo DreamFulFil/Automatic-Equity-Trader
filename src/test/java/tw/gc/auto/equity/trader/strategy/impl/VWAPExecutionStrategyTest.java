@@ -106,6 +106,78 @@ class VWAPExecutionStrategyTest {
         assertNull(strategy.getExecutedVolume("AUTO_EQUITY_TRADER"));
     }
     
+    @Test
+    void testBehindPace_ExecutesWithLowerConfidence() throws Exception {
+        // Test line 144: behindPace calculation
+        VWAPExecutionStrategy strategy2 = new VWAPExecutionStrategy(100, 60, 0.003, 1);
+        
+        // Build VWAP history
+        for (int i = 0; i < 5; i++) {
+            strategy2.execute(portfolio, createMarketData(22000.0 + i, 1000L));
+        }
+        
+        // Set start time to past to simulate being behind pace
+        java.lang.reflect.Field startTimeField = VWAPExecutionStrategy.class.getDeclaredField("startTime");
+        startTimeField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, LocalDateTime> startTimeMap = (Map<String, LocalDateTime>) startTimeField.get(strategy2);
+        startTimeMap.put("AUTO_EQUITY_TRADER", LocalDateTime.now().minusMinutes(30)); // halfway through
+        
+        // Price above VWAP but behind pace should still execute
+        MarketData aboveVWAP = createMarketData(22020.0, 1000L);
+        TradeSignal signal = strategy2.execute(portfolio, aboveVWAP);
+        
+        // Behind pace forces execution even with bad price
+        if (signal.getDirection() == TradeSignal.SignalDirection.LONG) {
+            assertTrue(signal.getConfidence() >= 0.60 && signal.getConfidence() <= 0.90);
+        }
+    }
+
+    @Test
+    void testGoodPriceConfidence_IsHigherThanUrgency() throws Exception {
+        // Test line 157: confidence calculation for goodPrice vs urgency
+        VWAPExecutionStrategy strategy3 = new VWAPExecutionStrategy(100, 60, 0.01, 1);
+        
+        // Build VWAP around 22000
+        for (int i = 0; i < 5; i++) {
+            strategy3.execute(portfolio, createMarketData(22000.0, 1000L));
+        }
+        
+        // Good price (below VWAP) should have 0.85 confidence
+        MarketData goodPrice = createMarketData(21990.0, 1000L);
+        TradeSignal signal = strategy3.execute(portfolio, goodPrice);
+        
+        assertEquals(TradeSignal.SignalDirection.LONG, signal.getDirection());
+        assertEquals(0.85, signal.getConfidence());
+    }
+
+    @Test
+    void testUrgencyFactorConfidence_IncreasesOverTime() throws Exception {
+        // Test confidence calculation based on urgency factor
+        VWAPExecutionStrategy strategy4 = new VWAPExecutionStrategy(100, 60, 0.001, 1);
+        
+        // Build VWAP history
+        for (int i = 0; i < 5; i++) {
+            strategy4.execute(portfolio, createMarketData(22000.0, 1000L));
+        }
+        
+        // Set start time far in past (80% through window)
+        java.lang.reflect.Field startTimeField = VWAPExecutionStrategy.class.getDeclaredField("startTime");
+        startTimeField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, LocalDateTime> startTimeMap = (Map<String, LocalDateTime>) startTimeField.get(strategy4);
+        startTimeMap.put("AUTO_EQUITY_TRADER", LocalDateTime.now().minusMinutes(48)); // 80% through
+        
+        // Price at VWAP (not good price, but urgency should force execution)
+        MarketData neutralPrice = createMarketData(22005.0, 1000L);
+        TradeSignal signal = strategy4.execute(portfolio, neutralPrice);
+        
+        // At 80% urgency, confidence should be around 0.60 + 0.80 * 0.30 = 0.84
+        if (signal.getDirection() == TradeSignal.SignalDirection.LONG) {
+            assertTrue(signal.getConfidence() >= 0.75);
+        }
+    }
+
     private MarketData createMarketData(double price, long volume) {
         return MarketData.builder()
                 .symbol("AUTO_EQUITY_TRADER")

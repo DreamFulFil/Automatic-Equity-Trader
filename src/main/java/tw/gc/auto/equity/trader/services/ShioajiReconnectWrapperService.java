@@ -41,7 +41,7 @@ public class ShioajiReconnectWrapperService {
         int maxRetries = 5;
         int attempt = 0;
         
-        while (attempt < maxRetries) {
+        while (true) {
             try {
                 attempt++;
                 
@@ -90,8 +90,6 @@ public class ShioajiReconnectWrapperService {
                 }
             }
         }
-        
-        throw new Exception("Should not reach here");
     }
     
     /**

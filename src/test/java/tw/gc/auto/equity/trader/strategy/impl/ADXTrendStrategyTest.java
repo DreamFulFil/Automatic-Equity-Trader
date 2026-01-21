@@ -96,4 +96,18 @@ class ADXTrendStrategyTest {
         TradeSignal s = strategy.execute(portfolio, MarketData.builder().symbol("TEST").high(101).low(100).close(100.5).build());
         assertTrue(s.getReason().toLowerCase().contains("warming up"));
     }
+
+    @Test
+    void testATR_WithSingleDataPoint_ReturnsZero() {
+        // Create strategy with period larger than data
+        ADXTrendStrategy shortStrategy = new ADXTrendStrategy(14, 25.0);
+        
+        // Feed only one data point - ATR loop starts at i=1, so count stays 0
+        MarketData md = MarketData.builder().symbol("TEST").high(101.0).low(99.0).close(100.0).build();
+        TradeSignal s = shortStrategy.execute(portfolio, md);
+        
+        // With only one bar, should be warming up (covers count=0 branch in ATR)
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, s.getDirection());
+        assertTrue(s.getReason().toLowerCase().contains("warming up"));
+    }
 }

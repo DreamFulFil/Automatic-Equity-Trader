@@ -448,7 +448,7 @@ public class BacktestService {
     /**
      * Fetch stocks from Taiwan Stock Exchange market cap rankings
      */
-    private Set<StockCandidate> fetchFromTWSE() {
+    protected Set<StockCandidate> fetchFromTWSE() {
         Set<StockCandidate> stocks = new HashSet<>();
         try {
             // TWSE market statistics page
@@ -480,7 +480,7 @@ public class BacktestService {
     /**
      * Fetch stocks from Yahoo Finance Taiwan most traded
      */
-    private Set<StockCandidate> fetchFromYahooFinanceTW() {
+    protected Set<StockCandidate> fetchFromYahooFinanceTW() {
         Set<StockCandidate> stocks = new HashSet<>();
         try {
             // Yahoo Finance Taiwan most active
@@ -510,7 +510,7 @@ public class BacktestService {
     /**
      * Fetch major TAIEX index components
      */
-    private Set<StockCandidate> fetchTAIEXComponents() {
+    protected Set<StockCandidate> fetchTAIEXComponents() {
         Set<StockCandidate> stocks = new HashSet<>();
         try {
             // TAIEX component stocks
@@ -541,7 +541,7 @@ public class BacktestService {
     /**
      * Check if stock meets all criteria
      */
-    private boolean meetsCriteria(StockCandidate stock) {
+    protected boolean meetsCriteria(StockCandidate stock) {
         // Must be TWSE listed (ends with .TW)
         if (!stock.getSymbol().endsWith(".TW")) return false;
         
@@ -605,7 +605,7 @@ public class BacktestService {
     /**
      * Internal class to represent stock candidate
      */
-    private static class StockCandidate {
+    static class StockCandidate {
         private final String symbol;
         private final String name;
         private final double marketCap;
@@ -796,7 +796,7 @@ public class BacktestService {
     /**
      * Run backtest for a single stock and queue results for persistence.
      */
-    private Map<String, InMemoryBacktestResult> runBacktestForStock(
+    protected Map<String, InMemoryBacktestResult> runBacktestForStock(
             String symbol, List<IStrategy> strategies, double initialCapital,
             String backtestRunId, LocalDateTime start, LocalDateTime end,
             BlockingQueue<BacktestResult> resultQueue) {
@@ -839,7 +839,7 @@ public class BacktestService {
     /**
      * Run backtest computation only (no persistence).
      */
-    private Map<String, InMemoryBacktestResult> runBacktestCompute(
+    protected Map<String, InMemoryBacktestResult> runBacktestCompute(
             List<IStrategy> strategies, List<MarketData> history, double initialCapital) {
         
         Map<String, InMemoryBacktestResult> results = new HashMap<>();
@@ -928,7 +928,7 @@ public class BacktestService {
      * Single writer thread that drains BacktestResult queue and performs bulk inserts.
      * Uses PgBulkInsert (COPY protocol) with JdbcTemplate fallback.
      */
-    private int runBacktestResultWriter(BlockingQueue<BacktestResult> queue, AtomicBoolean complete) {
+    protected int runBacktestResultWriter(BlockingQueue<BacktestResult> queue, AtomicBoolean complete) {
         List<BacktestResult> batch = new ArrayList<>(BULK_INSERT_BATCH_SIZE);
         int totalInserted = 0;
         long lastFlush = System.currentTimeMillis();
@@ -1007,7 +1007,7 @@ public class BacktestService {
     /**
      * JdbcTemplate batch insert fallback for BacktestResult.
      */
-    private int jdbcBatchInsertBacktestResults(List<BacktestResult> results) {
+    protected int jdbcBatchInsertBacktestResults(List<BacktestResult> results) {
         String sql = """
             INSERT INTO backtest_results (
                 backtest_run_id, symbol, stock_name, strategy_name, initial_capital, final_equity,
@@ -1047,7 +1047,7 @@ public class BacktestService {
     /**
      * PgBulkInsert mapping for BacktestResult entity.
      */
-    private static class BacktestResultBulkInsertMapping extends AbstractMapping<BacktestResult> {
+    protected static class BacktestResultBulkInsertMapping extends AbstractMapping<BacktestResult> {
         public BacktestResultBulkInsertMapping() {
             super("public", "backtest_results");
             mapText("backtest_run_id", BacktestResult::getBacktestRunId);

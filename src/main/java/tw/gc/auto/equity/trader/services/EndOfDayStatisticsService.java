@@ -285,7 +285,7 @@ public class EndOfDayStatisticsService {
     /**
      * Generate AI insight for daily statistics using Ollama/Llama.
      */
-    private void generateInsightAsync(DailyStatistics stats) {
+    void generateInsightAsync(DailyStatistics stats) {
         try {
             String prompt = buildInsightPrompt(stats);
 
@@ -319,7 +319,7 @@ public class EndOfDayStatisticsService {
         }
     }
 
-    private void sendTelegramSummary(DailyStatistics stats) {
+    void sendTelegramSummary(DailyStatistics stats) {
         String message = String.format(
             "📊 <b>Daily Trading Summary</b>\n" +
             "📅 %s (%s)\n\n" +
@@ -349,7 +349,7 @@ public class EndOfDayStatisticsService {
         telegramService.sendMessage(message);
     }
 
-    private String buildInsightPrompt(DailyStatistics stats) {
+    String buildInsightPrompt(DailyStatistics stats) {
         return String.format("""
             You are a professional trading analyst. Analyze today's trading performance and provide a brief, actionable insight.
             

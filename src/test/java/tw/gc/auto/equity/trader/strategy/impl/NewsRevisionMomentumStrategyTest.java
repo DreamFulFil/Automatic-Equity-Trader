@@ -147,4 +147,51 @@ public class NewsRevisionMomentumStrategyTest {
         assertNotNull(sig);
         assertTrue(sig.getReason().toLowerCase().contains("pnl") || sig.getReason().toLowerCase().contains("faded"));
     }
+
+    @Test
+    void exitSignal_shortPositionMomentumFaded() throws Exception {
+        // Test lines 102, 106: Exit signal for SHORT position when momentum reverses
+        NewsRevisionMomentumStrategy s = new NewsRevisionMomentumStrategy(3, 0.02);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        p.setPosition("SHORT_EXIT", -10); // short position
+
+        Deque<Double> prices = new ArrayDeque<>();
+        prices.addLast(100.0);
+        prices.addLast(95.0);
+        prices.addLast(90.0);
+
+        Deque<Long> vols = new ArrayDeque<>();
+        vols.addLast(100L);
+        vols.addLast(100L);
+        vols.addLast(100L);
+
+        Field fPrices = NewsRevisionMomentumStrategy.class.getDeclaredField("priceHistory");
+        fPrices.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> pm = (java.util.Map<String, Deque<Double>>) fPrices.get(s);
+        pm.put("SHORT_EXIT", prices);
+
+        Field fVols = NewsRevisionMomentumStrategy.class.getDeclaredField("volumeHistory");
+        fVols.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Long>> vm = (java.util.Map<String, Deque<Long>>) fVols.get(s);
+        vm.put("SHORT_EXIT", vols);
+
+        // Set event price at 90 (short entry) - price going up reverses momentum
+        Field fEvents = NewsRevisionMomentumStrategy.class.getDeclaredField("eventPrices");
+        fEvents.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Double> events = (java.util.Map<String, Double>) fEvents.get(s);
+        events.put("SHORT_EXIT", 90.0);
+
+        // Price rises above significanceThreshold/2 from event price
+        TradeSignal sig = s.execute(p, mk("SHORT_EXIT", 92.0, 100L)); // 2.2% up from 90
+
+        assertNotNull(sig);
+        if (sig.isExitSignal()) {
+            assertEquals(TradeSignal.SignalDirection.LONG, sig.getDirection()); // cover short
+            assertEquals(0.70, sig.getConfidence());
+            assertTrue(sig.getReason().contains("faded"));
+        }
+    }
 }

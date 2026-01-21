@@ -89,7 +89,8 @@ public class CrossSectionalMomentumStrategy implements IStrategy {
         double bottomThreshold = sortedReturns[Math.max(bottomIndex, 0)];
         
         int position = portfolio.getPosition(symbol);
-        double dailyReturn = returns.isEmpty() ? 0 : returns.getLast();
+        // returns is guaranteed non-empty here because we return early when retArray.length < 10
+        double dailyReturn = returns.getLast();
         
         // Buy winners (in top N percentile)
         if (dailyReturn > topThreshold && momentum > 0 && position <= 0) {

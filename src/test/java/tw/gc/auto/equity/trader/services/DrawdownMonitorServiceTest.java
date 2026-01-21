@@ -290,4 +290,50 @@ class DrawdownMonitorServiceTest {
         verify(orderExecutionService, times(1)).flattenPosition(anyString(), anyString(), anyString(), anyBoolean());
         verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
     }
+
+    @Test
+    void testMonitorDrawdown_WithNullMetrics_shouldHandleGracefully() {
+        // Test for lines 140-143: null metrics handling in Telegram message formatting
+        StrategyPerformance currentPerformance = StrategyPerformance.builder()
+            .strategyName("RSIStrategy")
+            .maxDrawdownPct(20.0)  // Above threshold
+            .sharpeRatio(1.0)
+            .build();
+
+        // Best alternative with all null metrics to trigger lines 140-143
+        StrategyPerformance alternativeWithNulls = StrategyPerformance.builder()
+            .strategyName("MACDStrategy")
+            .sharpeRatio(null)        // null - line 140
+            .maxDrawdownPct(null)     // null - line 141
+            .totalReturnPct(null)     // null - line 142
+            .winRatePct(null)         // null - line 143
+            .build();
+
+        when(strategyPerformanceService.calculatePerformance(
+            eq("RSIStrategy"),
+            eq(StrategyPerformance.PerformanceMode.MAIN),
+            any(LocalDateTime.class),
+            any(LocalDateTime.class),
+            isNull(),
+            any(Map.class)
+        )).thenReturn(currentPerformance);
+
+        when(positionManager.getPosition("2454.TW")).thenReturn(100);
+        when(strategyPerformanceService.getBestPerformer(30)).thenReturn(alternativeWithNulls);
+
+        service.monitorDrawdown();
+
+        // Should switch and send messages with null-safe values (0.0 for nulls)
+        verify(telegramService, times(2)).sendMessage(anyString());
+        verify(activeStrategyService).switchStrategy(
+            eq("MACDStrategy"),
+            any(Map.class),
+            contains("MDD breach"),
+            eq(true),
+            isNull(),   // sharpeRatio is null
+            isNull(),   // maxDrawdownPct is null
+            isNull(),   // totalReturnPct is null
+            isNull()    // winRatePct is null
+        );
+    }
 }

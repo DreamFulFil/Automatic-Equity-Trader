@@ -80,6 +80,75 @@ public class TimeSeriesMomentumStrategyTest {
         }
     }
 
+    @Test
+    public void historyRemoveFirst_whenExceedsLookbackPlus10() {
+        // Test line 45: prices.removeFirst() when size > lookback + 10
+        TimeSeriesMomentumStrategy strat = new TimeSeriesMomentumStrategy(5, 0.01);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Fill history with more than lookback + 10 = 15 prices
+        double[] prices = new double[20];
+        for (int i = 0; i < 20; i++) prices[i] = 100 + i;
+        primeHistory(strat, "HIST", prices);
+        
+        // Execute should trigger removeFirst
+        TradeSignal signal = strat.execute(p, makeMarketData("HIST", 120));
+        assertNotNull(signal);
+    }
+
+    @Test
+    public void exitLong_whenMomentumTurnsNegative() {
+        // Test lines 92-94: position > 0 && momentum < 0 (but not < -threshold)
+        TimeSeriesMomentumStrategy strat = new TimeSeriesMomentumStrategy(3, 0.10); // 10% threshold
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        p.setPosition("EXIT", 10);
+        
+        // Prime with slight decline - momentum between 0 and -threshold
+        // Current price will be 98, pastPrice (lookback=3) will be 100
+        // momentum = (98-100)/100 = -0.02 = -2%, which is < 0 but > -10%
+        primeHistory(strat, "EXIT", new double[]{100, 100.5, 100.2, 99.5});
+        
+        TradeSignal signal = strat.execute(p, makeMarketData("EXIT", 98));
+        
+        assertEquals(TradeSignal.SignalDirection.SHORT, signal.getDirection());
+        assertTrue(signal.isExitSignal());
+        assertTrue(signal.getReason().contains("TSMOM Exit Long"));
+    }
+
+    @Test
+    public void exitShort_whenMomentumTurnsPositive() {
+        // Test lines 98-100: position < 0 && momentum > 0 (but not > threshold)
+        TimeSeriesMomentumStrategy strat = new TimeSeriesMomentumStrategy(3, 0.10); // 10% threshold
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        p.setPosition("EXIT", -10);
+        
+        // Prime with slight increase - momentum between 0 and +threshold
+        // Current price will be 102, pastPrice (lookback=3) will be 100
+        // momentum = (102-100)/100 = 0.02 = 2%, which is > 0 but < 10%
+        primeHistory(strat, "EXIT", new double[]{100, 99.5, 99.8, 100.5});
+        
+        TradeSignal signal = strat.execute(p, makeMarketData("EXIT", 102));
+        
+        assertEquals(TradeSignal.SignalDirection.LONG, signal.getDirection());
+        assertTrue(signal.isExitSignal());
+        assertTrue(signal.getReason().contains("TSMOM Exit Short"));
+    }
+
+    @Test
+    public void neutral_whenMomentumWithinThreshold() {
+        // Test line 103: neutral signal
+        TimeSeriesMomentumStrategy strat = new TimeSeriesMomentumStrategy(3, 0.10);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Prime with very small price changes (momentum within threshold)
+        primeHistory(strat, "NEUT", new double[]{100, 100.5, 100.2, 100.3});
+        
+        TradeSignal signal = strat.execute(p, makeMarketData("NEUT", 100.1));
+        
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, signal.getDirection());
+        assertTrue(signal.getReason().contains("TSMOM:"));
+    }
+
     private void primeHistory(TimeSeriesMomentumStrategy strat, String symbol, double[] prices) {
         try {
             java.lang.reflect.Field f = TimeSeriesMomentumStrategy.class.getDeclaredField("priceHistory");

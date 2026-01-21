@@ -16,6 +16,7 @@ import tw.gc.auto.equity.trader.strategy.TradeSignal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -410,5 +411,127 @@ class StrategyManagerTest {
         
         // Verify no interactions
         verifyNoInteractions(tradingStateService);
+    }
+
+    // ==================== Coverage tests for lines 276-279, 293-296 ====================
+
+    @Test
+    void executeShadowTradeForStock_shouldCloseShortAndOpenLong() {
+        // Lines 276-279: Close short position when LONG signal received
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        
+        var strategy = new DummyStrategy("SS", TradeSignal.longSignal(1.0, "reversal"));
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override public List<IStrategy> createStrategies() { return List.of(strategy); }
+        };
+        
+        ShadowModeStock s = new ShadowModeStock(); 
+        s.setSymbol("2330.TW"); 
+        s.setStrategyName("SS");
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of(s));
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+
+        strategyManager.reinitializeStrategies(factory);
+        
+        // Get the shadow portfolio and set it to a short position
+        @SuppressWarnings("unchecked")
+        var shadowPortfolios = (java.util.Map<String, java.util.Map<String, Portfolio>>) 
+            org.springframework.test.util.ReflectionTestUtils.getField(strategyManager, "shadowStockPortfolios");
+        Portfolio portfolio = shadowPortfolios.get("2330.TW").get("SS");
+        portfolio.setPosition("2330.TW", -2); // Short 2 shares
+        portfolio.setEntryPrice("2330.TW", 120.0);
+        
+        // Execute - should close short and open long
+        strategyManager.executeShadowStockStrategies("2330.TW", new MarketData(), 100.0);
+
+        // Verify trades were logged (close short + open long)
+        verify(dataLoggingService, atLeast(2)).logTrade(any());
+        // Position should now be long
+        assertEquals(1, portfolio.getPosition("2330.TW"));
+    }
+
+    @Test
+    void executeShadowTradeForStock_shouldCloseLongAndOpenShort() {
+        // Lines 293-296: Close long position when SHORT signal received
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        
+        var strategy = new DummyStrategy("SS", TradeSignal.shortSignal(1.0, "reversal"));
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override public List<IStrategy> createStrategies() { return List.of(strategy); }
+        };
+        
+        ShadowModeStock s = new ShadowModeStock(); 
+        s.setSymbol("2330.TW"); 
+        s.setStrategyName("SS");
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of(s));
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+
+        strategyManager.reinitializeStrategies(factory);
+        
+        // Get the shadow portfolio and set it to a long position
+        @SuppressWarnings("unchecked")
+        var shadowPortfolios = (java.util.Map<String, java.util.Map<String, Portfolio>>) 
+            org.springframework.test.util.ReflectionTestUtils.getField(strategyManager, "shadowStockPortfolios");
+        Portfolio portfolio = shadowPortfolios.get("2330.TW").get("SS");
+        portfolio.setPosition("2330.TW", 3); // Long 3 shares
+        portfolio.setEntryPrice("2330.TW", 90.0);
+        
+        // Execute - should close long and open short
+        strategyManager.executeShadowStockStrategies("2330.TW", new MarketData(), 100.0);
+
+        // Verify trades were logged (close long + open short)
+        verify(dataLoggingService, atLeast(2)).logTrade(any());
+        // Position should now be short
+        assertEquals(-1, portfolio.getPosition("2330.TW"));
+    }
+
+    @Test
+    void executeShadowTradeForStock_strategyNotFound_shouldSkip() {
+        // Test when strategy is not found in activeStrategies
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        
+        var strategy = new DummyStrategy("DifferentStrategy", TradeSignal.longSignal(1.0, "go"));
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override public List<IStrategy> createStrategies() { return List.of(strategy); }
+        };
+        
+        ShadowModeStock s = new ShadowModeStock(); 
+        s.setSymbol("2330.TW"); 
+        s.setStrategyName("NonExistentStrategy"); // Strategy name doesn't match
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of(s));
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+
+        strategyManager.reinitializeStrategies(factory);
+        
+        // Execute - should skip because strategy is not found
+        strategyManager.executeShadowStockStrategies("2330.TW", new MarketData(), 100.0);
+
+        // No trades should be logged since strategy wasn't found
+        verify(dataLoggingService, never()).logTrade(any());
+    }
+
+    @Test
+    void executeShadowTradeForStock_neutralSignal_shouldNotTrade() {
+        // Test when signal is NEUTRAL - should not execute any trade
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        
+        var strategy = new DummyStrategy("SS", TradeSignal.neutral("wait"));
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override public List<IStrategy> createStrategies() { return List.of(strategy); }
+        };
+        
+        ShadowModeStock s = new ShadowModeStock(); 
+        s.setSymbol("2330.TW"); 
+        s.setStrategyName("SS");
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of(s));
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+
+        strategyManager.reinitializeStrategies(factory);
+        
+        // Execute - neutral signal should not trigger any trade
+        strategyManager.executeShadowStockStrategies("2330.TW", new MarketData(), 100.0);
+
+        // No trades should be logged for neutral signal
+        verify(dataLoggingService, never()).logTrade(any());
     }
 }

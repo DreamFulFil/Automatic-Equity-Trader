@@ -147,4 +147,98 @@ public class VolatilityArbitrageStrategyTest {
         assertEquals(TradeSignal.SignalDirection.SHORT, sig.getDirection());
         assertTrue(sig.getReason().toLowerCase().contains("vol spread"));
     }
+
+    @Test
+    void historyRemoveFirst_whenExceedsLimit() throws Exception {
+        // Test line 45: prices.removeFirst() when size > realizedWindow * 2
+        VolatilityArbitrageStrategy s = new VolatilityArbitrageStrategy(5, 0.01);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Prime with exactly 5 * 2 = 10 prices, then execute adds one -> triggers removeFirst
+        Deque<Double> prices = new ArrayDeque<>();
+        for (int i = 0; i < 10; i++) prices.addLast(100.0 + i);
+        
+        Field fPrices = VolatilityArbitrageStrategy.class.getDeclaredField("priceHistory");
+        fPrices.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> priceMap = (java.util.Map<String, Deque<Double>>) fPrices.get(s);
+        priceMap.put("TRIM", prices);
+        
+        TradeSignal sig = s.execute(p, mk("TRIM", 115));
+        assertNotNull(sig);
+        
+        // Verify size is now 10 (one added, one removed)
+        assertEquals(10, priceMap.get("TRIM").size());
+    }
+
+    @Test
+    void volHistoryRemoveFirst_whenExceeds30() throws Exception {
+        // Test line 67: vols.removeFirst() when size > 30
+        VolatilityArbitrageStrategy s = new VolatilityArbitrageStrategy(3, 0.01);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Prime vol history with exactly 30 entries
+        Deque<Double> vols = new ArrayDeque<>();
+        for (int i = 0; i < 30; i++) vols.addLast(0.2);
+        
+        // Prime price history
+        Deque<Double> prices = new ArrayDeque<>();
+        prices.addLast(100.0);
+        prices.addLast(101.0);
+        prices.addLast(102.0);
+        prices.addLast(103.0);
+        
+        Field fPrices = VolatilityArbitrageStrategy.class.getDeclaredField("priceHistory");
+        fPrices.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> priceMap = (java.util.Map<String, Deque<Double>>) fPrices.get(s);
+        priceMap.put("VOLTRIM", prices);
+        
+        Field fVols = VolatilityArbitrageStrategy.class.getDeclaredField("volHistory");
+        fVols.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> volMap = (java.util.Map<String, Deque<Double>>) fVols.get(s);
+        volMap.put("VOLTRIM", vols);
+        
+        TradeSignal sig = s.execute(p, mk("VOLTRIM", 104));
+        assertNotNull(sig);
+        
+        // Verify vol history size is 30 (one added, one removed due to size > 30 check)
+        assertEquals(30, volMap.get("VOLTRIM").size());
+    }
+
+    @Test
+    void neutralSignal_whenSpreadWithinThreshold() throws Exception {
+        // Test line 98: neutral signal
+        VolatilityArbitrageStrategy s = new VolatilityArbitrageStrategy(3, 0.50);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        // Prime with similar realized and implied vol (spread within threshold)
+        Deque<Double> prices = new ArrayDeque<>();
+        prices.addLast(100.0);
+        prices.addLast(100.5);
+        prices.addLast(100.2);
+        prices.addLast(100.3);
+        
+        Deque<Double> vols = new ArrayDeque<>();
+        vols.addLast(0.10);
+        vols.addLast(0.10);
+        
+        Field fPrices = VolatilityArbitrageStrategy.class.getDeclaredField("priceHistory");
+        fPrices.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> priceMap = (java.util.Map<String, Deque<Double>>) fPrices.get(s);
+        priceMap.put("NEUT", prices);
+        
+        Field fVols = VolatilityArbitrageStrategy.class.getDeclaredField("volHistory");
+        fVols.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Deque<Double>> volMap = (java.util.Map<String, Deque<Double>>) fVols.get(s);
+        volMap.put("NEUT", vols);
+        
+        TradeSignal sig = s.execute(p, mk("NEUT", 100.4));
+        
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, sig.getDirection());
+        assertTrue(sig.getReason().contains("Vol spread"));
+    }
 }

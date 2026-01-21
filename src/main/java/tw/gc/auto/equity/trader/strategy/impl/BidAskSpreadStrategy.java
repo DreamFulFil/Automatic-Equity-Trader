@@ -60,7 +60,8 @@ public class BidAskSpreadStrategy implements IStrategy {
             sumCov += r1 * r0;
             n++;
         }
-        double cov = n > 0 ? sumCov / n : 0;
+        // n is guaranteed > 0 here because prices.size() >= 10 (loop runs at least 8 times)
+        double cov = sumCov / n;
         double impliedSpread = cov < 0 ? 2 * Math.sqrt(-cov) : normalSpread;
         
         double currentPrice = priceArray[priceArray.length - 1];

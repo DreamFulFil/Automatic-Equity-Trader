@@ -48,16 +48,16 @@ public class KlingerOscillatorStrategy implements IStrategy {
         double vf = data.getVolume() * cm * 100;
         
         vfs.addLast(vf);
-        if (vfs.size() > 34) vfs.removeFirst();
+        if (vfs.size() > 55) vfs.removeFirst();
         
         previousHLC.put(symbol, hlc);
         
-        if (vfs.size() < 34) {
+        if (vfs.size() < 55) {
             return TradeSignal.neutral("Warming up Klinger");
         }
         
         double ema34 = calculateEMA(vfs, 34);
-        double ema55 = calculateEMA(vfs, Math.min(55, vfs.size()));
+        double ema55 = calculateEMA(vfs, 55);
         double ko = ema34 - ema55;
         
         int position = portfolio.getPosition(symbol);

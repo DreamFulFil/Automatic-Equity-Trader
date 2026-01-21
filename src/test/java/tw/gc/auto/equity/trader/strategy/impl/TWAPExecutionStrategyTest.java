@@ -83,5 +83,60 @@ public class TWAPExecutionStrategyTest {
         java.util.Map<String, Integer> exec = (java.util.Map<String, Integer>) fExec.get(s);
         assertTrue(exec.isEmpty());
     }
+
+    @Test
+    void nullMarketData_returnsNeutral() {
+        // Test line 25: null data returns neutral
+        TWAPExecutionStrategy s = new TWAPExecutionStrategy(10, 60);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        TradeSignal sig = s.execute(p, null);
+        
+        assertNotNull(sig);
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, sig.getDirection());
+        assertEquals("No market data", sig.getReason());
+    }
+
+    @Test
+    void nullSymbol_returnsNeutral() {
+        // Test line 25: null symbol returns neutral
+        TWAPExecutionStrategy s = new TWAPExecutionStrategy(10, 60);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+        
+        MarketData md = MarketData.builder()
+                .symbol(null)
+                .timeframe(MarketData.Timeframe.DAY_1)
+                .close(100.0)
+                .build();
+        
+        TradeSignal sig = s.execute(p, md);
+        
+        assertNotNull(sig);
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, sig.getDirection());
+    }
+
+    @Test
+    void targetVolumeReached_returnsNeutral() throws Exception {
+        // Test line 37: Target volume reached returns neutral
+        TWAPExecutionStrategy s = new TWAPExecutionStrategy(2, 60);
+        Portfolio p = Portfolio.builder().positions(new HashMap<>()).build();
+
+        // Set executed volume to target
+        Field fExec = TWAPExecutionStrategy.class.getDeclaredField("executedVolume");
+        fExec.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Integer> exec = (java.util.Map<String, Integer>) fExec.get(s);
+        exec.put("TGT", 2);
+
+        TradeSignal sig = s.execute(p, MarketData.builder()
+                .symbol("TGT")
+                .timeframe(MarketData.Timeframe.DAY_1)
+                .close(100.0)
+                .build());
+
+        assertNotNull(sig);
+        assertEquals(TradeSignal.SignalDirection.NEUTRAL, sig.getDirection());
+        assertEquals("Target volume reached", sig.getReason());
+    }
 }
  

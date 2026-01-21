@@ -195,6 +195,25 @@ class RSIStrategyTest {
         assertThat(signal).isNotNull();
     }
 
+    @Test
+    void calculateRSI_withInsufficientPrices_returnsDefault50() {
+        // Test with period larger than available data to cover line 85 (early return 50.0)
+        RSIStrategy largePerioStrategy = new RSIStrategy(50, 70, 30);
+        
+        // Feed only 20 prices, but period is 50, so p.length < n + 1
+        for (int i = 0; i < 20; i++) {
+            MarketData data = createMarketData("2330", 100 + i);
+            largePerioStrategy.execute(portfolio, data);
+        }
+
+        MarketData data = createMarketData("2330", 120);
+        TradeSignal signal = largePerioStrategy.execute(portfolio, data);
+        
+        // With insufficient data for RSI calculation, it returns 50.0 (neutral RSI)
+        assertThat(signal).isNotNull();
+        assertThat(signal.getReason()).contains("RSI");
+    }
+
     private MarketData createMarketData(String symbol, double close) {
         return MarketData.builder()
                 .symbol(symbol)

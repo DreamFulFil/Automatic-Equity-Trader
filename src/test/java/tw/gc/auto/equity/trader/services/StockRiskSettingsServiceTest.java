@@ -228,4 +228,68 @@ public class StockRiskSettingsServiceTest {
         assertTrue(help.contains("volatility_threshold_multiplier"));
     }
 
+    // ==================== Coverage tests for lines 277-278 ====================
+
+    @Test
+    void getAllStockRiskSettingsFormatted_enableAiVeto_displaysCheckmark() {
+        // Lines 277-278: settings.isEnableAiVeto() ? "✅" : "❌"
+        StockRiskSettings settings = StockRiskSettings.builder()
+                .maxSharesPerTrade(50)
+                .dailyLossLimitTwd(1000)
+                .weeklyLossLimitTwd(4000)
+                .stopLossTwdPerTrade(100)
+                .maxDailyTrades(5)
+                .minHoldMinutes(1)
+                .maxHoldMinutes(45)
+                .minSharpeRatio(1.0)
+                .minWinRate(0.5)
+                .maxDrawdownPercent(15.0)
+                .strategyBacktestDays(180)
+                .minTotalTradesInBacktest(50)
+                .enableAiVeto(true) // True case
+                .enableVolatilityFilter(false) // False case
+                .volatilityThresholdMultiplier(1.5)
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        when(repo.findFirst()).thenReturn(settings);
+
+        String out = service.getAllStockRiskSettingsFormatted();
+
+        // Verify both branches are covered
+        assertTrue(out.contains("enable_ai_veto = ✅"));
+        assertTrue(out.contains("enable_volatility_filter = ❌"));
+    }
+
+    @Test
+    void getAllStockRiskSettingsFormatted_enableVolatilityFilter_displaysCheckmark() {
+        // Test the opposite boolean values
+        StockRiskSettings settings = StockRiskSettings.builder()
+                .maxSharesPerTrade(50)
+                .dailyLossLimitTwd(1000)
+                .weeklyLossLimitTwd(4000)
+                .stopLossTwdPerTrade(100)
+                .maxDailyTrades(5)
+                .minHoldMinutes(1)
+                .maxHoldMinutes(45)
+                .minSharpeRatio(1.0)
+                .minWinRate(0.5)
+                .maxDrawdownPercent(15.0)
+                .strategyBacktestDays(180)
+                .minTotalTradesInBacktest(50)
+                .enableAiVeto(false) // False case
+                .enableVolatilityFilter(true) // True case
+                .volatilityThresholdMultiplier(1.5)
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        when(repo.findFirst()).thenReturn(settings);
+
+        String out = service.getAllStockRiskSettingsFormatted();
+
+        // Verify opposite values
+        assertTrue(out.contains("enable_ai_veto = ❌"));
+        assertTrue(out.contains("enable_volatility_filter = ✅"));
+    }
+
 }

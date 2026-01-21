@@ -72,6 +72,70 @@ class CrossSectionalMomentumStrategyTest {
     }
 
     @Test
+    void testDailyReturnComputed() {
+        for (int i = 0; i < 20; i++) {
+            strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(100 + i).build());
+        }
+
+        TradeSignal s = strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(120).build());
+        assertNotNull(s);
+        assertNotNull(s.getDirection());
+    }
+
+    @Test
+    void testLoser_ShortSignal() {
+        // Build enough history, then force a large negative daily return and negative momentum.
+        for (int i = 0; i < 25; i++) {
+            strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(100 + i * 0.1).build());
+        }
+        for (int i = 0; i < 15; i++) {
+            strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(102 - i * 0.1).build());
+        }
+
+        TradeSignal s = strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(80.0).build());
+        assertNotNull(s);
+        assertNotNull(s.getDirection());
+    }
+
+    @Test
+    void testExitLongOnMomentumReversal() {
+        for (int i = 0; i < 30; i++) {
+            strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(100 + Math.sin(i) * 0.1).build());
+        }
+        portfolio.getPositions().put("TEST", 1);
+
+        // Momentum negative over rankPeriod but last return ~0 (avoid loser branch).
+        double[] closes = {100, 99, 98, 97, 96, 96};
+        TradeSignal s = null;
+        for (double c : closes) {
+            s = strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(c).build());
+        }
+
+        assertNotNull(s);
+        assertTrue(s.isExitSignal());
+        assertEquals(TradeSignal.SignalDirection.SHORT, s.getDirection());
+    }
+
+    @Test
+    void testExitShortOnMomentumReversal() {
+        for (int i = 0; i < 30; i++) {
+            strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(100 + Math.sin(i) * 0.1).build());
+        }
+        portfolio.getPositions().put("TEST", -1);
+
+        // Momentum positive over rankPeriod but last return ~0 (avoid winner branch).
+        double[] closes = {100, 101, 102, 103, 104, 104};
+        TradeSignal s = null;
+        for (double c : closes) {
+            s = strategy.execute(portfolio, MarketData.builder().symbol("TEST").close(c).build());
+        }
+
+        assertNotNull(s);
+        assertTrue(s.isExitSignal());
+        assertEquals(TradeSignal.SignalDirection.LONG, s.getDirection());
+    }
+
+    @Test
     void testGetName_Type_Reset() {
         assertTrue(strategy.getName().contains("Cross-Sectional"));
         assertEquals(tw.gc.auto.equity.trader.strategy.StrategyType.SWING, strategy.getType());

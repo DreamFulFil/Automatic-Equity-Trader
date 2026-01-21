@@ -160,6 +160,50 @@ class BollingerSqueezeStrategyTest {
         }
     }
 
+    @Test
+    void exitSignal_whenLongPositionAndPriceBelowMean() {
+        // Test lines 102-103: position > 0 && currentPrice < mean
+        // Need bandwidth >= 0.04 to avoid squeeze detection returning early
+        BollingerSqueezeStrategy strat = new BollingerSqueezeStrategy(10, 2.0);
+        Portfolio p = new Portfolio();
+        p.setPosition("EXIT", 100);
+        
+        // Build history with enough volatility (bandwidth >= 4%)
+        for (int i = 0; i < 15; i++) {
+            // Oscillate between 95 and 115 to create bandwidth > 4%
+            double price = 100 + ((i % 2 == 0) ? 10 : -5);
+            strat.execute(p, createMarketData("EXIT", price));
+        }
+        
+        // Price falls below mean (which is around 102.5) - should trigger exit
+        TradeSignal signal = strat.execute(p, createMarketData("EXIT", 90));
+        
+        assertThat(signal.getDirection()).isEqualTo(TradeSignal.SignalDirection.SHORT);
+        assertThat(signal.isExitSignal()).isTrue();
+        assertThat(signal.getReason()).contains("reverted below mean");
+    }
+
+    @Test
+    void exitSignal_whenShortPositionAndPriceAboveMean() {
+        // Test lines 104-105: position < 0 && currentPrice > mean
+        BollingerSqueezeStrategy strat = new BollingerSqueezeStrategy(10, 2.0);
+        Portfolio p = new Portfolio();
+        p.setPosition("EXIT2", -100);
+        
+        // Build history with enough volatility (bandwidth >= 4%)
+        for (int i = 0; i < 15; i++) {
+            double price = 100 + ((i % 2 == 0) ? 5 : -10);
+            strat.execute(p, createMarketData("EXIT2", price));
+        }
+        
+        // Price rises above mean - should trigger exit
+        TradeSignal signal = strat.execute(p, createMarketData("EXIT2", 120));
+        
+        assertThat(signal.getDirection()).isEqualTo(TradeSignal.SignalDirection.LONG);
+        assertThat(signal.isExitSignal()).isTrue();
+        assertThat(signal.getReason()).contains("reverted above mean");
+    }
+
     private MarketData createMarketData(String symbol, double close) {
         return MarketData.builder()
                 .symbol(symbol)

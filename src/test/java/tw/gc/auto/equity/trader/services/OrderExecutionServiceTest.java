@@ -13,6 +13,8 @@ import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -393,4 +395,152 @@ class OrderExecutionServiceTest {
 
         assertTrue(result);
     }
+
+    // ==================== Coverage tests for lines 150, 233, 253-255, 259, 281, 290 ====================
+
+    @Test
+    void executeOrderWithRetry_shouldIncludeStrategyNameInTradeProposal() {
+        // Line 150: tradeProposal.put("strategy_name", strategyName != null ? strategyName : "Unknown")
+        when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(true);
+        when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(false);
+        when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
+                .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
+        Map<String, Object> vetoResult = new HashMap<>();
+        vetoResult.put("veto", false);
+        vetoResult.put("reason", "approved");
+        when(llmService.executeTradeVeto(any())).thenReturn(vetoResult);
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
+                .thenReturn("{\"status\":\"filled\"}");
+
+        // Call with null strategyName to trigger line 150 fallback
+        orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false, null);
+
+        verify(llmService).executeTradeVeto(argThat(proposal -> {
+            Map<String, Object> map = (Map<String, Object>) proposal;
+            return "Unknown".equals(map.get("strategy_name"));
+        }));
+    }
+
+    @Test
+    void executeOrderWithRetry_emergencyShutdown_shouldSetSimulationMode() {
+        // Line 233: mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
+                .thenReturn("{\"status\":\"filled\"}");
+
+        // Execute with emergencyShutdown=true
+        orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, true);
+
+        verify(dataLoggingService).logTrade(argThat(trade -> 
+            trade.getMode() == Trade.TradingMode.SIMULATION
+        ));
+    }
+
+    @Test
+    void executeOrderWithRetry_whenInterruptedDuringBackoff_shouldReturn() throws InterruptedException {
+        // Lines 253-255, 259: InterruptedException during backoff
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
+                .thenThrow(new RuntimeException("First fail"))
+                .thenThrow(new RuntimeException("Second fail"))
+                .thenReturn("{\"status\":\"filled\"}");
+
+        // Start execution in a separate thread and interrupt it
+        Thread testThread = new Thread(() -> {
+            orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false);
+        });
+        testThread.start();
+        
+        // Wait for first retry attempt then interrupt
+        Thread.sleep(500);
+        testThread.interrupt();
+        testThread.join(5000);
+        
+        // The thread should have stopped due to interrupt
+        assertFalse(testThread.isAlive());
+    }
+
+    @Test
+    void flattenPosition_shouldCalculateHoldDuration() throws Exception {
+        // Line 281: Calculate hold duration from entry time
+        positionManager.setPosition("2454.TW", 1);
+        LocalDateTime entryTime = java.time.LocalDateTime.now(ZoneId.of("Asia/Taipei")).minusMinutes(30);
+        positionManager.updateEntry("2454.TW", 20000.0, entryTime);
+
+        String signalJson = "{\"current_price\":20100}";
+        when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
+        when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+
+        orderExecutionService.flattenPosition("Test reason", "2454.TW", "stock", false);
+
+        // Verify closeLatestTrade was called with calculated holdDuration
+        verify(dataLoggingService).closeLatestTrade(
+            eq("2454.TW"), 
+            any(), 
+            anyDouble(), 
+            anyDouble(), 
+            intThat(duration -> duration >= 29 && duration <= 31) // Should be ~30 minutes
+        );
+    }
+
+    @Test
+    void flattenPosition_emergencyShutdown_shouldUseSimulationMode() throws Exception {
+        // Line 290: mode(emergencyShutdown ? Trade.TradingMode.SIMULATION : Trade.TradingMode.LIVE)
+        positionManager.setPosition("2454.TW", 1);
+        positionManager.updateEntry("2454.TW", 20000.0, java.time.LocalDateTime.now());
+
+        String signalJson = "{\"current_price\":20100}";
+        when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
+        when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+
+        orderExecutionService.flattenPosition("Test reason", "2454.TW", "stock", true); // emergencyShutdown=true
+
+        verify(dataLoggingService).closeLatestTrade(
+            eq("2454.TW"), 
+            eq(Trade.TradingMode.SIMULATION), // Should be SIMULATION when emergency
+            anyDouble(), 
+            anyDouble(), 
+            anyInt()
+        );
+    }
+
+    @Test
+    void flattenPosition_withNullEntryTime_shouldUseZeroHoldDuration() throws Exception {
+        // Line 281: entryTime == null case
+        positionManager.setPosition("2454.TW", 1);
+        positionManager.updateEntry("2454.TW", 20000.0, null); // null entry time
+
+        String signalJson = "{\"current_price\":20100}";
+        when(restTemplate.getForObject(contains("/signal"), eq(String.class))).thenReturn(signalJson);
+        when(objectMapper.readTree(signalJson)).thenReturn(new ObjectMapper().readTree(signalJson));
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class))).thenReturn("{\"status\":\"filled\"}");
+
+        orderExecutionService.flattenPosition("Test reason", "2454.TW", "stock", false);
+
+        verify(dataLoggingService).closeLatestTrade(
+            eq("2454.TW"), 
+            any(), 
+            anyDouble(), 
+            anyDouble(), 
+            eq(0) // Should be 0 when entry time is null
+        );
+    }
+
+    // ==================== Coverage test for line 259 ====================
+    
+    @Test
+    void executeOrderWithRetry_lastRetryFails_exitsAfterMaxAttempts() {
+        // Line 259: After all retries fail, the method returns (implicit)
+        when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
+                .thenThrow(new RuntimeException("Always fails"));
+
+        // This should not hang - it should exit after 3 retries
+        orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false);
+
+        // Verify that it tried 3 times (max retries)
+        verify(restTemplate, times(3)).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
+        verify(telegramService).sendMessage(contains("Order failed"));
+    }
 }
+

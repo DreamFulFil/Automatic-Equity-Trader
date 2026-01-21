@@ -673,4 +673,793 @@ class EndOfDayStatisticsServiceTest {
         assertEquals(1, stats.getSignalsLong());
         assertEquals(0, stats.getSignalsShort());
     }
+
+    @Test
+    void calculateEndOfDayStatistics_successPath_savesStatsAndGeneratesInsight() {
+        when(activeStockService.getActiveSymbol("stock")).thenReturn(symbol);
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(Collections.emptyList());
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenReturn(Map.of("response", "Test AI insight"));
+
+        service.calculateEndOfDayStatistics();
+
+        verify(dailyStatisticsRepository, times(2)).save(any(DailyStatistics.class));
+    }
+
+    @Test
+    void calculateStatisticsForDay_handlesNullRealizedPnL() {
+        Trade tradeWithPnL = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade tradeWithoutPnL = Trade.builder()
+                .realizedPnL(null)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any()))
+                .thenReturn(Arrays.asList(tradeWithPnL, tradeWithoutPnL));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        assertEquals(100.0, stats.getRealizedPnL());
+        assertEquals(1, stats.getWinningTrades());
+    }
+
+    @Test
+    void generateInsightAsync_successfulResponse_savesInsightAndSendsTelegram() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(5)
+                .winningTrades(3)
+                .losingTrades(2)
+                .winRate(60.0)
+                .realizedPnL(500.0)
+                .maxDrawdown(200.0)
+                .profitFactor(1.5)
+                .avgHoldMinutes(15.0)
+                .signalsGenerated(10)
+                .signalsLong(6)
+                .signalsShort(4)
+                .newsVetoCount(2)
+                .cumulativePnL(5000.0)
+                .consecutiveWins(2)
+                .consecutiveLosses(0)
+                .build();
+
+        Map<String, Object> mockResponse = Map.of("response", "AI generated insight about trading");
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(mockResponse);
+
+        service.generateInsightAsync(stats);
+
+        assertEquals("AI generated insight about trading", stats.getLlamaInsight());
+        assertNotNull(stats.getInsightGeneratedAt());
+        verify(dailyStatisticsRepository).save(stats);
+        verify(telegramService).sendMessage(contains("Daily Trading Summary"));
+    }
+
+    @Test
+    void generateInsightAsync_nullResponse_doesNotSaveInsight() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winningTrades(1)
+                .losingTrades(0)
+                .winRate(100.0)
+                .realizedPnL(100.0)
+                .maxDrawdown(0.0)
+                .profitFactor(1.0)
+                .avgHoldMinutes(10.0)
+                .signalsGenerated(1)
+                .signalsLong(1)
+                .signalsShort(0)
+                .newsVetoCount(0)
+                .cumulativePnL(100.0)
+                .consecutiveWins(1)
+                .consecutiveLosses(0)
+                .build();
+
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(null);
+
+        service.generateInsightAsync(stats);
+
+        assertNull(stats.getLlamaInsight());
+        verify(dailyStatisticsRepository, never()).save(any());
+        verify(telegramService, never()).sendMessage(anyString());
+    }
+
+    @Test
+    void generateInsightAsync_responseWithoutKey_doesNotSaveInsight() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winningTrades(1)
+                .losingTrades(0)
+                .winRate(100.0)
+                .realizedPnL(100.0)
+                .maxDrawdown(0.0)
+                .profitFactor(1.0)
+                .avgHoldMinutes(10.0)
+                .signalsGenerated(1)
+                .signalsLong(1)
+                .signalsShort(0)
+                .newsVetoCount(0)
+                .cumulativePnL(100.0)
+                .consecutiveWins(1)
+                .consecutiveLosses(0)
+                .build();
+
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(Map.of("error", "failed"));
+
+        service.generateInsightAsync(stats);
+
+        assertNull(stats.getLlamaInsight());
+        verify(dailyStatisticsRepository, never()).save(any());
+    }
+
+    @Test
+    void generateInsightAsync_restTemplateThrowsException_logsWarning() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winningTrades(1)
+                .losingTrades(0)
+                .winRate(100.0)
+                .realizedPnL(100.0)
+                .maxDrawdown(0.0)
+                .profitFactor(1.0)
+                .avgHoldMinutes(10.0)
+                .signalsGenerated(1)
+                .signalsLong(1)
+                .signalsShort(0)
+                .newsVetoCount(0)
+                .cumulativePnL(100.0)
+                .consecutiveWins(1)
+                .consecutiveLosses(0)
+                .build();
+
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenThrow(new RuntimeException("Connection refused"));
+
+        assertDoesNotThrow(() -> service.generateInsightAsync(stats));
+
+        verify(dailyStatisticsRepository, never()).save(any());
+        verify(telegramService, never()).sendMessage(anyString());
+    }
+
+    @Test
+    void sendTelegramSummary_sendsFormattedMessage() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(5)
+                .winningTrades(3)
+                .losingTrades(2)
+                .winRate(60.0)
+                .realizedPnL(500.0)
+                .maxDrawdown(200.0)
+                .profitFactor(1.5)
+                .avgHoldMinutes(15.5)
+                .signalsGenerated(10)
+                .signalsLong(6)
+                .signalsShort(4)
+                .newsVetoCount(2)
+                .llamaInsight("Strong performance with good risk management")
+                .build();
+
+        service.sendTelegramSummary(stats);
+
+        verify(telegramService).sendMessage(argThat(message ->
+                message.contains("Daily Trading Summary") &&
+                message.contains(symbol) &&
+                message.contains("500") &&
+                message.contains("Strong performance")
+        ));
+    }
+
+    @Test
+    void buildInsightPrompt_generatesValidPrompt() {
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(5)
+                .winningTrades(3)
+                .losingTrades(2)
+                .winRate(60.0)
+                .realizedPnL(500.0)
+                .maxDrawdown(200.0)
+                .profitFactor(1.5)
+                .avgHoldMinutes(15.0)
+                .signalsGenerated(10)
+                .signalsLong(6)
+                .signalsShort(4)
+                .newsVetoCount(2)
+                .cumulativePnL(5000.0)
+                .consecutiveWins(2)
+                .consecutiveLosses(0)
+                .build();
+
+        String prompt = service.buildInsightPrompt(stats);
+
+        assertTrue(prompt.contains("professional trading analyst"));
+        assertTrue(prompt.contains(symbol));
+        assertTrue(prompt.contains("Total Trades: 5"));
+        assertTrue(prompt.contains("Wins: 3"));
+        assertTrue(prompt.contains("Losses: 2"));
+        assertTrue(prompt.contains("Win Rate: 60"));
+        assertTrue(prompt.contains("500"));
+        assertTrue(prompt.contains("Consecutive Wins: 2"));
+    }
+
+    @Test
+    void getStatisticsSummary_handlesNullFieldsGracefully() {
+        DailyStatistics statWithNulls = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(null)
+                .winRate(null)
+                .realizedPnL(null)
+                .build();
+
+        DailyStatistics statWithValues = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(5)
+                .winRate(60.0)
+                .realizedPnL(500.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(statWithNulls, statWithValues));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        assertEquals(500.0, summary.get("totalPnL"));
+        assertEquals(5, summary.get("totalTrades"));
+        assertEquals(60.0, summary.get("avgWinRate"));
+    }
+
+    @Test
+    void getStatisticsSummary_filtersZeroTradeDaysFromWinRate() {
+        DailyStatistics dayWithNoTrades = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(0)
+                .winRate(0.0)
+                .realizedPnL(0.0)
+                .build();
+
+        DailyStatistics dayWithTrades = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(5)
+                .winRate(80.0)
+                .realizedPnL(500.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(dayWithNoTrades, dayWithTrades));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        assertEquals(80.0, summary.get("avgWinRate"));
+    }
+
+    @Test
+    void calculateEndOfDayStatistics_successPath_savesStatsAndLogsSuccess() {
+        // Setup for complete success path through lines 66-68, 71
+        when(activeStockService.getActiveSymbol("stock")).thenReturn(symbol);
+        
+        Trade trade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+        
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(List.of(trade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+        
+        // Mock successful AI response for line 71
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenReturn(Map.of("response", "Test insight"));
+        
+        service.calculateEndOfDayStatistics();
+        
+        // Verify save was called (line 67)
+        verify(dailyStatisticsRepository, atLeastOnce()).save(any(DailyStatistics.class));
+    }
+
+    @Test
+    void calculateEndOfDayStatistics_exceptionInCalculation_catchesAndLogsError() {
+        // Test line 75 - catch block
+        when(activeStockService.getActiveSymbol("stock")).thenReturn(symbol);
+        when(tradeRepository.findByTimestampBetween(any(), any()))
+                .thenThrow(new RuntimeException("Database connection lost"));
+        
+        // Should not throw exception - just log error
+        assertDoesNotThrow(() -> service.calculateEndOfDayStatistics());
+        
+        // Verify save was never called due to exception
+        verify(dailyStatisticsRepository, never()).save(any());
+    }
+
+    @Test
+    void generateInsightAsync_buildsPromptAndSendsRequest() {
+        // Test lines 290, 292, 295-296, 300
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(3)
+                .winningTrades(2)
+                .losingTrades(1)
+                .winRate(66.67)
+                .realizedPnL(300.0)
+                .maxDrawdown(100.0)
+                .profitFactor(2.0)
+                .avgHoldMinutes(12.5)
+                .signalsGenerated(5)
+                .signalsLong(3)
+                .signalsShort(2)
+                .newsVetoCount(1)
+                .cumulativePnL(1000.0)
+                .consecutiveWins(2)
+                .consecutiveLosses(0)
+                .build();
+
+        Map<String, Object> mockResponse = Map.of("response", "  Trimmed insight  ");
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(mockResponse);
+
+        service.generateInsightAsync(stats);
+
+        // Verify the insight was trimmed (line 308)
+        assertEquals("Trimmed insight", stats.getLlamaInsight());
+        assertNotNull(stats.getInsightGeneratedAt());
+        verify(dailyStatisticsRepository).save(stats);
+        verify(telegramService).sendMessage(anyString());
+    }
+
+    @Test
+    void generateInsightAsync_responseContainsKey_savesAndSendsTelegram() {
+        // Test lines 306-311, 314
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winningTrades(1)
+                .losingTrades(0)
+                .winRate(100.0)
+                .realizedPnL(50.0)
+                .maxDrawdown(0.0)
+                .profitFactor(Double.MAX_VALUE)
+                .avgHoldMinutes(5.0)
+                .signalsGenerated(2)
+                .signalsLong(2)
+                .signalsShort(0)
+                .newsVetoCount(0)
+                .cumulativePnL(50.0)
+                .consecutiveWins(1)
+                .consecutiveLosses(0)
+                .build();
+
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenReturn(Map.of("response", "Generated insight"));
+
+        service.generateInsightAsync(stats);
+
+        assertEquals("Generated insight", stats.getLlamaInsight());
+        assertNotNull(stats.getInsightGeneratedAt());
+        verify(dailyStatisticsRepository).save(stats);
+        verify(telegramService).sendMessage(contains("Daily Trading Summary"));
+    }
+
+    @Test
+    void generateInsightAsync_exceptionThrown_logsWarningAndContinues() {
+        // Test lines 317-320 - exception handling
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(1)
+                .winningTrades(0)
+                .losingTrades(1)
+                .winRate(0.0)
+                .realizedPnL(-50.0)
+                .maxDrawdown(50.0)
+                .profitFactor(0.0)
+                .avgHoldMinutes(3.0)
+                .signalsGenerated(1)
+                .signalsLong(0)
+                .signalsShort(1)
+                .newsVetoCount(0)
+                .cumulativePnL(-50.0)
+                .consecutiveWins(0)
+                .consecutiveLosses(1)
+                .build();
+
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenThrow(new RuntimeException("Network timeout"));
+
+        // Should not throw
+        assertDoesNotThrow(() -> service.generateInsightAsync(stats));
+        
+        // Verify no save or telegram sent
+        verify(dailyStatisticsRepository, never()).save(any());
+        verify(telegramService, never()).sendMessage(anyString());
+    }
+
+    @Test
+    void sendTelegramSummary_formatsAllStatsCorrectly() {
+        // Test lines 323, 337-346, 349-350
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(10)
+                .winningTrades(7)
+                .losingTrades(3)
+                .winRate(70.0)
+                .realizedPnL(1500.0)
+                .maxDrawdown(300.0)
+                .profitFactor(2.5)
+                .avgHoldMinutes(20.0)
+                .signalsGenerated(15)
+                .signalsLong(8)
+                .signalsShort(7)
+                .newsVetoCount(3)
+                .llamaInsight("Today showed excellent risk management with a strong win rate.")
+                .build();
+
+        service.sendTelegramSummary(stats);
+
+        verify(telegramService).sendMessage(argThat(message ->
+                message.contains("Daily Trading Summary") &&
+                message.contains(testDate.toString()) &&
+                message.contains(symbol) &&
+                message.contains("1500") &&
+                message.contains("10") &&
+                message.contains("W:7") &&
+                message.contains("L:3") &&
+                message.contains("70.0%") &&
+                message.contains("2.50") &&
+                message.contains("300") &&
+                message.contains("15") &&
+                message.contains("L:8") &&
+                message.contains("S:7") &&
+                message.contains("3") &&
+                message.contains("20.0") &&
+                message.contains("AI Insight") &&
+                message.contains("excellent risk management")
+        ));
+    }
+
+    @Test
+    void buildInsightPrompt_includesAllStatisticsFields() {
+        // Test lines 353, 377-393
+        DailyStatistics stats = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(8)
+                .winningTrades(5)
+                .losingTrades(3)
+                .winRate(62.5)
+                .realizedPnL(800.0)
+                .maxDrawdown(250.0)
+                .profitFactor(1.8)
+                .avgHoldMinutes(18.0)
+                .signalsGenerated(12)
+                .signalsLong(7)
+                .signalsShort(5)
+                .newsVetoCount(4)
+                .cumulativePnL(10000.0)
+                .consecutiveWins(3)
+                .consecutiveLosses(0)
+                .build();
+
+        String prompt = service.buildInsightPrompt(stats);
+
+        // Verify all statistics are included (lines 377-393)
+        assertTrue(prompt.contains(testDate.toString()));
+        assertTrue(prompt.contains(symbol));
+        assertTrue(prompt.contains("Total Trades: 8"));
+        assertTrue(prompt.contains("Wins: 5"));
+        assertTrue(prompt.contains("Losses: 3"));
+        assertTrue(prompt.contains("Win Rate: 62.5%"));
+        assertTrue(prompt.contains("800"));
+        assertTrue(prompt.contains("250"));
+        assertTrue(prompt.contains("1.80") || prompt.contains("1.8"));
+        assertTrue(prompt.contains("18.0"));
+        assertTrue(prompt.contains("Signals Generated: 12"));
+        assertTrue(prompt.contains("Long: 7"));
+        assertTrue(prompt.contains("Short: 5"));
+        assertTrue(prompt.contains("News Vetos: 4"));
+        assertTrue(prompt.contains("10000"));
+        assertTrue(prompt.contains("Consecutive Wins: 3"));
+        assertTrue(prompt.contains("Consecutive Losses: 0"));
+    }
+
+    @Test
+    void getStatisticsSummary_filtersNullRealizedPnL() {
+        // Test line 406
+        DailyStatistics statWithNullPnL = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(2)
+                .winRate(50.0)
+                .realizedPnL(null)
+                .build();
+
+        DailyStatistics statWithPnL = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(3)
+                .winRate(66.67)
+                .realizedPnL(300.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(statWithNullPnL, statWithPnL));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        // Only statWithPnL should be counted for totalPnL
+        assertEquals(300.0, summary.get("totalPnL"));
+    }
+
+    @Test
+    void getStatisticsSummary_filtersNullTotalTrades() {
+        // Test line 411
+        DailyStatistics statWithNullTrades = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(null)
+                .winRate(0.0)
+                .realizedPnL(0.0)
+                .build();
+
+        DailyStatistics statWithTrades = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(4)
+                .winRate(75.0)
+                .realizedPnL(400.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(statWithNullTrades, statWithTrades));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        assertEquals(4, summary.get("totalTrades"));
+    }
+
+    @Test
+    void getStatisticsSummary_filtersNullWinRateAndZeroTrades() {
+        // Test line 416
+        DailyStatistics statWithNullWinRate = DailyStatistics.builder()
+                .tradeDate(testDate)
+                .symbol(symbol)
+                .totalTrades(5)
+                .winRate(null)
+                .realizedPnL(100.0)
+                .build();
+
+        DailyStatistics statWithZeroTrades = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .symbol(symbol)
+                .totalTrades(0)
+                .winRate(0.0)
+                .realizedPnL(0.0)
+                .build();
+
+        DailyStatistics statWithValidWinRate = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .symbol(symbol)
+                .totalTrades(6)
+                .winRate(83.33)
+                .realizedPnL(500.0)
+                .build();
+
+        when(dailyStatisticsRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateDesc(
+                anyString(), any(), any()))
+                .thenReturn(Arrays.asList(statWithNullWinRate, statWithZeroTrades, statWithValidWinRate));
+
+        Map<String, Object> summary = service.getStatisticsSummary(symbol, testDate.minusDays(7), testDate);
+
+        // Only statWithValidWinRate should be counted for avgWinRate
+        assertEquals(83.33, summary.get("avgWinRate"));
+    }
+
+    @Test
+    void calculateStatisticsForDay_filtersNullRealizedPnLInStreams() {
+        // Test line 120 - filter for realizedPnL in sum calculation
+        Trade tradeWithPnL1 = Trade.builder()
+                .realizedPnL(200.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade tradeWithNullPnL = Trade.builder()
+                .realizedPnL(null)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade tradeWithPnL2 = Trade.builder()
+                .realizedPnL(-50.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any()))
+                .thenReturn(Arrays.asList(tradeWithPnL1, tradeWithNullPnL, tradeWithPnL2));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        // realizedPnL should be 200 - 50 = 150 (null trade excluded)
+        assertEquals(150.0, stats.getRealizedPnL());
+        assertEquals(3, stats.getTotalTrades());
+        assertEquals(1, stats.getWinningTrades());
+        assertEquals(2, stats.getLosingTrades()); // null PnL counts as not winning
+    }
+
+    @Test
+    void calculateStatisticsForDay_withNullHoldDuration_handlesGracefully() {
+        Trade tradeWithHoldTime = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .holdDurationMinutes(25)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        Trade tradeWithNullHoldTime = Trade.builder()
+                .realizedPnL(50.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .holdDurationMinutes(null)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any()))
+                .thenReturn(Arrays.asList(tradeWithHoldTime, tradeWithNullHoldTime));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        // Only trade with hold time should be counted
+        assertEquals(25.0, stats.getAvgHoldMinutes());
+        assertEquals(25, stats.getMaxHoldMinutes());
+        assertEquals(25, stats.getMinHoldMinutes());
+        assertEquals(25, stats.getTimeInMarketMinutes());
+    }
+
+    @Test
+    void calculateStatisticsForDay_consecutiveWins_breaksOnNullPnL() {
+        Trade winningTrade = Trade.builder()
+                .realizedPnL(100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevWin = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(50.0)
+                .build();
+        
+        DailyStatistics prevNull = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .realizedPnL(null) // Null breaks the streak
+                .build();
+        
+        DailyStatistics prevWin2 = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(3))
+                .realizedPnL(75.0)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(List.of(winningTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt()))
+                .thenReturn(Arrays.asList(prevWin, prevNull, prevWin2));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        // Streak should be 2 (today + prevWin), broken by null
+        assertEquals(2, stats.getConsecutiveWins());
+    }
+
+    @Test
+    void calculateStatisticsForDay_consecutiveLosses_breaksOnNullPnL() {
+        Trade losingTrade = Trade.builder()
+                .realizedPnL(-100.0)
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevLoss = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(-50.0)
+                .build();
+        
+        DailyStatistics prevNull = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(2))
+                .realizedPnL(null) // Null breaks the streak
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(List.of(losingTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt()))
+                .thenReturn(Arrays.asList(prevLoss, prevNull));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        // Streak should be 2 (today + prevLoss), broken by null
+        assertEquals(2, stats.getConsecutiveLosses());
+    }
+
+    @Test
+    void calculateStatisticsForDay_zeroPnLDay_resetsWinStreak() {
+        Trade breakEvenTrade = Trade.builder()
+                .realizedPnL(0.0) // Zero P&L - not a win
+                .status(Trade.TradeStatus.CLOSED)
+                .symbol(symbol)
+                .mode(Trade.TradingMode.SIMULATION)
+                .build();
+
+        DailyStatistics prevWin = DailyStatistics.builder()
+                .tradeDate(testDate.minusDays(1))
+                .realizedPnL(100.0)
+                .build();
+
+        when(tradeRepository.findByTimestampBetween(any(), any())).thenReturn(List.of(breakEvenTrade));
+        when(signalRepository.findByTimestampBetweenOrderByTimestampDesc(any(), any())).thenReturn(Collections.emptyList());
+        when(dailyStatisticsRepository.sumPnLSince(anyString(), any())).thenReturn(0.0);
+        when(dailyStatisticsRepository.sumTradesSince(anyString(), any())).thenReturn(0L);
+        when(dailyStatisticsRepository.findRecentBySymbol(anyString(), anyInt()))
+                .thenReturn(List.of(prevWin));
+
+        DailyStatistics stats = service.calculateStatisticsForDay(testDate, symbol);
+
+        // Zero P&L day is not a win, so streak should be 0
+        assertEquals(0, stats.getConsecutiveWins());
+        assertEquals(0, stats.getConsecutiveLosses());
+    }
 }

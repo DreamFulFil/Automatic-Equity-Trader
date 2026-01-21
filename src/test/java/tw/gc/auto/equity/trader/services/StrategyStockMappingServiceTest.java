@@ -166,6 +166,38 @@ class StrategyStockMappingServiceTest {
     }
     
     @Test
+    void getStockPerformanceSummary_withNullSharpeRatio_shouldHandleAverage() {
+        // Test for line 141: null Sharpe ratio handling in average calculation
+        // Create mapping with non-null best sharpe (for Map.of) but null in another mapping
+        StrategyStockMapping mappingWithSharpe = StrategyStockMapping.builder()
+            .symbol("2330.TW")
+            .stockName("TSMC")
+            .strategyName("BestStrategy")
+            .sharpeRatio(2.0)  // non-null for best
+            .riskLevel("LOW")
+            .build();
+        
+        StrategyStockMapping mappingWithNullSharpe = StrategyStockMapping.builder()
+            .symbol("2330.TW")
+            .stockName("TSMC")
+            .strategyName("NullSharpeStrategy")
+            .sharpeRatio(null)  // null Sharpe ratio - tests line 141
+            .riskLevel("MEDIUM")
+            .build();
+        
+        when(mappingRepository.findBySymbolOrderBySharpeRatioDesc("2330.TW"))
+            .thenReturn(Arrays.asList(mappingWithSharpe, mappingWithNullSharpe));
+        
+        Map<String, Object> summary = mappingService.getStockPerformanceSummary("2330.TW");
+        
+        assertEquals("2330.TW", summary.get("symbol"));
+        assertEquals("BestStrategy", summary.get("bestStrategy"));
+        // Line 141: m.getSharpeRatio() != null ? m.getSharpeRatio() : 0
+        // Average of 2.0 and 0 = 1.0
+        assertEquals(1.0, summary.get("averageSharpe"));
+    }
+    
+    @Test
     void getStockPerformanceSummary_withNoMappings_shouldReturnMessage() {
         when(mappingRepository.findBySymbolOrderBySharpeRatioDesc("2330.TW"))
             .thenReturn(Arrays.asList());

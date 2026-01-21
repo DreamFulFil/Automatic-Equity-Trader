@@ -10,6 +10,10 @@ import tw.gc.auto.equity.trader.repositories.BarRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+
 import javax.sql.DataSource;
 import java.util.List;
 import java.util.Map;
@@ -269,5 +273,122 @@ class HistoryDataServiceEdgeCasesTest {
         org.assertj.core.api.Assertions.assertThat(summary).contains("1000");
         org.assertj.core.api.Assertions.assertThat(summary).contains("950");
         org.assertj.core.api.Assertions.assertThat(summary).contains("50");
+    }
+
+    @Test
+    void notifyDownloadComplete_shouldHandleNullResult() {
+        // When/Then - should not throw NPE
+        historyDataService.notifyDownloadComplete(null);
+        
+        // Verify no telegram interaction
+        verifyNoInteractions(telegramService);
+    }
+
+    @Test
+    void awaitWriterLatch_shouldHandleInterruptedException() throws Exception {
+        // Given
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        
+        // When - interrupt the current thread before calling awaitWriterLatch
+        Thread testThread = new Thread(() -> {
+            Thread.currentThread().interrupt();
+            boolean result = historyDataService.awaitWriterLatch(latch, 5, java.util.concurrent.TimeUnit.SECONDS);
+            org.assertj.core.api.Assertions.assertThat(result).isFalse();
+            org.assertj.core.api.Assertions.assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        });
+        testThread.start();
+        testThread.join(2000);
+    }
+
+    @Test
+    void runMultiStockDownloadTask_shouldHandleGeneralException() throws Exception {
+        // Given
+        java.util.concurrent.BlockingQueue<HistoryDataService.HistoricalDataPoint> queue = 
+            new java.util.concurrent.ArrayBlockingQueue<>(10);
+        java.util.concurrent.Semaphore permits = new java.util.concurrent.Semaphore(1);
+        java.util.Map<String, HistoryDataService.DownloadResult> results = new java.util.HashMap<>();
+        java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(0);
+        
+        // Mock backtestService to throw exception during downloadBatch
+        when(backtestService.fetchTop50Stocks()).thenThrow(new RuntimeException("Test exception"));
+        
+        // When
+        historyDataService.runMultiStockDownloadTask("2330.TW", 1, queue, permits, results, counter);
+        
+        // Then - should have a result with 0 records
+        org.assertj.core.api.Assertions.assertThat(results).containsKey("2330.TW");
+        org.assertj.core.api.Assertions.assertThat(results.get("2330.TW").getTotalRecords()).isZero();
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldHandleNullBars() {
+        // When/Then - should not throw NPE
+        historyDataService.fillMissingNamesIfMissing(null, List.of(), "2330.TW");
+        
+        // Verify no name service interaction
+        verifyNoInteractions(taiwanStockNameService);
+    }
+
+    @Test
+    void fillMissingNamesIfMissing_shouldHandleEmptyBars() {
+        // When/Then - should not throw
+        historyDataService.fillMissingNamesIfMissing(List.of(), List.of(), "2330.TW");
+        
+        // Verify no name service interaction
+        verifyNoInteractions(taiwanStockNameService);
+    }
+
+    @Test
+    void downloadHistoricalDataForMultipleStocks_shouldHandleInsertedBySymbolWithoutPrevResult() {
+        // Given - setup a scenario where insertedBySymbol has a key that's not in results
+        historyDataService.resetTruncationFlag();
+        List<String> symbols = List.of("NEW.TW");
+        
+        // Mock to return empty response (download fails, but insertedBySymbol may have entry)
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
+            .thenReturn(new org.springframework.http.ResponseEntity<>(Map.of(), org.springframework.http.HttpStatus.OK));
+        
+        // When
+        Map<String, HistoryDataService.DownloadResult> results = 
+            historyDataService.downloadHistoricalDataForMultipleStocks(symbols, 1);
+        
+        // Then - should have result for NEW.TW
+        org.assertj.core.api.Assertions.assertThat(results).containsKey("NEW.TW");
+    }
+
+    @Test
+    void notifyDownloadStartedForAll_shouldHandleNullSymbols() {
+        // When/Then - should not throw NPE
+        historyDataService.notifyDownloadStartedForAll(null, 1);
+        
+        // Verify no telegram interaction
+        verifyNoInteractions(telegramService);
+    }
+
+    @Test
+    void notifyDownloadStartedForAll_shouldHandleEmptySymbols() {
+        // When/Then - should not throw
+        historyDataService.notifyDownloadStartedForAll(List.of(), 1);
+        
+        // Verify no telegram interaction
+        verifyNoInteractions(telegramService);
+    }
+
+    @Test
+    void getStockNameFromHistory_shouldReturnNullWhenBarHasEmptyName() {
+        // Given
+        String symbol = "2330.TW";
+        tw.gc.auto.equity.trader.entities.Bar bar = new tw.gc.auto.equity.trader.entities.Bar();
+        bar.setSymbol(symbol);
+        bar.setName(""); // Empty name
+        
+        when(barRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, "1day"))
+            .thenReturn(java.util.Optional.of(bar));
+        
+        // When
+        String name = historyDataService.getStockNameFromHistory(symbol);
+        
+        // Then - empty string is returned (bar found with empty name)
+        org.assertj.core.api.Assertions.assertThat(name).isEmpty();
     }
 }

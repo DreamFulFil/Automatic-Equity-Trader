@@ -56,18 +56,56 @@ class StrategyImplTest {
 
                 s.reset();
 
-                for (int i = 0; i < 60; i++) {
-                    double price = 100.0 + (i * 0.3) + Math.sin(i / 3.0) * 3.0;
+                // Drive multiple market regimes to cover both sides of common decision branches
+                // (warm-up, trend, mean reversion, spikes, volume=0 edge cases).
+                for (int i = 0; i < 320; i++) {
+                    double price;
+                    if (i < 60) {
+                        price = 100.0; // flat (stdDev=0 branches)
+                    } else if (i < 120) {
+                        price = 100.0 + (i - 60) * 1.2; // strong uptrend
+                    } else if (i < 180) {
+                        price = 172.0 - (i - 120) * 1.5; // strong downtrend
+                    } else if (i < 240) {
+                        price = 80.0 + (i - 180) * 3.0; // spike up
+                    } else if (i < 270) {
+                        price = 100.0; // long flat
+                    } else if (i == 270) {
+                        price = 50.0; // extreme undervaluation
+                    } else if (i < 300) {
+                        price = 100.0; // revert to mean
+                    } else if (i == 300) {
+                        price = 200.0; // extreme overvaluation
+                    } else {
+                        price = 100.0; // revert to mean
+                    }
+
+                    long volume = (i % 25 == 0) ? 0L : (1000L + i);
                     MarketData md = MarketData.builder()
                         .symbol("TEST")
                         .name("TEST")
-                        .timestamp(LocalDateTime.now().minusMinutes(60 - i))
+                        .timestamp(LocalDateTime.now().minusMinutes(320 - i))
                         .timeframe(MarketData.Timeframe.MIN_1)
-                        .open(price)
-                        .high(price * 1.01)
-                        .low(price * 0.99)
+                        .open(price * 0.99)
+                        .high(price * ((i % 10 == 0) ? 1.25 : 1.01))
+                        .low(price * ((i % 10 == 0) ? 0.75 : 0.99))
                         .close(price)
-                        .volume(1000L + i)
+                        .volume(volume)
+                        .sma20(price)
+                        .sma50(price)
+                        .ema12(price)
+                        .ema26(price)
+                        .rsi(55.0)
+                        .macdLine(0.1)
+                        .macdSignal(0.05)
+                        .macdHistogram(0.05)
+                        .bollingerUpper(price * 1.02)
+                        .bollingerLower(price * 0.98)
+                        .bollingerMiddle(price)
+                        .atr(1.0)
+                        .vwap(price)
+                        .volumeSma(1000.0)
+                        .momentumPct(0.01)
                         .assetType(MarketData.AssetType.STOCK)
                         .build();
 
@@ -84,6 +122,26 @@ class StrategyImplTest {
                         p.setPosition(md.getSymbol(), -1);
                         p.setEntryPrice(md.getSymbol(), md.getClose());
                     }
+                }
+
+                // Extra scenario: all-zero volume to hit vwap/avg-volume fallback branches.
+                for (int i = 0; i < 80; i++) {
+                    double price = (i < 40) ? 100.0 : 120.0;
+                    MarketData md = MarketData.builder()
+                        .symbol("ZERO_VOL")
+                        .name("ZERO_VOL")
+                        .timestamp(LocalDateTime.now().minusMinutes(80 - i))
+                        .timeframe(MarketData.Timeframe.MIN_1)
+                        .open(price)
+                        .high(price)
+                        .low(price)
+                        .close(price)
+                        .volume(0L)
+                        .assetType(MarketData.AssetType.STOCK)
+                        .build();
+
+                    TradeSignal sig = s.execute(p, md);
+                    assertNotNull(sig);
                 }
             } catch (Exception e) {
                 System.err.println("Skipping " + clsName + " due to: " + e.getClass().getSimpleName() + " -> " + e.getMessage());
@@ -132,9 +190,10 @@ class StrategyImplTest {
             }
             return arr;
         }
-        if (t == int.class || t == Integer.class) return 14;
+        if (t == int.class || t == Integer.class) return 20;
         if (t == long.class || t == Long.class) return 1000L;
-        if (t == double.class || t == Double.class) return 2.0;
+        // Prefer small thresholds (many strategies treat doubles as percentages/thresholds)
+        if (t == double.class || t == Double.class) return 0.05;
         if (t == boolean.class || t == Boolean.class) return false;
         if (t == String.class) return "TEST";
         if (t == BigDecimal.class) return BigDecimal.ONE;

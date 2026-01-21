@@ -244,6 +244,20 @@ public class EarningsBlackoutServiceTest {
     }
 
     @Test
+    void tryFetchWithRetry_interruptedDuringBackoff_returnsNull() throws Exception {
+        earningsProperties.getRefresh().setEnabled(true);
+        when(restTemplate.getForObject(eq("http://localhost:8888/earnings/scrape"), eq(String.class)))
+                .thenThrow(new RuntimeException("boom"));
+
+        Thread.currentThread().interrupt();
+        @SuppressWarnings("unchecked")
+        Map<String, List<LocalDate>> result = (Map<String, List<LocalDate>>) ReflectionTestUtils.invokeMethod(
+                service, "tryFetchWithRetry", Set.of("TSM"));
+        assertNull(result);
+        assertTrue(Thread.interrupted());
+    }
+
+    @Test
     void manualRefresh_returnsEmpty_whenLockHeldByOtherThread() throws Exception {
         earningsProperties.getRefresh().setEnabled(true);
         java.util.concurrent.locks.ReentrantLock lock = (java.util.concurrent.locks.ReentrantLock)
@@ -520,6 +534,45 @@ public class EarningsBlackoutServiceTest {
             verify(metaRepository, atLeastOnce()).save(any(EarningsBlackoutMeta.class));
         } finally {
             java.nio.file.Files.move(backup, path);
+        }
+    }
+
+    // ==================== Coverage tests for lines 232, 246, 250 ====================
+    
+    @Test
+    void tryFetchWithRetry_retryLoopExecuted() {
+        // Line 232: for (int attempt = 1; attempt <= BACKOFFS.length + 1; attempt++)
+        earningsProperties.getRefresh().setEnabled(true);
+        
+        // Return empty response to trigger retry loop (line 238)
+        when(restTemplate.getForObject(eq("http://localhost:8888/earnings/scrape"), eq(String.class)))
+                .thenReturn("{}"); // Empty response - no dates
+        
+        // Test via manualRefresh which calls tryFetchWithRetry
+        // Use Thread.currentThread().interrupt() to trigger the InterruptedException path (lines 246-250)
+        Thread.currentThread().interrupt();
+        try {
+            assertTrue(service.manualRefresh().isEmpty());
+        } finally {
+            Thread.interrupted(); // Clear interrupt flag
+        }
+    }
+    
+    @Test
+    void tryFetchWithRetry_interruptedDuringBackoff_shouldBreak() {
+        // Lines 246-250: InterruptedException during Thread.sleep breaks out of loop
+        earningsProperties.getRefresh().setEnabled(true);
+        
+        // First attempt fails with exception, then interrupted during backoff
+        when(restTemplate.getForObject(eq("http://localhost:8888/earnings/scrape"), eq(String.class)))
+                .thenThrow(new RuntimeException("Network error"));
+        
+        Thread.currentThread().interrupt();
+        try {
+            Optional<EarningsBlackoutMeta> result = service.manualRefresh();
+            assertTrue(result.isEmpty());
+        } finally {
+            Thread.interrupted(); // Clear interrupt flag
         }
     }
 }

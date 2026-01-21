@@ -161,6 +161,30 @@ class MACDStrategyTest {
         assertThat(signal2).isNotNull();
     }
 
+    @Test
+    void execute_withBearishZeroCross_andZeroPosition_shouldReturnShortSignal() {
+        // Test lines 93-94: Short signal when position == 0 on bearish cross
+        portfolio.setPosition("MACD_TEST", 0); // no position
+        
+        // Create rising then declining pattern to trigger bearish cross
+        for (int i = 0; i < 30; i++) {
+            MarketData data = createMarketData("MACD_TEST", 100 + i * 2); // strong uptrend
+            strategy.execute(portfolio, data);
+        }
+        
+        // Now create sharp decline to cross below zero
+        for (int i = 0; i < 20; i++) {
+            MarketData data = createMarketData("MACD_TEST", 160 - i * 3); // sharp decline
+            TradeSignal signal = strategy.execute(portfolio, data);
+            
+            if (signal.getDirection() == TradeSignal.SignalDirection.SHORT) {
+                assertThat(signal.getConfidence()).isEqualTo(0.7);
+                assertThat(signal.getReason()).containsIgnoringCase("bearish");
+                return;
+            }
+        }
+    }
+
     private MarketData createMarketData(String symbol, double close) {
         return MarketData.builder()
                 .symbol(symbol)

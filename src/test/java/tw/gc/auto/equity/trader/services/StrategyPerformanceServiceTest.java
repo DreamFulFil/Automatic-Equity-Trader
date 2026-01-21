@@ -159,6 +159,75 @@ class StrategyPerformanceServiceTest {
         assertEquals(100.0, result.getWinRatePct(), 0.01);
         assertEquals(500.0, result.getTotalPnl(), 0.01);
         assertEquals(0.0, result.getProfitFactor(), 0.01); // No losses
+        assertEquals(0.0, result.getAvgLoss(), 0.01);
+    }
+
+    @Test
+    void testCalculatePerformance_singleTrade_setsZeroSharpe() throws Exception {
+        Trade trade = Trade.builder()
+            .id(1L)
+            .timestamp(periodStart.plusHours(1))
+            .strategyName("RSIStrategy")
+            .realizedPnL(100.0)
+            .status(Trade.TradeStatus.CLOSED)
+            .build();
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(List.of(trade));
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> params = new HashMap<>();
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            params
+        );
+
+        assertNotNull(result);
+        assertEquals(0.0, result.getSharpeRatio(), 0.01);
+    }
+
+    @Test
+    void testCalculatePerformance_whenParametersSerializationFails_usesEmptyJson() throws Exception {
+        List<Trade> trades = new ArrayList<>();
+        trades.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart.plusHours(1))
+            .strategyName("RSIStrategy")
+            .realizedPnL(100.0)
+            .status(Trade.TradeStatus.CLOSED)
+            .build());
+        trades.add(Trade.builder()
+            .id(2L)
+            .timestamp(periodStart.plusHours(2))
+            .strategyName("RSIStrategy")
+            .realizedPnL(-50.0)
+            .status(Trade.TradeStatus.CLOSED)
+            .build());
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(trades);
+        when(objectMapper.writeValueAsString(any())).thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("boom") {});
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> params = new HashMap<>();
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            params
+        );
+
+        assertNotNull(result);
+        assertEquals("{}", result.getParametersJson());
     }
 
     @Test
@@ -271,5 +340,325 @@ class StrategyPerformanceServiceTest {
 
         assertNotNull(performance);
         verify(performanceRepository).save(any(StrategyPerformance.class));
+    }
+
+    // ==================== Coverage tests for lines 60, 63, 67, 79, 137, 140, 144, 166, 189 ====================
+
+    @Test
+    void testCalculatePerformance_ZeroTrades_WinRateShouldBeZero() throws Exception {
+        // Lines 60, 67: totalTrades == 0 edge cases
+        List<Trade> singleTrade = new ArrayList<>();
+        Trade trade = Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(null) // null PnL
+            .status(Trade.TradeStatus.OPEN)
+            .build();
+        singleTrade.add(trade);
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(singleTrade);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> params = new HashMap<>();
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            params
+        );
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalTrades());
+        assertEquals(0, result.getWinningTrades());
+    }
+
+    @Test
+    void testCalculatePerformance_FilterNullPnL() throws Exception {
+        // Line 63: Filter trades with null realizedPnL
+        List<Trade> tradesWithNullPnL = new ArrayList<>();
+        tradesWithNullPnL.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(100.0)
+            .build());
+        tradesWithNullPnL.add(Trade.builder()
+            .id(2L)
+            .timestamp(periodStart.plusDays(1))
+            .strategyName("RSIStrategy")
+            .realizedPnL(null) // null PnL - should be filtered
+            .build());
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(tradesWithNullPnL);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        assertEquals(100.0, result.getTotalPnl(), 0.01);
+    }
+
+    @Test
+    void testCalculatePerformance_EmptyWinningPnls() throws Exception {
+        // Line 79: avgWin when winningPnls.isEmpty()
+        List<Trade> allLosses = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            allLosses.add(Trade.builder()
+                .id((long) i)
+                .timestamp(periodStart.plusDays(i))
+                .strategyName("RSIStrategy")
+                .realizedPnL(-50.0) // All losses
+                .status(Trade.TradeStatus.CLOSED)
+                .build());
+        }
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(allLosses);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        assertEquals(0.0, result.getWinRatePct(), 0.01);
+        assertEquals(0.0, result.getAvgWin(), 0.01);
+    }
+
+    @Test
+    void testCalculateSharpeRatio_SingleTrade_ShouldReturnZero() throws Exception {
+        // Line 137: trades.size() < 2 returns 0.0
+        List<Trade> singleTrade = new ArrayList<>();
+        singleTrade.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(100.0)
+            .build());
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(singleTrade);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        assertEquals(0.0, result.getSharpeRatio(), 0.01);
+    }
+
+    @Test
+    void testCalculateSharpeRatio_EmptyReturnsAfterFilter() throws Exception {
+        // Lines 140, 144: Filter returns null PnL, resulting in empty returns
+        List<Trade> tradesWithNullPnl = new ArrayList<>();
+        tradesWithNullPnl.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(null)
+            .build());
+        tradesWithNullPnl.add(Trade.builder()
+            .id(2L)
+            .timestamp(periodStart.plusDays(1))
+            .strategyName("RSIStrategy")
+            .realizedPnL(null)
+            .build());
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(tradesWithNullPnl);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        assertEquals(0.0, result.getSharpeRatio(), 0.01);
+    }
+
+    @Test
+    void testCalculateMaxDrawdown_EmptyTrades_ShouldReturnZero() throws Exception {
+        // Line 166: trades.isEmpty() returns 0.0
+        // This is already covered by testCalculatePerformance_NoTrades, but let's be explicit
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("EmptyStrategy"), any(), any()
+        )).thenReturn(new ArrayList<>());
+
+        StrategyPerformance result = service.calculatePerformance(
+            "EmptyStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNull(result); // Returns null when no trades
+    }
+
+    @Test
+    void testCalculateMaxDrawdown_WithDrawdown() throws Exception {
+        // Line 189: Calculate drawdown percentage
+        List<Trade> tradesWithDrawdown = new ArrayList<>();
+        tradesWithDrawdown.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(1000.0) // Win
+            .build());
+        tradesWithDrawdown.add(Trade.builder()
+            .id(2L)
+            .timestamp(periodStart.plusDays(1))
+            .strategyName("RSIStrategy")
+            .realizedPnL(-500.0) // Loss - creates drawdown
+            .build());
+        tradesWithDrawdown.add(Trade.builder()
+            .id(3L)
+            .timestamp(periodStart.plusDays(2))
+            .strategyName("RSIStrategy")
+            .realizedPnL(-300.0) // Another loss
+            .build());
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(tradesWithDrawdown);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        assertTrue(result.getMaxDrawdownPct() > 0); // Should have some drawdown
+    }
+
+    // ==================== Coverage tests for lines 60, 67, 166 ====================
+    
+    @Test
+    void testCalculatePerformance_ZeroTotalTrades_ReturnsZeroWinRateAndAvgPnl() throws Exception {
+        // Lines 60, 67: totalTrades > 0 ? calculation : 0.0
+        // When trades have only null PnL values, the counts/sums are still processed
+        List<Trade> tradesAllNullPnL = new ArrayList<>();
+        tradesAllNullPnL.add(Trade.builder()
+            .id(1L)
+            .timestamp(periodStart)
+            .strategyName("RSIStrategy")
+            .realizedPnL(null)
+            .build());
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("RSIStrategy"), any(), any()
+        )).thenReturn(tradesAllNullPnL);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(performanceRepository.save(any(StrategyPerformance.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        StrategyPerformance result = service.calculatePerformance(
+            "RSIStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNotNull(result);
+        // With 1 trade (even with null PnL), totalTrades = 1
+        // Line 60: winRate = 1 > 0 ? (0 * 100.0 / 1) : 0.0 = 0.0
+        // Line 67: avgTradePnl = 1 > 0 ? (0.0 / 1) : 0.0 = 0.0
+        assertEquals(0.0, result.getWinRatePct(), 0.01);
+        assertEquals(0.0, result.getAvgTradePnl(), 0.01);
+    }
+
+    @Test
+    void testCalculateMaxDrawdown_emptyTradesList_returnsZero() throws Exception {
+        // Line 166: if (trades.isEmpty()) return 0.0
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("EmptyStrategy"), any(), any()
+        )).thenReturn(new ArrayList<>());
+
+        StrategyPerformance result = service.calculatePerformance(
+            "EmptyStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        // Returns null when no trades (line 50 check)
+        assertNull(result);
+    }
+
+    @Test
+    void testCalculatePerformance_EdgeCaseDivisorZero() throws Exception {
+        // Line 60: winRate when totalTrades == 0 (covered by null trades path)
+        // Line 67: avgTradePnl when totalTrades == 0
+        List<Trade> emptyTrades = new ArrayList<>();
+
+        when(tradeRepository.findByStrategyNameAndTimestampBetween(
+            eq("EmptyStrategy"), any(), any()
+        )).thenReturn(emptyTrades);
+
+        StrategyPerformance result = service.calculatePerformance(
+            "EmptyStrategy",
+            StrategyPerformance.PerformanceMode.SHADOW,
+            periodStart,
+            periodEnd,
+            "2454.TW",
+            new HashMap<>()
+        );
+
+        assertNull(result); // Returns null when no trades
     }
 }
