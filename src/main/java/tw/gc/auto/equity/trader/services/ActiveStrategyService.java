@@ -93,6 +93,36 @@ public class ActiveStrategyService {
         Double totalReturnPct,
         Double winRatePct
     ) {
+        switchStrategyWithStock(
+            strategyName,
+            parameters,
+            reason,
+            autoSwitched,
+            sharpeRatio,
+            maxDrawdownPct,
+            totalReturnPct,
+            winRatePct,
+            null,
+            null
+        );
+    }
+
+    /**
+     * Switch to a new strategy with performance metrics and persist the active stock selection.
+     */
+    @Transactional
+    public void switchStrategyWithStock(
+        String strategyName,
+        Map<String, Object> parameters,
+        String reason,
+        boolean autoSwitched,
+        Double sharpeRatio,
+        Double maxDrawdownPct,
+        Double totalReturnPct,
+        Double winRatePct,
+        String stockSymbol,
+        String stockName
+    ) {
         ActiveStrategyConfig config = getActiveStrategy();
         
         log.info("🔄 Switching strategy: {} → {} ({})", 
@@ -106,6 +136,10 @@ public class ActiveStrategyService {
         config.setMaxDrawdownPct(maxDrawdownPct);
         config.setTotalReturnPct(totalReturnPct);
         config.setWinRatePct(winRatePct);
+        if (stockSymbol != null && !stockSymbol.isBlank()) {
+            config.setStockSymbol(stockSymbol);
+            config.setStockName(stockName);
+        }
         
         try {
             String parametersJson = objectMapper.writeValueAsString(parameters);

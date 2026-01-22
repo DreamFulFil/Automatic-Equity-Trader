@@ -3,12 +3,31 @@
 ## Context
 This prompt guides the AI agent through downloading historical data for Taiwan stocks using the Automatic-Equity-Trader system.
 
+## Required Input: `JASYPT_PASSWORD`
+
+This prompt assumes you will provide `JASYPT_PASSWORD` in the shell environment before running any scripts.
+
+- Why: the Java service decrypts secrets in `application.yml` via Jasypt at runtime.
+- If missing: the non-interactive runner aborts early with a clear error message.
+
+Fish example:
+```fish
+# Provide the password for this shell session only
+set -x JASYPT_PASSWORD '<your-secret>'
+```
+
+Verify it is set:
+```fish
+test -n "$JASYPT_PASSWORD"; and echo "✅ JASYPT_PASSWORD is set"; or echo "❌ JASYPT_PASSWORD is missing"
+```
+
 **Non-interactive:** This document includes runnable, non-interactive fish scripts to automate the full download, verification of 5-year coverage, and auto-triggering of the backtest.
 
 **Runtime logs:** All runtime logs and temporary outputs are written to the repository's `logs/` directory (not `/tmp`).
 
 ## Prerequisites
-- The script will check that **JASYPT_PASSWORD** is exported in the environment and will abort with a clear message if it is missing.
+- You MUST export **JASYPT_PASSWORD** in the environment before running this prompt or any scripts here.
+    - The runner checks for it and aborts if it is missing.
 - **Years of data**: Number of years to download (default: 5; the script uses 5 if not specified)
 - Ensure Telegram credentials (bot token & chat id) are configured and enabled so the Java service can send notifications.
 
@@ -32,7 +51,7 @@ Use the provided executable fish script which kills/starts services, triggers th
 
 Usage:
 ```fish
-# Ensure JASYPT_PASSWORD is exported in this shell (example):
+# REQUIRED: ensure JASYPT_PASSWORD is exported in this shell (example):
 set -x JASYPT_PASSWORD '<your-secret>'
 # Run the script (non-interactive):
 fish scripts/operational/run_download_and_monitor.fish

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.data.Offset.offset;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -114,7 +115,9 @@ class BacktestServiceDataValidationTest {
         );
 
         assertThat(results).containsKey("ONE");
-        assertThat(results.get("ONE").getFinalEquity()).isEqualTo(10_000.0);
+        // With realistic fees/tax/slippage, a same-price open+close results in a small loss.
+        assertThat(results.get("ONE").getFinalEquity()).isLessThan(10_000.0);
+        assertThat(results.get("ONE").getFinalEquity()).isGreaterThan(0.0);
         // Position is opened and then closed at end-of-history, which counts as a trade even with pnl=0.
         assertThat(results.get("ONE").getTotalTrades()).isEqualTo(1);
     }
@@ -154,7 +157,7 @@ class BacktestServiceDataValidationTest {
     }
 
     @Test
-    void processSignal_shouldOpenShort_withDeterministicQuantity() throws Exception {
+    void processSignal_shortSignal_shouldNotOpenShortPositions_whenFlat() throws Exception {
         Portfolio p = Portfolio.builder()
             .positions(new HashMap<>())
             .entryPrices(new HashMap<>())
@@ -185,18 +188,14 @@ class BacktestServiceDataValidationTest {
         IStrategy strategy = mock(IStrategy.class);
         process.invoke(backtestService, strategy, p, data, TradeSignal.shortSignal(1.0, "short"), result);
 
-        // qty = (int) (10000 * 0.95 / 100) = 95
-        assertThat(p.getPosition("2330.TW")).isEqualTo(-95);
-        assertThat(p.getEntryPrice("2330.TW")).isEqualTo(100.0);
-        assertThat(p.getAvailableMargin()).isEqualTo(500.0);
+        // Backtest engine is long-only: SHORT does not open a short position.
+        assertThat(p.getPosition("2330.TW")).isZero();
+        assertThat(p.getEntryPrice("2330.TW")).isEqualTo(0.0);
+        assertThat(p.getAvailableMargin()).isEqualTo(10_000.0);
     }
 
     @Test
-    void processSignal_shouldCloseShort_correctPnLArithmetic_withoutOpeningLongWhenQtyZero() throws Exception {
-        // Pick values that ensure:
-        // - short opens with qty=1
-        // - closing at a much higher price yields loss
-        // - subsequent LONG does NOT open a new long because qty becomes 0
+    void processSignal_shortSignal_shouldCloseLong_andRealizePnL() throws Exception {
         Portfolio p = Portfolio.builder()
             .positions(new HashMap<>())
             .entryPrices(new HashMap<>())
@@ -220,22 +219,23 @@ class BacktestServiceDataValidationTest {
 
         IStrategy strategy = mock(IStrategy.class);
 
-        // Open short at 50: qty = (int)(99 * 0.95 / 50) = 1
+        // Open long at 50: qty = (int)(99 * 0.95 / 50) = 1
         MarketData open = MarketData.builder().symbol("2330.TW").close(50.0).timestamp(LocalDateTime.now()).build();
-        process.invoke(backtestService, strategy, p, open, TradeSignal.shortSignal(1.0, "short"), result);
-        assertThat(p.getPosition("2330.TW")).isEqualTo(-1);
-        assertThat(p.getAvailableMargin()).isEqualTo(49.0);
+        process.invoke(backtestService, strategy, p, open, TradeSignal.longSignal(1.0, "long"), result);
+        assertThat(p.getPosition("2330.TW")).isEqualTo(1);
+        // Includes buy slippage + buy fee
+        assertThat(p.getAvailableMargin()).isCloseTo(48.903714375, offset(1e-9));
 
-        // Close short at 100 via LONG; qty after close = (int)(99 * 0.95 / 100) = 0 -> no long opened
+        // Close long at 100 via SHORT
         MarketData close = MarketData.builder().symbol("2330.TW").close(100.0).timestamp(LocalDateTime.now()).build();
-        process.invoke(backtestService, strategy, p, close, TradeSignal.longSignal(1.0, "close-short"), result);
+        process.invoke(backtestService, strategy, p, close, TradeSignal.shortSignal(1.0, "close-long"), result);
 
-        // pnl = (50 - 100) * 1 = -50
+        // pnl includes sell slippage + sell fee + transaction tax + buy fee
         assertThat(p.getPosition("2330.TW")).isZero();
-        assertThat(p.getEquity()).isEqualTo(49.0);
-        assertThat(p.getAvailableMargin()).isEqualTo(99.0);
+        assertThat(p.getEquity()).isCloseTo(148.411435625, offset(1e-9));
+        assertThat(p.getAvailableMargin()).isCloseTo(148.411435625, offset(1e-9));
         assertThat(result.getTotalTrades()).isEqualTo(1);
-        assertThat(result.getTotalPnL()).isEqualTo(-50.0);
+        assertThat(result.getTotalPnL()).isCloseTo(49.411435625, offset(1e-9));
     }
 
     private static class NeutralStrategy implements IStrategy {

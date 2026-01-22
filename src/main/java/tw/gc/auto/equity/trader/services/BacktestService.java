@@ -65,6 +65,14 @@ public class BacktestService {
     private static final int BULK_INSERT_BATCH_SIZE = 500;
     private static final int FLUSH_TIMEOUT_MS = 1_000;
     private static final int MAX_CONCURRENT_BACKTESTS = 8;
+
+    // Backtest execution assumptions (Taiwan stocks): fees + tax + mild slippage.
+    // These constants intentionally make backtest results more realistic and prevent
+    // pathological compounding from extremely high-frequency trading.
+    private static final double BUY_FEE_RATE = 0.001425;   // 0.1425%
+    private static final double SELL_FEE_RATE = 0.001425;  // 0.1425%
+    private static final double SELL_TAX_RATE = 0.003;     // 0.3% (stock transaction tax)
+    private static final double SLIPPAGE_RATE = 0.0005;    // 0.05%
     
     private final BacktestResultRepository backtestResultRepository;
     private final MarketDataRepository marketDataRepository;
@@ -206,7 +214,7 @@ public class BacktestService {
             .dataPoints(dataPoints)
             .build();
         
-        backtestResultRepository.save(entity);
+        backtestResultRepository.save(java.util.Objects.requireNonNull(entity));
 
         // Also update the canonical strategy-stock mapping table so downstream
         // automation (auto-selection / shadow-mode) can use persisted mappings.
@@ -233,68 +241,111 @@ public class BacktestService {
         String symbol = data.getSymbol();
         int currentPos = p.getPosition(symbol);
         double price = data.getClose();
-        
-        // Simple execution logic (Market Orders)
-        if (signal.getDirection() == TradeSignal.SignalDirection.LONG && currentPos <= 0) {
-            // Close Short if any
-            if (currentPos < 0) {
-                double pnl = (p.getEntryPrice(symbol) - price) * Math.abs(currentPos);
-                p.setEquity(p.getEquity() + pnl);
-                p.setAvailableMargin(p.getAvailableMargin() + (price * Math.abs(currentPos)) + pnl);
-                p.setPosition(symbol, 0);
-                result.addTrade(pnl);
+
+        // Defensive: keep equity marked-to-market even if strategy returns null
+        if (signal == null || signal.getDirection() == null) {
+            markToMarket(p, symbol, price);
+            return;
+        }
+
+        // Backtest is long-only for Taiwan stocks:
+        // - LONG: enter if flat
+        // - SHORT: exit/close if long
+        if (signal.getDirection() == TradeSignal.SignalDirection.LONG) {
+            if (currentPos == 0) {
+                int qty = calculateQuantity(p, price);
+                if (qty > 0) {
+                    double execPrice = buyExecutionPrice(price);
+                    double grossCost = execPrice * qty;
+                    double fees = grossCost * BUY_FEE_RATE;
+                    double totalCost = grossCost + fees;
+
+                    if (totalCost <= p.getAvailableMargin()) {
+                        p.setAvailableMargin(p.getAvailableMargin() - totalCost);
+                        p.setPosition(symbol, qty);
+                        p.setEntryPrice(symbol, execPrice);
+                    }
+                }
             }
-            
-            // Open Long
-            int qty = calculateQuantity(p, price);
-            if (qty > 0) {
-                p.setAvailableMargin(p.getAvailableMargin() - (price * qty));
-                p.setPosition(symbol, qty);
-                p.setEntryPrice(symbol, price);
-            }
-            
-        } else if (signal.getDirection() == TradeSignal.SignalDirection.SHORT && currentPos >= 0) {
-            // Close Long if any
+        } else if (signal.getDirection() == TradeSignal.SignalDirection.SHORT) {
             if (currentPos > 0) {
-                double pnl = (price - p.getEntryPrice(symbol)) * currentPos;
-                p.setEquity(p.getEquity() + pnl);
-                p.setAvailableMargin(p.getAvailableMargin() + (price * currentPos) + pnl);
+                int qty = currentPos;
+                double execPrice = sellExecutionPrice(price);
+                double grossProceeds = execPrice * qty;
+                double fees = grossProceeds * SELL_FEE_RATE;
+                double tax = grossProceeds * SELL_TAX_RATE;
+                double netProceeds = grossProceeds - fees - tax;
+
+                double entryGross = p.getEntryPrice(symbol) * qty;
+                double entryFees = entryGross * BUY_FEE_RATE;
+                double pnl = netProceeds - (entryGross + entryFees);
+
+                p.setAvailableMargin(p.getAvailableMargin() + netProceeds);
                 p.setPosition(symbol, 0);
                 result.addTrade(pnl);
-            }
-            
-            // Open Short (assuming margin allowed)
-            int qty = calculateQuantity(p, price);
-            if (qty > 0) {
-                p.setAvailableMargin(p.getAvailableMargin() - (price * qty));
-                p.setPosition(symbol, -qty);
-                p.setEntryPrice(symbol, price);
             }
         }
+
+        markToMarket(p, symbol, price);
     }
     
     private void closeAllPositions(Portfolio p, MarketData data, InMemoryBacktestResult result) {
         String symbol = data.getSymbol();
         int currentPos = p.getPosition(symbol);
         double price = data.getClose();
-        
-        if (currentPos != 0) {
-            double pnl;
-            if (currentPos > 0) {
-                pnl = (price - p.getEntryPrice(symbol)) * currentPos;
-            } else {
-                pnl = (p.getEntryPrice(symbol) - price) * Math.abs(currentPos);
-            }
-            p.setEquity(p.getEquity() + pnl);
+
+        if (currentPos > 0) {
+            int qty = currentPos;
+            double execPrice = sellExecutionPrice(price);
+            double grossProceeds = execPrice * qty;
+            double fees = grossProceeds * SELL_FEE_RATE;
+            double tax = grossProceeds * SELL_TAX_RATE;
+            double netProceeds = grossProceeds - fees - tax;
+
+            double entryGross = p.getEntryPrice(symbol) * qty;
+            double entryFees = entryGross * BUY_FEE_RATE;
+            double pnl = netProceeds - (entryGross + entryFees);
+
+            p.setAvailableMargin(p.getAvailableMargin() + netProceeds);
             p.setPosition(symbol, 0);
             result.addTrade(pnl);
         }
+
+        // After closing, equity should be pure cash
+        p.setEquity(p.getAvailableMargin());
     }
     
     private int calculateQuantity(Portfolio p, double price) {
+        if (price <= 0) return 0;
+
         // Simple sizing: use 95% of available margin
         double budget = p.getAvailableMargin() * 0.95;
-        return (int) (budget / price);
+        if (budget <= 0) return 0;
+
+        // Account for estimated buy slippage + fees when sizing.
+        double execPrice = buyExecutionPrice(price);
+        double perShareAllIn = execPrice * (1.0 + BUY_FEE_RATE);
+        if (perShareAllIn <= 0) return 0;
+        return (int) (budget / perShareAllIn);
+    }
+
+    private double buyExecutionPrice(double midOrClosePrice) {
+        if (!Double.isFinite(midOrClosePrice) || midOrClosePrice <= 0) return 0.0;
+        return midOrClosePrice * (1.0 + SLIPPAGE_RATE);
+    }
+
+    private double sellExecutionPrice(double midOrClosePrice) {
+        if (!Double.isFinite(midOrClosePrice) || midOrClosePrice <= 0) return 0.0;
+        return midOrClosePrice * (1.0 - SLIPPAGE_RATE);
+    }
+
+    private void markToMarket(Portfolio p, String symbol, double price) {
+        int pos = p.getPosition(symbol);
+        double equity = p.getAvailableMargin();
+        if (pos > 0) {
+            equity += pos * price;
+        }
+        p.setEquity(equity);
     }
     
     @lombok.Data
@@ -725,7 +776,7 @@ public class BacktestService {
         Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
         
         // Start single global writer thread for BacktestResult persistence
-        Thread writerThread = Thread.ofPlatform()
+        Thread.ofPlatform()
             .name("BacktestResultWriter")
             .start(() -> {
                 try {

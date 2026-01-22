@@ -85,7 +85,18 @@ class AutoStrategySelectorTest {
         
         // Then
         verify(telegramService).sendMessage(contains("No backtest results"));
-        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+        verify(activeStrategyService, never()).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -103,7 +114,7 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then
-        verify(activeStrategyService).switchStrategy(
+        verify(activeStrategyService).switchStrategyWithStock(
             eq("BollingerBandStrategy"), 
             isNull(), 
             anyString(), 
@@ -111,7 +122,9 @@ class AutoStrategySelectorTest {
             eq(1.5),
             eq(-8.0),
             eq(15.0),
-            eq(60.0)
+            eq(60.0),
+            eq("2330.TW"),
+            eq("TSMC")
         );
         verify(activeStockService).setActiveStock("2330.TW");
     }
@@ -131,7 +144,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then
-        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+        verify(activeStrategyService, never()).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -252,7 +276,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - should switch because current combo not tested
-        verify(activeStrategyService).switchStrategy(anyString(), any(), anyString(), eq(true), any(), any(), any(), any());
+        verify(activeStrategyService).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            eq(true),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -268,7 +303,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - should switch because no current strategy
-        verify(activeStrategyService).switchStrategy(anyString(), any(), anyString(), eq(true), any(), any(), any(), any());
+        verify(activeStrategyService).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            eq(true),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -286,7 +332,18 @@ class AutoStrategySelectorTest {
         
         // Then - should skip because no valid results
         verify(telegramService).sendMessage(contains("No backtest results"));
-        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+        verify(activeStrategyService, never()).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -320,7 +377,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - should allow intraday strategy
-        verify(activeStrategyService).switchStrategy(eq("VWAPStrategy"), any(), anyString(), eq(true), any(), any(), any(), any());
+        verify(activeStrategyService).switchStrategyWithStock(
+            eq("VWAPStrategy"),
+            any(),
+            anyString(),
+            eq(true),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -369,10 +437,6 @@ class AutoStrategySelectorTest {
         BacktestResult shadowResult2 = createBacktestResult("2330.TW", "TSMC", "Strategy2", 14.0, 1.6, 62.0, -7.0); // Same stock as active
         
         when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(shadowResult1, shadowResult2));
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(
-            createMappingFromResult(shadowResult1),
-            createMappingFromResult(shadowResult2)
-        ));
         when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
         tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
@@ -517,17 +581,6 @@ class AutoStrategySelectorTest {
         activeMapping.setWinRatePct(60.0);
         activeMapping.setMaxDrawdownPct(-8.0);
         
-        // Shadow mapping also with null stockName
-        StrategyStockMapping shadowMapping = new StrategyStockMapping();
-        shadowMapping.setSymbol("2454.TW");
-        shadowMapping.setStockName(null);
-        shadowMapping.setStrategyName("ShadowStrategy");
-        shadowMapping.setTotalReturnPct(12.0);
-        shadowMapping.setSharpeRatio(1.3);
-        shadowMapping.setWinRatePct(58.0);
-        shadowMapping.setMaxDrawdownPct(-9.0);
-        
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(activeMapping, shadowMapping));
         when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
         when(backtestResultRepository.findAll()).thenReturn(Collections.emptyList());
         
@@ -572,9 +625,11 @@ class AutoStrategySelectorTest {
         intradayMapping.setWinRatePct(58.0);
         intradayMapping.setMaxDrawdownPct(-9.0);
         
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(activeMapping, intradayMapping));
         when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
-        when(backtestResultRepository.findAll()).thenReturn(Collections.emptyList());
+        // Populate-table reads from backtest_results; provide an intraday strategy that should be filtered out.
+        when(backtestResultRepository.findAll()).thenReturn(List.of(
+            createBacktestResult("2454.TW", "MediaTek", "VWAPStrategy", 12.0, 1.3, 58.0, -9.0)
+        ));
         
         tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
@@ -624,9 +679,12 @@ class AutoStrategySelectorTest {
         lowSharpeMapping.setWinRatePct(58.0);
         lowSharpeMapping.setMaxDrawdownPct(-9.0);
         
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(activeMapping, lowReturnMapping, lowSharpeMapping));
         when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
-        when(backtestResultRepository.findAll()).thenReturn(Collections.emptyList());
+        // Provide backtest_results that are below thresholds so no shadows are selected.
+        when(backtestResultRepository.findAll()).thenReturn(List.of(
+            createBacktestResult("2454.TW", "MediaTek", "LowReturnStrategy", 2.0, 1.3, 58.0, -9.0),
+            createBacktestResult("2317.TW", "Hon Hai", "LowSharpeStrategy", 12.0, 0.5, 58.0, -9.0)
+        ));
         
         tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
@@ -666,7 +724,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - should switch because new is > 10% better
-        verify(activeStrategyService).switchStrategy(eq("NewStrategy"), any(), anyString(), eq(true), any(), any(), any(), any());
+        verify(activeStrategyService).switchStrategyWithStock(
+            eq("NewStrategy"),
+            any(),
+            anyString(),
+            eq(true),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -689,7 +758,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - should NOT switch (< 10% better)
-        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+        verify(activeStrategyService, never()).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -779,7 +859,18 @@ class AutoStrategySelectorTest {
         autoStrategySelector.selectBestStrategyAndStock();
         
         // Then - selects good result, skips null metrics
-        verify(activeStrategyService).switchStrategy(eq("Strategy2"), any(), anyString(), eq(true), any(), any(), any(), any());
+        verify(activeStrategyService).switchStrategyWithStock(
+            eq("Strategy2"),
+            any(),
+            anyString(),
+            eq(true),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -827,38 +918,13 @@ class AutoStrategySelectorTest {
             createBacktestResult("2330.TW", "TSMC", "ActiveStrategy", 20.0, 2.0, 65.0, -5.0)
         );
         
-        // Create valid shadow mappings (not intraday, return > 3.0, sharpe > 0.8)
-        StrategyStockMapping shadow1 = new StrategyStockMapping();
-        shadow1.setSymbol("2454.TW");
-        shadow1.setStockName("MediaTek");
-        shadow1.setStrategyName("BollingerBand");
-        shadow1.setTotalReturnPct(15.0);
-        shadow1.setSharpeRatio(1.8);
-        shadow1.setWinRatePct(60.0);
-        shadow1.setMaxDrawdownPct(-7.0);
-        
-        StrategyStockMapping shadow2 = new StrategyStockMapping();
-        shadow2.setSymbol("2317.TW");
-        shadow2.setStockName("Hon Hai");
-        shadow2.setStrategyName("RSIStrategy");
-        shadow2.setTotalReturnPct(12.0);
-        shadow2.setSharpeRatio(1.5);
-        shadow2.setWinRatePct(58.0);
-        shadow2.setMaxDrawdownPct(-8.0);
-        
-        // Another strategy for 2454.TW - should pick best one
-        StrategyStockMapping shadow3 = new StrategyStockMapping();
-        shadow3.setSymbol("2454.TW");
-        shadow3.setStockName("MediaTek");
-        shadow3.setStrategyName("MACDStrategy");
-        shadow3.setTotalReturnPct(10.0);  // Lower than shadow1
-        shadow3.setSharpeRatio(1.2);
-        shadow3.setWinRatePct(55.0);
-        shadow3.setMaxDrawdownPct(-10.0);
-        
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(activeMapping, shadow1, shadow2, shadow3));
         when(shadowModeStockService.getMaxShadowModeStocks()).thenReturn(10);
-        when(backtestResultRepository.findAll()).thenReturn(Collections.emptyList());
+        // Provide valid backtest_results (not intraday, return > 3.0, sharpe > 0.8)
+        // Including two strategies for 2454.TW; selector should pick the best one.
+        BacktestResult shadow1 = createBacktestResult("2454.TW", "MediaTek", "BollingerBand", 15.0, 1.8, 60.0, -7.0);
+        BacktestResult shadow2 = createBacktestResult("2317.TW", "Hon Hai", "RSIStrategy", 12.0, 1.5, 58.0, -8.0);
+        BacktestResult shadow3 = createBacktestResult("2454.TW", "MediaTek", "MACDStrategy", 10.0, 1.2, 55.0, -10.0);
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(shadow1, shadow2, shadow3));
         
         tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository mockRepo = 
             org.mockito.Mockito.mock(tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository.class);
@@ -911,10 +977,18 @@ class AutoStrategySelectorTest {
     @Test
     void selectShadowModeStrategiesAndPopulateTable_filtersNullMetrics() {
         // Line 123: filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
-        StrategyStockMapping nullMetricsMapping = createMapping("2317.TW", "NullStrategy", null, null, null, null);
-        StrategyStockMapping validMapping = createMapping("2330.TW", "ValidStrategy", 10.0, 1.5, 55.0, -8.0);
-        
-        when(mappingRepository.findAll()).thenReturn(Arrays.asList(nullMetricsMapping, validMapping));
+        BacktestResult nullMetrics = BacktestResult.builder()
+            .symbol("2317.TW")
+            .stockName("Hon Hai")
+            .strategyName("NullStrategy")
+            .totalReturnPct(null)
+            .sharpeRatio(null)
+            .winRatePct(null)
+            .maxDrawdownPct(null)
+            .totalTrades(50)
+            .build();
+        BacktestResult valid = createBacktestResult("2330.TW", "TSMC", "ValidStrategy", 10.0, 1.5, 55.0, -8.0);
+        when(backtestResultRepository.findAll()).thenReturn(Arrays.asList(nullMetrics, valid));
         
         StrategyStockMapping activeMapping = createMapping("2454.TW", "ActiveStrategy", 12.0, 1.6, 60.0, -5.0);
         
@@ -970,6 +1044,17 @@ class AutoStrategySelectorTest {
         
         // Should skip because both results filtered out
         verify(telegramService).sendMessage(contains("No backtest results"));
-        verify(activeStrategyService, never()).switchStrategy(anyString(), any(), anyString(), anyBoolean(), any(), any(), any(), any());
+        verify(activeStrategyService, never()).switchStrategyWithStock(
+            anyString(),
+            any(),
+            anyString(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 }

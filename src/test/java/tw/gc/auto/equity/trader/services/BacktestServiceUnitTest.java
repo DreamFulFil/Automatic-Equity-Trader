@@ -17,8 +17,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.data.Offset.offset;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class BacktestServiceUnitTest {
@@ -81,13 +81,14 @@ class BacktestServiceUnitTest {
 
         TradeSignal signal = TradeSignal.longSignal(0.9, "test-long");
 
-        Method process = null;
-        for (Method mm : BacktestService.class.getDeclaredMethods()) {
-            if (mm.getName().equals("processSignal") && mm.getParameterCount() == 5) {
-                process = mm;
-                break;
-            }
-        }
+        Method process = BacktestService.class.getDeclaredMethod(
+            "processSignal",
+            tw.gc.auto.equity.trader.strategy.IStrategy.class,
+            Portfolio.class,
+            MarketData.class,
+            TradeSignal.class,
+            BacktestService.InMemoryBacktestResult.class
+        );
         process.setAccessible(true);
 
         // Act
@@ -97,12 +98,13 @@ class BacktestServiceUnitTest {
 
         // Assert - position should be opened long and entry price set
         assertThat(p.getPosition("2330.TW")).isGreaterThan(0);
-        assertThat(p.getEntryPrice("2330.TW")).isEqualTo(50.0);
+        // Entry price includes buy-side slippage.
+        assertThat(p.getEntryPrice("2330.TW")).isCloseTo(50.025, offset(1e-9));
         assertThat(p.getAvailableMargin()).isLessThan(10_000.0);
     }
 
     @Test
-    void processSignal_shouldOpenShort_whenNeutral() throws Exception {
+    void processSignal_shouldNotOpenShort_whenNeutral() throws Exception {
         Portfolio p = Portfolio.builder()
             .positions(new HashMap<>())
             .entryPrices(new HashMap<>())
@@ -130,10 +132,10 @@ class BacktestServiceUnitTest {
 
         process.invoke(backtestService, strategyMock, p, data, signal, result);
 
-        // Assert - position should be opened short (negative) and entry price set
-        assertThat(p.getPosition("2330.TW")).isLessThan(0);
-        assertThat(p.getEntryPrice("2330.TW")).isEqualTo(100.0);
-        assertThat(p.getAvailableMargin()).isLessThan(5_000.0);
+        // Assert - backtest engine is long-only; short does not open a short position
+        assertThat(p.getPosition("2330.TW")).isZero();
+        assertThat(p.getEntryPrice("2330.TW")).isEqualTo(0.0);
+        assertThat(p.getAvailableMargin()).isEqualTo(5_000.0);
     }
 
     @Test

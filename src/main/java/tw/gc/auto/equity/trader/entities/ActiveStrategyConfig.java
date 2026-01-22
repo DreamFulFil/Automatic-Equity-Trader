@@ -33,6 +33,19 @@ public class ActiveStrategyConfig {
      */
     @Column(name = "strategy_name", nullable = false, length = 100)
     private String strategyName;
+
+    /**
+     * Stock symbol for the currently active selection (e.g., 2330.TW).
+     * This makes the main selection discoverable in one place instead of being split across tables.
+     */
+    @Column(name = "stock_symbol", length = 32)
+    private String stockSymbol;
+
+    /**
+     * Human-readable stock name for the currently active selection.
+     */
+    @Column(name = "stock_name", length = 200)
+    private String stockName;
     
     /**
      * Optimized parameters for the active strategy (stored as JSON)

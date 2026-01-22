@@ -20,6 +20,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AutoStrategySelector {
 
+    @SuppressWarnings("unused")
     private static final double MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING = 2_000_000.0;
 
     private final StrategyStockMappingRepository mappingRepository;
@@ -29,6 +30,7 @@ public class AutoStrategySelector {
     private final ActiveStockService activeStockService;
     private final ShadowModeStockService shadowModeStockService;
     private final TelegramService telegramService;
+    @SuppressWarnings("unused")
     private final TaiwanStockComplianceService complianceService;
     private final tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository activeShadowSelectionRepository;
 
@@ -64,7 +66,7 @@ public class AutoStrategySelector {
             
             if (shouldChange) {
                 // Switch main strategy and stock
-                activeStrategyService.switchStrategy(
+                activeStrategyService.switchStrategyWithStock(
                     best.getStrategyName(), 
                     null,  // parameters
                     "Auto-selected based on backtest results",
@@ -72,7 +74,9 @@ public class AutoStrategySelector {
                     best.getSharpeRatio(),
                     best.getMaxDrawdownPct(),
                     best.getTotalReturnPct(),
-                    best.getWinRatePct()
+                    best.getWinRatePct(),
+                    best.getSymbol(),
+                    best.getStockName()
                 );
                 activeStockService.setActiveStock(best.getSymbol());
                 
@@ -117,13 +121,22 @@ public class AutoStrategySelector {
     @Transactional
     public void selectShadowModeStrategiesAndPopulateTable(StrategyStockMapping activeMapping) {
         log.info("🌙 Selecting shadow strategies and populating selection table...");
-        
-        // Get all eligible mappings
-        List<StrategyStockMapping> allMappings = mappingRepository.findAll().stream()
-            .filter(m -> m.getTotalReturnPct() != null && m.getSharpeRatio() != null)
-            .filter(m -> !isIntradayStrategy(m.getStrategyName()))
-            .filter(m -> m.getTotalReturnPct() > 3.0)
-            .filter(m -> m.getSharpeRatio() > 0.8)
+
+        // Get stock settings to determine round-lot mode
+        StockSettings settings = stockSettingsRepository.findFirstByOrderByIdDesc()
+            .orElse(StockSettings.builder().shareIncrement(27).build());
+        // Round-lot: shareIncrement must be divisible by 1000 (no remainder)
+        boolean isRoundLot = (settings.getShareIncrement() % 1000) == 0;
+
+        // Read from backtest_results and convert to mappings (do NOT depend on legacy mapping table)
+        List<BacktestResult> allResults = backtestResultRepository.findAll();
+        List<StrategyStockMapping> allMappings = allResults.stream()
+            .filter(r -> r.getTotalReturnPct() != null && r.getSharpeRatio() != null)
+            .filter(r -> r.getTotalTrades() != null && r.getTotalTrades() > 10)
+            .filter(r -> !shouldFilterStrategy(r.getStrategyName(), isRoundLot))
+            .filter(r -> r.getTotalReturnPct() > 3.0)
+            .filter(r -> r.getSharpeRatio() > 0.8)
+            .map(this::convertToMapping)
             .toList();
         
         // Group by symbol and pick best strategy per stock
@@ -165,7 +178,7 @@ public class AutoStrategySelector {
                 .maxDrawdownPct(activeMapping.getMaxDrawdownPct())
                 .compositeScore(calculateScore(activeMapping))
                 .build();
-        activeShadowSelectionRepository.save(activeSelection);
+        activeShadowSelectionRepository.save(java.util.Objects.requireNonNull(activeSelection));
         
         // Insert shadow (ranks 2-11)
         int rank = 2;
@@ -184,11 +197,11 @@ public class AutoStrategySelector {
                     .maxDrawdownPct(mapping.getMaxDrawdownPct())
                     .compositeScore(calculateScore(mapping))
                     .build();
-            activeShadowSelectionRepository.save(shadowSelection);
+            activeShadowSelectionRepository.save(java.util.Objects.requireNonNull(shadowSelection));
         }
         
         // Also update shadow mode stock service for backward compatibility
-        selectShadowModeStrategies();
+        selectShadowModeStrategiesInternal(activeMapping.getSymbol());
         
         log.info("✅ Selection table populated: 1 active + {} shadow entries", shadowMappings.size());
         
@@ -322,6 +335,15 @@ public class AutoStrategySelector {
     @Transactional
     public void selectShadowModeStrategies() {
         log.info("🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies...");
+
+        // Exclude the currently active stock from shadow candidates
+        String activeSymbol = activeStockService.getActiveStock();
+        selectShadowModeStrategiesInternal(activeSymbol);
+    }
+
+    @Transactional
+    void selectShadowModeStrategiesInternal(String excludeSymbol) {
+        log.info("🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies (excluding={})...", excludeSymbol);
         
         // Get stock settings to determine round-lot mode
         StockSettings settings = stockSettingsRepository.findFirstByOrderByIdDesc()
@@ -344,6 +366,9 @@ public class AutoStrategySelector {
         java.util.Map<String, StrategyStockMapping> bestPerStock = new java.util.HashMap<>();
         for (StrategyStockMapping mapping : allMappings) {
             String symbol = mapping.getSymbol();
+            if (excludeSymbol != null && excludeSymbol.equals(symbol)) {
+                continue;
+            }
             if (!bestPerStock.containsKey(symbol) || 
                 calculateScore(mapping) > calculateScore(bestPerStock.get(symbol))) {
                 bestPerStock.put(symbol, mapping);
@@ -358,7 +383,6 @@ public class AutoStrategySelector {
         
         // Build config list with full metrics for upsert
         List<ShadowModeStockService.ShadowModeStockConfig> configs = new java.util.ArrayList<>();
-        int rank = 1;
         for (StrategyStockMapping mapping : topStrategies) {
             double score = calculateScore(mapping);
             configs.add(ShadowModeStockService.ShadowModeStockConfig.builder()
@@ -371,7 +395,6 @@ public class AutoStrategySelector {
                 .maxDrawdownPct(mapping.getMaxDrawdownPct())
                 .selectionScore(score)
                 .build());
-            rank++;
         }
 
         // Upsert top candidates (clears old, inserts new with ranking)

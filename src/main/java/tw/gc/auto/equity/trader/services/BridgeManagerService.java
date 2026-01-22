@@ -112,6 +112,11 @@ public class BridgeManagerService {
      * Check if bridge is healthy by calling health endpoint
      */
     public boolean isBridgeHealthy() {
+        // Health should reflect the process managed by this service.
+        // Otherwise, any unrelated service on localhost:8888 would cause false positives.
+        if (!isRunning || bridgeProcess == null || !bridgeProcess.isAlive()) {
+            return false;
+        }
         try {
             RestTemplate rt = new RestTemplate();
             String response = rt.getForObject("http://localhost:8888/health", String.class);
