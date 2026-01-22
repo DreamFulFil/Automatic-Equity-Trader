@@ -19,7 +19,7 @@ Validator:
 - Run `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
 
 A I automation (invocation examples below):
-- The assistant will run tests, write the commit message to `logs/commit-msg-<TS>.txt`, validate it, and commit staged changes.
+- The assistant will run unit tests, generate a Conventional Commit message that summarizes the staged changes and write it to `logs/commit-msg-<TS>.txt`, automatically run the commit validator, and commit staged changes if validation passes. Validation runs non-interactively; if validation fails the assistant aborts the commit and saves validation logs to `logs/run-commit-<TS>.log`.
 - If a `JASYPT_PASSWORD` is provided via `/commit`, the assistant will use it for the test command instead of the environment variable (the password is never echoed or stored in chat).
 - If the commit is a minor bump (`feat|perf|refactor`): bump `VERSION`, create an annotated tag, push branch+tags, and attempt a release (requires `GITHUB_TOKEN`).
 - Otherwise: push the branch.
@@ -27,13 +27,13 @@ A I automation (invocation examples below):
 
 Automatic `/commit` behavior:
 - Invocation: `GitHub Copilot: /commit [JASYPT_PASSWORD] ["optional commit header or message"]`
-- If no commit header/message is supplied, the assistant will infer a Conventional Commit header and short body from the unstaged+staged changes (type, scope inferred from changed paths, brief summary of key files).
-- The assistant will then:
-	- Run unit tests (use provided `JASYPT_PASSWORD` if given, else use env var),
-	- Run the validator on the generated message,
-	- Stage all unstaged changes (`git add -A`),
-	- Commit using the generated or supplied message file, and
-	- Push the branch to `origin`.
+- If no commit header/message is supplied, the assistant will generate a Conventional Commit header and a short summary that describes the staged changes (derived from `git diff --staged`). If a commit message is supplied, the assistant will verify it adequately summarizes the staged changes; if it does not, the assistant will replace it with a generated summary.
+- The assistant will then run the following steps non-interactively (it will not ask for permission to run the validator or proceed):
+  - Run unit tests (use provided `JASYPT_PASSWORD` if given, else use env var)
+  - Run the commit message validator automatically on the generated or supplied message and abort if validation fails; validation errors and logs will be saved to `logs/run-commit-<TS>.log`
+  - Stage all unstaged changes (`git add -A`)
+  - Commit using the generated or validated message file (saved as `logs/commit-msg-<TS>.txt`)
+  - Push the branch to `origin`
 - For minor bump commits (`feat|perf|refactor`) the assistant will also bump `VERSION`, create an annotated tag, push tags, and attempt a release (requires `GITHUB_TOKEN`).
 - The assistant will never echo secrets in chat; all outputs are saved in `logs/run-commit-<TS>.log` and the commit message is saved to `logs/commit-msg-<TS>.txt`.
 
