@@ -1,263 +1,60 @@
-# Auto-selection prompt — concise guide
+# Auto-selection prompt
 
-Purpose: Run and validate the auto-selection workflow that picks best strategy+stock combos from backtest results.
+Purpose: Run and validate the auto-selection workflow that picks the best strategy + stock from backtest results and updates shadow-mode candidates.
 
-Prereqs
-- Backtest results exist (run backtest if needed)
-- Java service healthy: `curl -s http://localhost:16350/actuator/health | jq -r '.status'` -> `UP`
+## Prerequisites
+- Backtest results exist (run backtest first if needed).
+- Java service is healthy: `curl -s http://localhost:16350/actuator/health | jq -r '.status'` returns `UP`.
+- PostgreSQL container `psql` is running.
 
-Quick run (fish examples)
-1) Verify results count
-- fish: `docker exec -i psql psql -U postgres -d auto_equity_trader -c "SELECT COUNT(*) FROM backtest_results WHERE total_trades > 10;"`
+## Run (fish)
+1) Verify backtest results exist
+```fish
+docker exec -i psql psql -U $POSTGRES_USER -d $POSTGRES_DB -c \
+  "SELECT COUNT(*) AS results FROM backtest_results WHERE total_trades > 10;"
+```
 
 2) Trigger auto-selection
-- fish: `curl -X POST http://localhost:16350/api/auto-selection/run-now | jq '.'`
-
-3) Validate success
-- Look for `"status":"success"` in response and `AUTO-SELECTION` logs in `logs/java-*.log`
-- DB check: `SELECT stock_code, strategy_name, confidence_score FROM strategy_stock_mapping WHERE is_active = true ORDER BY confidence_score DESC LIMIT 10;`
-
-Checks & expectations
-- Selection time: typically < 5s
-- Active mapping updated (`is_active = true`) and top 10 shadow strategies set
-
-Troubleshooting (short)
-- No results: run backtest and verify `backtest_results`
-- Selection repeats same strategy: inspect diversity and thresholds
-- Shadow strategies not updating: inspect logs and DB schema
-
-Notes
-- Manual trigger useful post-backtest or CV tuning
-- Scheduled daily by `@Scheduled(cron = "${app.auto-selection.schedule:0 0 1 * * *}")`
-
-END
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \ I
-  "SELECT COUNT(*) as total_results, 
-          COUNT(DISTINCT symbol) as unique_stocks,
-          COUNT(DISTINCT strategy_name) as unique_strategies
-   FROM backtest_results
-   WHERE total_trades > 10;"
+```fish
+curl -s -X POST http://localhost:16350/api/auto-selection/run-now | jq '.'
 ```
 
-**Expected Output:**
-```
- total_results | unique_stocks | unique_strategies 
----------------+---------------+-------------------
-          3000 |            50 |                99
-```
+## Validate
+Look for `"status":"success"` in the response and `AUTO-SELECTION` entries in `logs/java-*.log`.
 
-## Step 2: Check Current Active Configuration
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT stock_code, stock_name, strategy_name, is_active, confidence_score
-   FROM strategy_stock_mapping
-   WHERE is_active = true
-   ORDER BY confidence_score DESC
-   LIMIT 10;"
+### Active selection
+```sql
+SELECT strategy_name, stock_symbol, stock_name, updated_at
+FROM active_strategy_config
+ORDER BY updated_at DESC
+LIMIT 1;
 ```
 
-This shows the currently active strategy+stock combinations.
-
-## Step 3: Trigger Auto-Selection
-
-```bash
-curl -X POST http://localhost:16350/api/auto-selection/run-now | jq '.'
+### Shadow-mode candidates (top 10)
+```sql
+SELECT stock_symbol, strategy_name, expected_return_percentage, rank_position, updated_at
+FROM shadow_mode_stocks
+ORDER BY rank_position ASC
+LIMIT 10;
 ```
 
-**Expected Response:**
-```json
-{
-  "status": "success",
-  "message": "Auto-selection completed successfully"
-}
+### Optional: legacy mapping table (if enabled)
+```sql
+SELECT stock_code, stock_name, strategy_name, is_active, confidence_score, created_at
+FROM strategy_stock_mapping
+WHERE is_active = true
+ORDER BY confidence_score DESC
+LIMIT 10;
 ```
 
-**What Happens:**
-1. `selectBestStrategyAndStock()`: Analyzes backtest results, ranks strategies by performance metrics (win rate, Sharpe ratio, profit factor), selects top performer
-2. `selectShadowModeStrategies()`: Selects top 10 strategies for shadow mode monitoring
-3. Updates `strategy_stock_mapping` table with new active configurations
-4. Deactivates previous selections
-
-## Step 4: Monitor Execution
-
-```bash
-tail -100 logs/java-*.log | rg -i "(auto.?selection|strategy.?selector)" | tail -20
-```
-
-**Expected Log Patterns:**
-```
-INFO  t.g.a.e.t.c.AutoSelectionController - 🎯 Manual trigger: Running auto-selection NOW
-INFO  t.g.a.e.t.s.AutoStrategySelector - 🤖 AUTO-SELECTION: Starting daily strategy and stock selection...
-INFO  t.g.a.e.t.s.AutoStrategySelector - 🏆 SELECTED: Strategy [Bollinger Band] + Stock [2330.TW]
-INFO  t.g.a.e.t.s.AutoStrategySelector - 🌙 AUTO-SELECTION: Selecting top 10 shadow mode strategies...
-INFO  t.g.a.e.t.s.AutoStrategySelector - ✅ Shadow mode strategies updated
-```
-
-**Warning: If no backtest results exist:**
-```
-WARN  t.g.a.e.t.s.AutoStrategySelector - ⚠️ No backtest results found. Skipping auto-selection.
-```
-→ Run backtest first (see [backtest.prompt.md](backtest.prompt.md))
-
-## Step 5: Verify Selection Results
-
-### Check Active Strategy+Stock Mapping
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT stock_code, stock_name, strategy_name, is_active, confidence_score, created_at
-   FROM strategy_stock_mapping
-   WHERE is_active = true
-   ORDER BY confidence_score DESC;"
-```
-
-**Expected Output:**
-```
- stock_code | stock_name |     strategy_name      | is_active | confidence_score |        created_at         
-------------+------------+------------------------+-----------+------------------+---------------------------
- 2330.TW    | 台積電     | Bollinger Band         | t         |            0.850 | 2025-01-19 14:22:00
-```
-
-### Check Shadow Mode Strategies
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT stock_code, strategy_name, confidence_score
-   FROM strategy_stock_mapping
-   WHERE is_active = true
-   ORDER BY confidence_score DESC
-   LIMIT 10;"
-```
-
-This shows the top 10 strategies selected for shadow mode monitoring.
-
-## Step 6: Analyze Selection Quality
-
-### View Performance Metrics of Selected Strategy
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT symbol, strategy_name, win_rate_pct, sharpe_ratio, total_return_pct, profit_factor, total_trades
-   FROM backtest_results
-   WHERE symbol = '2330.TW' AND strategy_name = 'Bollinger Band Mean Reversion'
-   LIMIT 1;"
-```
-
-### Compare Top 10 Strategies by Win Rate
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT symbol, strategy_name, 
-          ROUND(CAST(win_rate_pct AS numeric), 2) as win_rate,
-          ROUND(CAST(sharpe_ratio AS numeric), 2) as sharpe,
-          ROUND(CAST(total_return_pct AS numeric), 2) as return_pct,
-          total_trades
-   FROM backtest_results
-   WHERE total_trades > 10
-   ORDER BY win_rate_pct DESC
-   LIMIT 10;"
-```
-
-### Check Stock Rankings
-
-```bash
-docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-  "SELECT symbol, 
-          COUNT(*) as strategy_count,
-          ROUND(CAST(AVG(win_rate_pct) AS numeric), 2) as avg_win_rate,
-          ROUND(CAST(AVG(sharpe_ratio) AS numeric), 2) as avg_sharpe
-   FROM backtest_results
-   WHERE total_trades > 10
-   GROUP BY symbol
-   ORDER BY avg_win_rate DESC
-   LIMIT 10;"
-```
-
-## Step 7: Verify System is Trading Selected Strategy
-
-Check that the system starts using the newly selected strategy:
-
-```bash
-tail -50 logs/java-*.log | rg -i "(strategy.*signal|trade)" | tail -10
-```
-
-**Expected Pattern:**
-```
-INFO  t.g.a.e.t.services.StrategyManager - 💡 Strategy [Bollinger Band Mean Reversion] Signal: LONG
-INFO  t.g.a.e.t.services.StrategyManager - 👻 Shadow Trade [Bollinger Band]: BUY 1 @ 635.0
-```
-
-## Expected Results
-
-- **Selection Time:** < 5 seconds
-- **Active Strategy:** 1 best-performing strategy+stock combination
-- **Shadow Strategies:** Top 10 strategies for monitoring
-- **Confidence Score:** 0.7-0.95 (based on win rate, Sharpe ratio, profit factor)
-- **Database Updates:** `strategy_stock_mapping` table updated with `is_active = true`
+## Expectations
+- Selection time: typically < 5s.
+- Active selection updated and shadow candidates refreshed.
 
 ## Troubleshooting
-
-### Issue: "No backtest results found"
-
-**Cause:** `backtest_results` table is empty or filtered out all records
-
-**Solution:**
-1. Run backtest first: `curl -X POST http://localhost:16350/api/backtest/run`
-2. Wait for completion (check logs)
-3. Verify results: `SELECT COUNT(*) FROM backtest_results WHERE total_trades > 10;`
-4. Re-run auto-selection
-
-### Issue: Selection keeps choosing same strategy
-
-**Cause:** Only one strategy has acceptable performance metrics
-
-**Solution:**
-1. Check diversity of backtest results:
-   ```bash
-   docker exec -i psql psql -U postgres -d auto_equity_trader -c \
-     "SELECT strategy_name, COUNT(*) as stock_count, AVG(win_rate_pct) as avg_win_rate
-      FROM backtest_results
-      WHERE total_trades > 10
-      GROUP BY strategy_name
-      ORDER BY avg_win_rate DESC
-      LIMIT 20;"
-   ```
-2. Review strategy parameter configurations in `strategy_stock_mapping`
-3. Consider adjusting selection criteria in `AutoStrategySelector.java`
-
-### Issue: No active strategies after auto-selection
-
-**Cause:** All strategies failed minimum performance criteria
-
-**Solution:**
-1. Check selection thresholds:
-   - Minimum win rate (typically 40-50%)
-   - Minimum Sharpe ratio (typically 0.5)
-   - Minimum total trades (typically 10)
-2. Review logs for selection criteria:
-   ```bash
-   tail -200 logs/java-*.log | rg -i "(selection|threshold|criteria)"
-   ```
-3. Lower thresholds in configuration if backtest results are poor across the board
-
-### Issue: Shadow strategies not updating
-
-**Cause:** `selectShadowModeStrategies()` failing silently
-
-**Solution:**
-1. Check for errors in logs:
-   ```bash
-   tail -200 logs/java-*.log | rg -i "(shadow|error|exception)"
-   ```
-2. Verify database connection: `curl http://localhost:16350/actuator/health`
-3. Check `strategy_stock_mapping` table structure:
-   ```bash
-   docker exec -i psql psql -U postgres -d auto_equity_trader -c "\d strategy_stock_mapping"
-   ```
-
-## Data Verification Checklist
+- No results: run backtest and verify `backtest_results` has rows.
+- Shadow candidates not updating: check `logs/java-*.log` for exceptions and confirm the `shadow_mode_stocks` table exists.
+- Health check not `UP`: start the Java service and re-run.
 
 ✅ Backtest results exist (3,000+ records)  
 ✅ At least 10 strategies have total_trades > 10  

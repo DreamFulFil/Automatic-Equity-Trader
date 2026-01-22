@@ -1,5 +1,70 @@
 # Historical Data Download Prompt
 
+Purpose: Download historical Taiwan stock data into PostgreSQL for backtesting and auto-selection.
+
+## Required input: `JASYPT_PASSWORD`
+This workflow requires `JASYPT_PASSWORD` to decrypt runtime secrets.
+
+Fish example:
+```fish
+set -x JASYPT_PASSWORD '<your-secret>'
+test -n "$JASYPT_PASSWORD"; and echo "✅ JASYPT_PASSWORD is set"; or echo "❌ JASYPT_PASSWORD is missing"
+```
+
+## Notes
+- Non-interactive: use the operational runner script.
+- Logs: all runtime logs and temporary outputs are written to `logs/`.
+
+## Prerequisites
+- Export `JASYPT_PASSWORD` in the environment.
+- PostgreSQL container `psql` is running.
+- Python bridge is available (default port `8888`).
+
+## Run (recommended)
+Use `scripts/operational/run_download_and_monitor.fish` to start services (if needed), trigger the history download, and monitor DB inserts.
+
+```fish
+set -x JASYPT_PASSWORD '<your-secret>'
+fish scripts/operational/run_download_and_monitor.fish
+```
+
+Exit codes:
+- 0: Success
+- 1: Missing `JASYPT_PASSWORD` (or early abort)
+- 2: Health check failed after startup
+- 3: No inserts observed during monitoring
+
+Artifacts:
+- `logs/history-download-*.json`
+- `logs/java-*.log`
+- `logs/bridge-*.log`
+
+## Quick checks
+
+### Health
+```fish
+curl -s http://localhost:16350/actuator/health | jq -r '.status'
+curl -s http://localhost:8888/health | jq '.'
+```
+
+### DB coverage (high level)
+```fish
+docker exec psql psql -U $POSTGRES_USER -d $POSTGRES_DB -c \
+  "SELECT COUNT(*) AS records, COUNT(DISTINCT symbol) AS symbols, MIN(timestamp::date) AS earliest FROM bar;"
+```
+
+## Data source priority
+Current configuration (as of 2025-12-27):
+1. Yahoo Finance (primary)
+2. Shioaji (supplement)
+3. TWSE (supplement)
+
+## Troubleshooting
+- 0 records inserted: verify Python bridge health and check `logs/bridge-*.log`.
+- Short date range: confirm the bridge logs show the requested date window.
+- Repeated batches: ensure no concurrent downloads are running; check `logs/java-*.log`.
+# Historical Data Download Prompt
+
 ## Context
 This prompt guides the AI agent through downloading historical data for Taiwan stocks using the Automatic-Equity-Trader system.
 

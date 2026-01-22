@@ -40,14 +40,54 @@ Automatic `/commit` behavior:
 Decision rules:
 - Non-interactive: the assistant prefers a `JASYPT_PASSWORD` provided via `/commit` (if present), otherwise it looks for the `JASYPT_PASSWORD` env var. If neither is available, the process aborts.
 - Secrets are never printed to chat; full logs are stored under `logs/`.
+---
+agent: agent
+---
 
-Examples:
-- feat(selection): add dynamic stock selection algorithm
-- fix(bridge): handle null ticker names in telegram parser
+# Commit prompt — Conventional Commits (concise)
 
-Invocation examples:
-- GitHub Copilot: Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'
-- GitHub Copilot: /commit <JASYPT_PASSWORD> Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'
-- Run commit (uses env `JASYPT_PASSWORD` if set)
+Purpose: enforce Conventional Commits and required pre-commit checks.
 
-END
+Format: `<type>(<scope>): <short summary>` (imperative, ≤50 chars)
+
+Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `chore`
+
+## Required checklist
+- Run unit tests: `./run-tests.sh --unit $JASYPT_PASSWORD` (or pass `JASYPT_PASSWORD` when invoking the assistant with `/commit <JASYPT_PASSWORD>`)
+- Add/modify unit tests for your change
+- No compile warnings or unused imports
+- For `feat|perf|refactor`: update and stage `VERSION` (`./scripts/operational/bump-version.sh minor`)
+
+## Validator
+- Run `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
+
+## AI automation
+- The assistant will run unit tests, generate a Conventional Commit message that summarizes the staged changes (derived from `git diff --staged`) and save it to `logs/commit-msg-<TS>.txt`, automatically run the commit validator, and commit staged changes if validation passes.
+- Validation runs non-interactively; on failure the assistant aborts and saves logs to `logs/run-commit-<TS>.log`.
+- If a `JASYPT_PASSWORD` is provided via `/commit`, the assistant will use it for the test command instead of the environment variable.
+- If the commit is a minor bump (`feat|perf|refactor`): bump `VERSION`, create an annotated tag, push branch+tags, and attempt a release (requires `GITHUB_TOKEN`).
+- Otherwise: push the branch.
+
+## Automatic `/commit` behavior
+- Invocation: `GitHub Copilot: /commit [JASYPT_PASSWORD] ["optional commit header or message"]`
+- If no commit header/message is supplied, the assistant will generate a Conventional Commit header and a short summary that describes the staged changes.
+- If a commit message is supplied, the assistant will verify it adequately summarizes the staged changes; if it does not, the assistant will replace it with a generated summary.
+- The assistant then runs the following steps non-interactively:
+  - Run unit tests (use provided `JASYPT_PASSWORD` if given, else use env var)
+  - Run the commit message validator and abort if validation fails
+  - Stage all unstaged changes (`git add -A`)
+  - Commit using the generated or validated message file
+  - Push the branch to `origin`
+
+## Decision rules
+- Non-interactive: prefer `JASYPT_PASSWORD` provided via `/commit`, else use env var; if neither is available, abort.
+- Secrets are never printed to chat; full logs are stored under `logs/`.
+
+## Examples
+- `feat(selection): add dynamic stock selection algorithm`
+- `fix(bridge): handle null ticker names in telegram parser`
+
+## Invocation examples
+- `GitHub Copilot: Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'`
+- `GitHub Copilot: /commit <JASYPT_PASSWORD> Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'`
+- `Run commit (uses env JASYPT_PASSWORD if set)`

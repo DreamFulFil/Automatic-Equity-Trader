@@ -1,6 +1,107 @@
 ---
 agent: agent
 ---
+
+# Release prompt — create GitHub release via REST API (curl)
+
+Purpose: Create or update a GitHub Release using the GitHub Releases REST API.
+
+## When to run
+- Only create a release for **minor bumps**: commit types `feat`, `perf`, `refactor`.
+
+## Prerequisites
+- You already pushed the commit that bumps `VERSION`.
+- You created and pushed the annotated tag `v${NEW_VERSION}`.
+- `GITHUB_TOKEN` is exported in the environment and has `repo` scope.
+- Logs must be written under `logs/`.
+
+## Checklist
+1) Confirm current version
+```bash
+cat VERSION
+```
+
+2) Create and push tag (if not already done)
+```bash
+NEW_VERSION=$(cat VERSION)
+git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+git push origin "v${NEW_VERSION}"
+```
+
+3) Confirm tag exists locally and remotely
+```bash
+git tag --list | rg "v${NEW_VERSION}"
+git ls-remote --tags origin | rg "v${NEW_VERSION}"
+```
+
+## Build release body
+The release body must start with an H1 line and include `## Summary` and `## Changes`.
+
+Required format:
+
+```text
+# Release v${NEW_VERSION}
+
+## Summary
+- <clean commit message (text after the commit type prefix)>
+
+## Changes
+- <at least 3 concise bullet points>
+```
+
+Example (bash):
+```bash
+NEW_VERSION=$(cat VERSION)
+COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/^[^:]*: //')
+
+BODY="# Release v${NEW_VERSION}\n\n## Summary\n- ${COMMIT_MSG}\n\n## Changes\n- Updated Java services\n- Updated tests\n- Updated docs/ops prompts\n"
+BODY_ESCAPED=$(echo "$BODY" | jq -Rs .)
+```
+
+## Create release (POST)
+```bash
+mkdir -p logs
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-${LOG_TS}-v${NEW_VERSION}.log"
+
+curl -L -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases \
+  -d "{\"tag_name\": \"v${NEW_VERSION}\", \"target_commitish\": \"main\", \"name\": \"v${NEW_VERSION}\", \"body\": ${BODY_ESCAPED}, \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }" \
+  2>&1 | tee "$LOGFILE"
+```
+
+## Update an existing release body (PATCH)
+```bash
+RELEASE_TAG="v${NEW_VERSION}"
+RELEASE_JSON=$(curl -sS \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases/tags/${RELEASE_TAG}")
+RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
+
+LOG_TS=$(date -u +%Y%m%dT%H%M%SZ)
+LOGFILE="logs/release-update-${LOG_TS}-${RELEASE_TAG}.log"
+
+curl -sS -X PATCH \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/DreamFulFil/Automatic-Equity-Trader/releases/${RELEASE_ID}" \
+  -d "{\"body\": ${BODY_ESCAPED}}" \
+  2>&1 | tee "$LOGFILE"
+```
+
+## Validation tips
+- POST success: HTTP 201.
+- PATCH success: HTTP 200.
+- If you get 4xx/5xx errors, check token scopes and confirm the tag exists on origin.
+---
+agent: agent
+---
 Release instructions — Create GitHub release via REST API (curl)
 
 **Note:** This file is an operational prompt template for maintainers. Ensure you have run unit tests and used `./scripts/operational/bump-version.sh` to update `VERSION` (and create the tag) before creating the release.

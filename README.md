@@ -2,13 +2,13 @@
 
 # Automatic Equity Trader
 
-**Version 0.79.0** - Semantic Versioning Release
+**Version 0.175.0** (from [VERSION](VERSION))
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org/)
 [![Ollama](https://img.shields.io/badge/AI-Llama%203.1%208B-purple.svg)](https://ollama.ai/)
-[![Tests](https://img.shields.io/badge/Tests-524%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-passing-brightgreen.svg)](tests/)
 
 ---
 
@@ -16,7 +16,7 @@
 
 **Automatic Equity Trader** is a risk-first, AI-powered automated trading platform for Taiwan stock market. Designed for capital preservation with conservative strategies, comprehensive testing, and full observability.
 
-**Production-Ready:** 524 passing tests | 99 strategies | AI trade veto
+**Production-Ready:** 2k+ unit tests | 100+ strategies | AI trade veto
 
 ---
 
@@ -92,8 +92,8 @@ git clone https://github.com/DreamFulFil/Automatic-Equity-Trader.git
 cd Automatic-Equity-Trader
 
 # 2. Setup Python environment
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv python/venv
+source python/venv/bin/activate
 pip install -r python/requirements.txt
 
 # 3. Configure secrets (Jasypt encrypted)
@@ -132,24 +132,18 @@ Control the trading bot via Telegram. See [Telegram Commands Documentation](docs
 ```
 
 **Test Coverage:**
-- **Java:** 371 unit tests + 25 integration tests + 16 e2e tests
-- **Python:** 96 unit tests + integration tests
-- **Total:** 524 tests, all passing
+- Unit tier (fast): ~2k Java tests + ~100 Python tests
+- Full suite: run `./run-tests.sh YOUR_JASYPT_PASSWORD` and use the printed summary as the source of truth
 
 ---
 
 ## 📊 Version History
 
-**Current Version:** `0.79.0` (from [VERSION](VERSION) file)
+**Current Version:** `0.175.0` (from [VERSION](VERSION) file)
 
 This project follows [Semantic Versioning](https://semver.org/):
 - **Minor versions** (0.X.0): New features, performance improvements, refactoring
 - **Patch versions** (0.X.Y): Bug fixes, maintenance, documentation, CI/CD
-
-**Recent Releases:**
-- `v0.79.0` - PgBulkInsert and single-writer pattern for data ingestion
-- `v0.77.0` - JDBC batch insert optimization
-- `v0.76.0` - PostgreSQL COPY protocol for bulk inserts
 
 **All Releases:** See [git tags](https://github.com/DreamFulFil/Automatic-Equity-Trader/tags) for complete version history.
 
