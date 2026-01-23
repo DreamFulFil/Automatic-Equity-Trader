@@ -2,92 +2,73 @@
 agent: agent
 ---
 
-# Commit prompt — Conventional Commits (concise)
+# Commit prompt — Conventional Commits (automation-safe)
 
-Purpose: enforce Conventional Commits and required pre-commit checks.
-
-Format: <type>(<scope>): <short summary> (imperative, ≤50 chars)
-Types: feat, fix, perf, refactor, docs, test, ci, chore
-
-- Required checklist:
-- Run unit tests: `./run-tests.sh --unit $JASYPT_PASSWORD` (or pass `JASYPT_PASSWORD` when invoking the assistant with `/commit <JASYPT_PASSWORD>`)
-- Add/modify unit tests for your change
-- No compile warnings or unused imports
-- For `feat|perf|refactor`: update and stage `VERSION` (`./scripts/operational/bump-version.sh minor`)
-
-Validator:
-- Run `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
-
-A I automation (invocation examples below):
-- The assistant will run unit tests, generate a Conventional Commit message that summarizes the staged changes and write it to `logs/commit-msg-<TS>.txt`, automatically run the commit validator, and commit staged changes if validation passes. Validation runs non-interactively; if validation fails the assistant aborts the commit and saves validation logs to `logs/run-commit-<TS>.log`.
-- If a `JASYPT_PASSWORD` is provided via `/commit`, the assistant will use it for the test command instead of the environment variable (the password is never echoed or stored in chat).
-- If the commit is a minor bump (`feat|perf|refactor`): bump `VERSION`, create an annotated tag, push branch+tags, and attempt a release (requires `GITHUB_TOKEN`).
-- Otherwise: push the branch.
-- All outputs are saved to `logs/run-commit-<TS>.log` and `logs/releases-summary.csv` (release entries may be `SKIPPED`).
-
-Automatic `/commit` behavior:
-- Invocation: `GitHub Copilot: /commit [JASYPT_PASSWORD] ["optional commit header or message"]`
-- If no commit header/message is supplied, the assistant will generate a Conventional Commit header and a short summary that describes the staged changes (derived from `git diff --staged`). If a commit message is supplied, the assistant will verify it adequately summarizes the staged changes; if it does not, the assistant will replace it with a generated summary.
-- The assistant will then run the following steps non-interactively (it will not ask for permission to run the validator or proceed):
-  - Run unit tests (use provided `JASYPT_PASSWORD` if given, else use env var)
-  - Run the commit message validator automatically on the generated or supplied message and abort if validation fails; validation errors and logs will be saved to `logs/run-commit-<TS>.log`
-  - Stage all unstaged changes (`git add -A`)
-  - Commit using the generated or validated message file (saved as `logs/commit-msg-<TS>.txt`)
-  - Push the branch to `origin`
-- For minor bump commits (`feat|perf|refactor`) the assistant will also bump `VERSION`, create an annotated tag, push tags, and attempt a release (requires `GITHUB_TOKEN`).
-- The assistant will never echo secrets in chat; all outputs are saved in `logs/run-commit-<TS>.log` and the commit message is saved to `logs/commit-msg-<TS>.txt`.
-
-Decision rules:
-- Non-interactive: the assistant prefers a `JASYPT_PASSWORD` provided via `/commit` (if present), otherwise it looks for the `JASYPT_PASSWORD` env var. If neither is available, the process aborts.
-- Secrets are never printed to chat; full logs are stored under `logs/`.
----
-agent: agent
----
-
-# Commit prompt — Conventional Commits (concise)
-
-Purpose: enforce Conventional Commits and required pre-commit checks.
+Purpose: enforce Conventional Commits and required pre-commit checks, while ensuring the generated commit message matches the *actual staged diff*, `VERSION` is updated when required, and tags/releases are not skipped when conditions are met.
 
 Format: `<type>(<scope>): <short summary>` (imperative, ≤50 chars)
-
 Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `chore`
 
-## Required checklist
-- Run unit tests: `./run-tests.sh --unit $JASYPT_PASSWORD` (or pass `JASYPT_PASSWORD` when invoking the assistant with `/commit <JASYPT_PASSWORD>`)
+## Hard rules (avoid wrong commit messages)
+- Always stage first: run `git add -A` before generating or validating the commit message.
+- Generate the commit message *only* from `git diff --staged` (never from `git diff`).
+- If a user supplies a commit header/message, verify it matches the staged diff; replace it if it doesn’t.
+- Never mention files/features not present in the staged diff.
+
+## VERSION + tagging + release rules
+- `feat|perf|refactor` commits require a `VERSION` update included in the same commit.
+- Use the canonical script with a commit type (NOT `minor`/`patch`):
+  - `./scripts/operational/bump-version.sh <commit-type>`
+- For `feat|perf|refactor`, also ensure tag `v$(cat VERSION)` points at the new commit and is pushed.
+- For `feat|perf|refactor`, attempt to create a GitHub release when `gh` exists and `GITHUB_TOKEN` is set.
+
+Important: `bump-version.sh` creates a tag immediately. If you run it before committing (so the `VERSION` change is included), it will tag the previous `HEAD`. Therefore you must force-move the tag to the new `HEAD` after committing and then force-push that tag.
+
+## Required checklist (always)
+- Run unit tests: `./run-tests.sh --unit $JASYPT_PASSWORD`
 - Add/modify unit tests for your change
 - No compile warnings or unused imports
-- For `feat|perf|refactor`: update and stage `VERSION` (`./scripts/operational/bump-version.sh minor`)
 
-## Validator
-- Run `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
+## Validator (always)
+- Run: `./scripts/operational/validate-commit-and-version.sh <commit-msg-file>`
 
-## AI automation
-- The assistant will run unit tests, generate a Conventional Commit message that summarizes the staged changes (derived from `git diff --staged`) and save it to `logs/commit-msg-<TS>.txt`, automatically run the commit validator, and commit staged changes if validation passes.
-- Validation runs non-interactively; on failure the assistant aborts and saves logs to `logs/run-commit-<TS>.log`.
-- If a `JASYPT_PASSWORD` is provided via `/commit`, the assistant will use it for the test command instead of the environment variable.
-- If the commit is a minor bump (`feat|perf|refactor`): bump `VERSION`, create an annotated tag, push branch+tags, and attempt a release (requires `GITHUB_TOKEN`).
-- Otherwise: push the branch.
+## Non-interactive `/commit` workflow (order matters)
+Use fish-compatible shell syntax (`set VAR (cmd)`), and never echo secrets.
 
-## Automatic `/commit` behavior
-- Invocation: `GitHub Copilot: /commit [JASYPT_PASSWORD] ["optional commit header or message"]`
-- If no commit header/message is supplied, the assistant will generate a Conventional Commit header and a short summary that describes the staged changes.
-- If a commit message is supplied, the assistant will verify it adequately summarizes the staged changes; if it does not, the assistant will replace it with a generated summary.
-- The assistant then runs the following steps non-interactively:
-  - Run unit tests (use provided `JASYPT_PASSWORD` if given, else use env var)
-  - Run the commit message validator and abort if validation fails
-  - Stage all unstaged changes (`git add -A`)
-  - Commit using the generated or validated message file
-  - Push the branch to `origin`
+1. Verify `JASYPT_PASSWORD` is available (prefer `/commit` arg; else env). If missing: abort.
+2. Create an execution timestamp and log paths (UTC):
+   - `set TS (date -u +%Y%m%dT%H%M%SZ)`
+   - `set MSGFILE logs/commit-msg-$TS.txt`
+   - `set RUNLOG logs/run-commit-$TS.log`
+3. Stage everything first: `git add -A`. Abort if nothing is staged.
+4. Decide commit type/scope (user-provided preferred; else infer from staged diff). Scope should be a short noun describing the primary area (e.g. `ollama`, `ci`, `tests`, `config`).
+5. If type is `feat|perf|refactor`, bump version before tests/message generation:
+   - Run (prevent premature releases): `env -u GITHUB_TOKEN ./scripts/operational/bump-version.sh <type>`
+   - Stage again: `git add -A` (must include `VERSION`).
+6. Run unit tests (UNIT tier). Save output to `$RUNLOG`.
+7. Generate commit message from the staged diff:
+   - Save to `$MSGFILE`
+   - Body: 2–6 bullets describing the impact of the staged changes.
+8. Run validator on the message file; if it fails, abort and save details to `$RUNLOG`.
+9. Commit: `git commit -F $MSGFILE`.
+10. If type is `feat|perf|refactor`, force-move the version tag to this commit:
+   - `set NEW_VERSION (cat VERSION)`
+   - `set TAG v$NEW_VERSION`
+   - `git tag -f -a "$TAG" -m "Release $TAG"`
+11. Push branch: `git push origin HEAD`.
+12. If type is `feat|perf|refactor`, push the updated tag:
+   - `git push --force-with-lease origin "$TAG"`
+13. If type is `feat|perf|refactor` and `gh` exists and `GITHUB_TOKEN` is set:
+   - Attempt release creation: `./scripts/operational/create-release.sh "$TAG"`.
+   - If the release already exists, treat as `[SKIPPED]` rather than failure.
 
-## Decision rules
-- Non-interactive: prefer `JASYPT_PASSWORD` provided via `/commit`, else use env var; if neither is available, abort.
-- Secrets are never printed to chat; full logs are stored under `logs/`.
+## Heuristics (only if no user header supplied)
+- If changes are only `docs/**` → `docs(<scope>): ...`
+- If changes touch only tests (`src/test/**`, `tests/**`, test resources) → `test(<scope>): ...`
+- If changes touch `.github/workflows/**` and no runtime code changes → `ci(<scope>): ...`
+- Otherwise default to `chore(<scope>): ...` unless you can clearly justify `fix|feat|perf|refactor`.
 
 ## Examples
 - `feat(selection): add dynamic stock selection algorithm`
 - `fix(bridge): handle null ticker names in telegram parser`
-
-## Invocation examples
-- `GitHub Copilot: Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'`
-- `GitHub Copilot: /commit <JASYPT_PASSWORD> Run commit.prompt.md with message 'feat(selection): add dynamic stock selection algorithm'`
-- `Run commit (uses env JASYPT_PASSWORD if set)`
+- `ci(ollama): update model pull in CI`
