@@ -290,7 +290,7 @@ public class EndOfDayStatisticsService {
             String prompt = buildInsightPrompt(stats);
 
             Map<String, Object> request = Map.of(
-                    "model", "mistral:7b-instruct-v0.2-q5_K_M",
+                    "model", "llama3.1:8b-instruct-q5_K_M",
                     "prompt", prompt,
                     "stream", false,
                     "options", Map.of("temperature", 0.5)

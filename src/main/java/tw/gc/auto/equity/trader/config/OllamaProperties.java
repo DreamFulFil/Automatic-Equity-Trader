@@ -9,5 +9,5 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "ollama")
 public class OllamaProperties {
     private String url = "http://localhost:11434";
-    private String model = "mistral:7b-instruct-v0.2-q5_K_M";
+    private String model = "llama3.1:8b-instruct-q5_K_M";
 }

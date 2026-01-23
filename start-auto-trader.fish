@@ -197,11 +197,11 @@ if not pgrep -x "ollama" > /dev/null
     sleep 2
 end
 
-if not curl -s http://localhost:11434/api/tags | grep -q "mistral:7b-instruct-v0.2-q5_K_M"
-    echo "📥 Downloading mistral:7b-instruct-v0.2-q5_K_M..."
-    $OLLAMA_BIN pull mistral:7b-instruct-v0.2-q5_K_M
+if not curl -s http://localhost:11434/api/tags | grep -q "llama3.1:8b-instruct-q5_K_M"
+    echo "📥 Downloading llama3.1:8b-instruct-q5_K_M..."
+    $OLLAMA_BIN pull llama3.1:8b-instruct-q5_K_M
 end
-echo -e "$GREEN✅ Ollama + mistral:7b-instruct-v0.2-q5_K_M ready$NC"
+echo -e "$GREEN✅ Ollama + llama3.1:8b-instruct-q5_K_M ready$NC"
 
 # Step 4.5: Check PostgreSQL (only for local runs, not CI)
 if not set -q CI

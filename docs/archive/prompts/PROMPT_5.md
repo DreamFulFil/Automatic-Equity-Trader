@@ -290,7 +290,7 @@ createuser autotraderuser -P
 #### 4. Ollama Setup
 ```bash
 ollama serve > /dev/null 2>&1 &
-ollama pull mistral:7b-instruct-v0.2-q5_K_M
+ollama pull llama3.1:8b-instruct-q5_K_M
 ollama list  # Verify model downloaded
 ```
 
