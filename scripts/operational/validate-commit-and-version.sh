@@ -37,14 +37,25 @@ fi
 # Determine commit type
 COMMIT_TYPE=$(echo "$COMMIT_MSG_HEAD" | sed -E 's/^([^(:]+).*$/\1/')
 
-# For minor bump types, ensure VERSION is staged
+# For minor bump types, ensure VERSION is staged locally or present in the commit in CI
 if echo "$COMMIT_TYPE" | $MATCHER "^(feat|perf|refactor)$"; then
-  STAGED_FILES=$(git diff --cached --name-only)
-  if ! echo "$STAGED_FILES" | $MATCHER "(^|/)VERSION$"; then
-    echo "ERROR: This commit is a minor bump type ('$COMMIT_TYPE') and requires updating the VERSION file." >&2
-    echo "Please run: ./scripts/operational/bump-version.sh minor" >&2
-    echo "Then stage the updated VERSION and include it in this commit." >&2
-    exit 1
+  if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+    COMMIT_REF=${GITHUB_SHA:-HEAD}
+    COMMIT_FILES=$(git show --name-only --pretty="" "$COMMIT_REF")
+    if ! echo "$COMMIT_FILES" | $MATCHER "(^|/)VERSION$"; then
+      echo "ERROR: This commit is a minor bump type ('$COMMIT_TYPE') and requires updating the VERSION file." >&2
+      echo "Please run: ./scripts/operational/bump-version.sh $COMMIT_TYPE" >&2
+      echo "Then include the updated VERSION in this commit." >&2
+      exit 1
+    fi
+  else
+    STAGED_FILES=$(git diff --cached --name-only)
+    if ! echo "$STAGED_FILES" | $MATCHER "(^|/)VERSION$"; then
+      echo "ERROR: This commit is a minor bump type ('$COMMIT_TYPE') and requires updating the VERSION file." >&2
+      echo "Please run: ./scripts/operational/bump-version.sh $COMMIT_TYPE" >&2
+      echo "Then stage the updated VERSION and include it in this commit." >&2
+      exit 1
+    fi
   fi
 fi
 
