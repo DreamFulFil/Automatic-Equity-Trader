@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -145,7 +146,11 @@ public class BacktestService {
                 .build();
             
             portfolios.put(strategy.getName(), p);
-            results.put(strategy.getName(), new InMemoryBacktestResult(strategy.getName(), initialCapital));
+            
+            InMemoryBacktestResult result = new InMemoryBacktestResult(strategy.getName(), initialCapital);
+            result.setCommissionRate(BUY_FEE_RATE + SELL_FEE_RATE + SELL_TAX_RATE);
+            result.setSlippageRate(SLIPPAGE_RATE);
+            results.put(strategy.getName(), result);
         }
         
         // Run Simulation Loop
@@ -158,8 +163,7 @@ public class BacktestService {
                     TradeSignal signal = strategy.execute(p, data);
                     processSignal(strategy, p, data, signal, result);
                     
-                    // Track equity curve for drawdown calculation
-                    result.trackEquity(p.getEquity());
+                    // Note: trackEquity is now called inside processSignal with position status
                 } catch (Exception e) {
                     log.error("Error in backtest for strategy {}", strategy.getName(), e);
                 }
@@ -196,22 +200,57 @@ public class BacktestService {
         // Get stock name from historical data (already in database from download)
         String stockName = historyDataService.getStockNameFromHistory(symbol);
         
+        // Calculate duration in days
+        int durationDays = (int) ChronoUnit.DAYS.between(periodStart, periodEnd);
+        if (durationDays < 1) durationDays = 1;
+        
         BacktestResult entity = BacktestResult.builder()
             .backtestRunId(backtestRunId)
             .symbol(symbol)
             .stockName(stockName)
             .strategyName(strategyName)
+            // Configuration
             .initialCapital(result.getInitialCapital())
-            .finalEquity(result.getFinalEquity())
-            .totalReturnPct(result.getTotalReturnPercentage())
-            .sharpeRatio(result.getSharpeRatio())
-            .maxDrawdownPct(result.getMaxDrawdownPercentage())
-            .totalTrades(result.getTotalTrades())
-            .winningTrades(result.getWinningTrades())
-            .winRatePct(result.getWinRate())
-            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            .commissionRate(result.getCommissionRate())
+            .slippageRate(result.getSlippageRate())
+            // Time metrics
             .backtestPeriodStart(periodStart)
             .backtestPeriodEnd(periodEnd)
+            .durationDays(durationDays)
+            .exposureTimePct(result.getExposureTimePct())
+            // Equity metrics
+            .finalEquity(result.getFinalEquity())
+            .equityPeak(result.getEquityPeak())
+            .totalReturnPct(result.getTotalReturnPercentage())
+            .buyHoldReturnPct(result.getBuyHoldReturnPct())
+            // Annualized metrics
+            .annualReturnPct(result.getAnnualReturnPct())
+            .annualVolatilityPct(result.getAnnualVolatilityPct())
+            // Risk-adjusted ratios
+            .sharpeRatio(result.getSharpeRatio())
+            .sortinoRatio(result.getSortinoRatio())
+            .calmarRatio(result.getCalmarRatio())
+            // Drawdown metrics
+            .maxDrawdownPct(result.getMaxDrawdownPercentage())
+            .avgDrawdownPct(result.getAvgDrawdownPercentage())
+            .maxDrawdownDurationDays(result.getMaxDrawdownDurationDays())
+            .avgDrawdownDurationDays(result.getAvgDrawdownDurationDays())
+            // Trade statistics
+            .totalTrades(result.getTotalTrades())
+            .winningTrades(result.getWinningTrades())
+            .losingTrades(result.getLosingTrades())
+            .winRatePct(result.getWinRate())
+            .bestTradePct(result.getBestTradePct())
+            .worstTradePct(result.getWorstTradePct())
+            .avgTradePct(result.getAvgTradePct())
+            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            // Trade duration
+            .maxTradeDurationDays(result.getMaxTradeDurationDays())
+            .avgTradeDurationDays(result.getAvgTradeDurationDays())
+            // Quality metrics
+            .profitFactor(Double.isFinite(result.getProfitFactor()) ? result.getProfitFactor() : null)
+            .expectancy(result.getExpectancy())
+            .sqn(result.getSqn())
             .dataPoints(dataPoints)
             .build();
         
@@ -242,10 +281,14 @@ public class BacktestService {
         String symbol = data.getSymbol();
         int currentPos = p.getPosition(symbol);
         double price = data.getClose();
+        
+        // Track price for buy & hold comparison
+        result.recordPrice(price);
 
         // Defensive: keep equity marked-to-market even if strategy returns null
         if (signal == null || signal.getDirection() == null) {
             markToMarket(p, symbol, price);
+            result.trackEquity(p.getEquity(), currentPos > 0);
             return;
         }
 
@@ -265,6 +308,9 @@ public class BacktestService {
                         p.setAvailableMargin(p.getAvailableMargin() - totalCost);
                         p.setPosition(symbol, qty);
                         p.setEntryPrice(symbol, execPrice);
+                        
+                        // Record trade entry for duration tracking
+                        result.recordTradeEntry(data.getTimestamp(), p.getEquity());
                     }
                 }
             }
@@ -283,11 +329,15 @@ public class BacktestService {
 
                 p.setAvailableMargin(p.getAvailableMargin() + netProceeds);
                 p.setPosition(symbol, 0);
-                result.addTrade(pnl);
+                
+                // Add trade with entry value for proper P&L percentage calculation
+                result.addTrade(pnl, entryGross + entryFees, data.getTimestamp());
             }
         }
 
         markToMarket(p, symbol, price);
+        // Track equity with position status for exposure time calculation
+        result.trackEquity(p.getEquity(), p.getPosition(symbol) > 0);
     }
     
     private void closeAllPositions(Portfolio p, MarketData data, InMemoryBacktestResult result) {
@@ -309,7 +359,9 @@ public class BacktestService {
 
             p.setAvailableMargin(p.getAvailableMargin() + netProceeds);
             p.setPosition(symbol, 0);
-            result.addTrade(pnl);
+            
+            // Add trade with entry value for proper P&L percentage calculation
+            result.addTrade(pnl, entryGross + entryFees, data.getTimestamp());
         }
 
         // After closing, equity should be pure cash
@@ -349,87 +401,332 @@ public class BacktestService {
         p.setEquity(equity);
     }
     
+    /**
+     * Comprehensive in-memory backtest result tracking all industry-standard metrics.
+     * 
+     * Tracks:
+     * - Time metrics: duration, exposure time
+     * - Equity curve for drawdown calculations
+     * - Individual trade P&L and duration
+     * - Buy & hold benchmark return
+     * - Daily returns for risk-adjusted metrics
+     */
     @lombok.Data
     public static class InMemoryBacktestResult {
         private final String strategyName;
         private final double initialCapital;
         private double finalEquity;
+        
+        // Configuration (for reference in metrics)
+        private double commissionRate;
+        private double slippageRate;
+        
+        // Trade tracking
         private int totalTrades;
         private int winningTrades;
+        private int losingTrades;
         private double totalPnL;
+        private double grossProfit;  // Sum of winning trades
+        private double grossLoss;    // Sum of losing trades (absolute value)
         
-        // Additional metrics
+        // Computed metrics (populated by calculateMetrics())
         private double totalReturnPercentage;
+        private double buyHoldReturnPct;
+        private double annualReturnPct;
+        private double annualVolatilityPct;
         private double sharpeRatio;
+        private double sortinoRatio;
+        private double calmarRatio;
         private double maxDrawdownPercentage;
+        private double avgDrawdownPercentage;
+        private int maxDrawdownDurationDays;
+        private double avgDrawdownDurationDays;
+        private double exposureTimePct;
+        private double equityPeak;
+        private double bestTradePct;
+        private double worstTradePct;
+        private double avgTradePct;
+        private int maxTradeDurationDays;
+        private double avgTradeDurationDays;
+        private double profitFactor;
+        private double expectancy;
+        private double sqn; // System Quality Number
         
-        // Track equity curve for advanced metrics
+        // Tracking data structures
         private final List<Double> equityCurve = new ArrayList<>();
         private final List<Double> tradePnLs = new ArrayList<>();
+        private final List<Double> tradePnLPcts = new ArrayList<>(); // P&L as percentage of entry
+        private final List<Long> tradeDurations = new ArrayList<>(); // Duration in days
+        private final List<Double> dailyReturns = new ArrayList<>(); // For Sharpe/Sortino
         
-        public void addTrade(double pnl) {
+        // For exposure time calculation
+        private int barsInPosition = 0;
+        private int totalBars = 0;
+        
+        // For buy & hold tracking
+        private double firstPrice = 0;
+        private double lastPrice = 0;
+        
+        // For trade duration tracking
+        private LocalDateTime currentTradeEntryTime = null;
+        private double currentTradeEntryEquity = 0;
+        
+        // Previous equity for daily return calculation
+        private double previousEquity;
+        
+        public InMemoryBacktestResult(String strategyName, double initialCapital) {
+            this.strategyName = strategyName;
+            this.initialCapital = initialCapital;
+            this.previousEquity = initialCapital;
+            this.finalEquity = initialCapital;
+        }
+        
+        /**
+         * Record entry into a trade position.
+         */
+        public void recordTradeEntry(LocalDateTime entryTime, double equity) {
+            this.currentTradeEntryTime = entryTime;
+            this.currentTradeEntryEquity = equity;
+        }
+        
+        /**
+         * Add a completed trade with P&L and duration.
+         */
+        public void addTrade(double pnl, double entryValue, LocalDateTime exitTime) {
             totalTrades++;
             totalPnL += pnl;
             tradePnLs.add(pnl);
-            if (pnl > 0) winningTrades++;
+            
+            // Calculate P&L percentage based on entry value
+            double pnlPct = entryValue > 0 ? (pnl / entryValue) * 100.0 : 0.0;
+            tradePnLPcts.add(pnlPct);
+            
+            if (pnl > 0) {
+                winningTrades++;
+                grossProfit += pnl;
+            } else if (pnl < 0) {
+                losingTrades++;
+                grossLoss += Math.abs(pnl);
+            }
+            
+            // Calculate trade duration
+            if (currentTradeEntryTime != null && exitTime != null) {
+                long durationDays = ChronoUnit.DAYS.between(currentTradeEntryTime, exitTime);
+                if (durationDays < 1) durationDays = 1; // Minimum 1 day for intraday
+                tradeDurations.add(durationDays);
+            }
+            currentTradeEntryTime = null;
         }
         
-        public void trackEquity(double equity) {
+        /**
+         * Legacy addTrade method for backward compatibility.
+         */
+        public void addTrade(double pnl) {
+            addTrade(pnl, initialCapital, LocalDateTime.now());
+        }
+        
+        /**
+         * Track equity at each bar for drawdown calculation.
+         */
+        public void trackEquity(double equity, boolean inPosition) {
             equityCurve.add(equity);
+            totalBars++;
+            if (inPosition) {
+                barsInPosition++;
+            }
+            
+            // Calculate daily return
+            if (previousEquity > 0) {
+                double dailyReturn = (equity - previousEquity) / previousEquity;
+                dailyReturns.add(dailyReturn);
+            }
+            previousEquity = equity;
+        }
+        
+        /**
+         * Legacy trackEquity method for backward compatibility.
+         */
+        public void trackEquity(double equity) {
+            trackEquity(equity, false);
+        }
+        
+        /**
+         * Record first and last price for buy & hold calculation.
+         */
+        public void recordPrice(double price) {
+            if (firstPrice == 0) {
+                firstPrice = price;
+            }
+            lastPrice = price;
         }
         
         public double getWinRate() {
             return totalTrades == 0 ? 0 : (double) winningTrades / totalTrades * 100;
         }
         
+        /**
+         * Calculate all comprehensive backtest metrics.
+         * Should be called after the backtest simulation completes.
+         */
         public void calculateMetrics() {
-            // Calculate total return percentage
+            // Total return percentage
             if (initialCapital > 0) {
                 totalReturnPercentage = ((finalEquity - initialCapital) / initialCapital) * 100.0;
             }
             
-            // Calculate max drawdown
-            maxDrawdownPercentage = calculateMaxDrawdown();
+            // Buy & hold return
+            if (firstPrice > 0) {
+                buyHoldReturnPct = ((lastPrice - firstPrice) / firstPrice) * 100.0;
+            }
             
-            // Calculate Sharpe ratio
-            sharpeRatio = calculateSharpeRatio();
+            // Exposure time (percentage of time in position)
+            exposureTimePct = totalBars > 0 ? ((double) barsInPosition / totalBars) * 100.0 : 0.0;
+            
+            // Calculate drawdown metrics
+            calculateDrawdownMetrics();
+            
+            // Calculate risk-adjusted ratios
+            calculateRiskAdjustedMetrics();
+            
+            // Calculate trade statistics
+            calculateTradeStatistics();
+            
+            // Calculate quality metrics
+            calculateQualityMetrics();
         }
         
-        private double calculateMaxDrawdown() {
-            if (equityCurve.isEmpty()) return 0.0;
+        private void calculateDrawdownMetrics() {
+            if (equityCurve.isEmpty()) {
+                equityPeak = initialCapital;
+                return;
+            }
             
-            double maxEquity = equityCurve.get(0);
+            equityPeak = equityCurve.get(0);
             double maxDrawdown = 0.0;
+            List<Double> drawdowns = new ArrayList<>();
+            List<Integer> drawdownDurations = new ArrayList<>();
             
-            for (double equity : equityCurve) {
-                if (equity > maxEquity) {
-                    maxEquity = equity;
+            int drawdownStart = -1;
+            double currentDrawdownPeak = equityPeak;
+            
+            for (int i = 0; i < equityCurve.size(); i++) {
+                double equity = equityCurve.get(i);
+                
+                if (equity > equityPeak) {
+                    equityPeak = equity;
+                    // End of drawdown period
+                    if (drawdownStart >= 0) {
+                        drawdownDurations.add(i - drawdownStart);
+                        drawdownStart = -1;
+                    }
+                    currentDrawdownPeak = equity;
                 }
-                double drawdown = ((maxEquity - equity) / maxEquity) * 100.0;
-                if (drawdown > maxDrawdown) {
-                    maxDrawdown = drawdown;
+                
+                double drawdown = ((currentDrawdownPeak - equity) / currentDrawdownPeak) * 100.0;
+                if (drawdown > 0) {
+                    drawdowns.add(drawdown);
+                    if (drawdownStart < 0) {
+                        drawdownStart = i;
+                    }
+                    if (drawdown > maxDrawdown) {
+                        maxDrawdown = drawdown;
+                    }
                 }
             }
             
-            return maxDrawdown;
+            // Handle ongoing drawdown at end
+            if (drawdownStart >= 0) {
+                drawdownDurations.add(equityCurve.size() - drawdownStart);
+            }
+            
+            maxDrawdownPercentage = maxDrawdown;
+            avgDrawdownPercentage = drawdowns.isEmpty() ? 0.0 : 
+                drawdowns.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            
+            maxDrawdownDurationDays = drawdownDurations.isEmpty() ? 0 :
+                drawdownDurations.stream().mapToInt(Integer::intValue).max().orElse(0);
+            avgDrawdownDurationDays = drawdownDurations.isEmpty() ? 0.0 :
+                drawdownDurations.stream().mapToInt(Integer::intValue).average().orElse(0.0);
         }
         
-        private double calculateSharpeRatio() {
-            if (tradePnLs.isEmpty()) return 0.0;
+        private void calculateRiskAdjustedMetrics() {
+            // Annualized metrics (assuming 252 trading days)
+            int tradingDays = Math.max(1, dailyReturns.size());
+            double totalReturn = initialCapital > 0 ? (finalEquity / initialCapital) - 1.0 : 0.0;
             
-            // Calculate average return
-            double avgReturn = tradePnLs.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            // Annualized return: (1 + total_return) ^ (252 / days) - 1
+            double yearsElapsed = tradingDays / 252.0;
+            if (yearsElapsed > 0 && totalReturn > -1) {
+                annualReturnPct = (Math.pow(1 + totalReturn, 1.0 / yearsElapsed) - 1) * 100.0;
+            }
             
-            // Calculate standard deviation
-            double variance = tradePnLs.stream()
-                .mapToDouble(pnl -> Math.pow(pnl - avgReturn, 2))
+            // Daily volatility and annualized volatility
+            double avgDailyReturn = dailyReturns.isEmpty() ? 0.0 :
+                dailyReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            double variance = dailyReturns.stream()
+                .mapToDouble(r -> Math.pow(r - avgDailyReturn, 2))
                 .average()
                 .orElse(0.0);
+            double dailyVolatility = Math.sqrt(variance);
+            annualVolatilityPct = dailyVolatility * Math.sqrt(252) * 100.0;
             
-            double stdDev = Math.sqrt(variance);
+            // Sharpe Ratio = (Annual Return - Risk Free Rate) / Annual Volatility
+            // Assuming risk-free rate = 0 for simplicity
+            sharpeRatio = annualVolatilityPct > 0 ? annualReturnPct / annualVolatilityPct : 0.0;
             
-            // Sharpe ratio (assuming risk-free rate = 0 for simplicity)
-            return stdDev == 0 ? 0.0 : avgReturn / stdDev;
+            // Sortino Ratio = (Annual Return - Risk Free Rate) / Downside Deviation
+            double downsideVariance = dailyReturns.stream()
+                .filter(r -> r < 0)
+                .mapToDouble(r -> Math.pow(r, 2))
+                .average()
+                .orElse(0.0);
+            double downsideDeviation = Math.sqrt(downsideVariance) * Math.sqrt(252) * 100.0;
+            sortinoRatio = downsideDeviation > 0 ? annualReturnPct / downsideDeviation : 0.0;
+            
+            // Calmar Ratio = Annual Return / Max Drawdown
+            calmarRatio = maxDrawdownPercentage > 0 ? annualReturnPct / maxDrawdownPercentage : 0.0;
+        }
+        
+        private void calculateTradeStatistics() {
+            if (!tradePnLPcts.isEmpty()) {
+                bestTradePct = tradePnLPcts.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+                worstTradePct = tradePnLPcts.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+                avgTradePct = tradePnLPcts.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            }
+            
+            if (!tradeDurations.isEmpty()) {
+                maxTradeDurationDays = tradeDurations.stream().mapToInt(Long::intValue).max().orElse(0);
+                avgTradeDurationDays = tradeDurations.stream().mapToLong(Long::longValue).average().orElse(0.0);
+            }
+        }
+        
+        private void calculateQualityMetrics() {
+            // Profit Factor = Gross Profit / Gross Loss
+            profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Double.MAX_VALUE : 0.0);
+            
+            // Expectancy = (Win% × Avg Win) - (Loss% × Avg Loss)
+            if (totalTrades > 0) {
+                double winPct = (double) winningTrades / totalTrades;
+                double lossPct = (double) losingTrades / totalTrades;
+                double avgWin = winningTrades > 0 ? grossProfit / winningTrades : 0.0;
+                double avgLoss = losingTrades > 0 ? grossLoss / losingTrades : 0.0;
+                expectancy = (winPct * avgWin) - (lossPct * avgLoss);
+            }
+            
+            // SQN (System Quality Number) = sqrt(N) × Expectancy / StdDev(R)
+            // Where N = number of trades, R = individual trade returns
+            if (tradePnLs.size() >= 2) {
+                double avgPnL = tradePnLs.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                double pnlVariance = tradePnLs.stream()
+                    .mapToDouble(p -> Math.pow(p - avgPnL, 2))
+                    .average()
+                    .orElse(0.0);
+                double pnlStdDev = Math.sqrt(pnlVariance);
+                
+                if (pnlStdDev > 0) {
+                    sqn = Math.sqrt(totalTrades) * (avgPnL / pnlStdDev);
+                }
+            }
         }
     }
     
@@ -1030,7 +1327,11 @@ public class BacktestService {
                 .build();
             
             portfolios.put(strategy.getName(), p);
-            results.put(strategy.getName(), new InMemoryBacktestResult(strategy.getName(), initialCapital));
+            
+            InMemoryBacktestResult result = new InMemoryBacktestResult(strategy.getName(), initialCapital);
+            result.setCommissionRate(BUY_FEE_RATE + SELL_FEE_RATE + SELL_TAX_RATE);
+            result.setSlippageRate(SLIPPAGE_RATE);
+            results.put(strategy.getName(), result);
         }
         
         // Simulation loop
@@ -1042,7 +1343,7 @@ public class BacktestService {
                 try {
                     TradeSignal signal = strategy.execute(p, data);
                     processSignal(strategy, p, data, signal, result);
-                    result.trackEquity(p.getEquity());
+                    // Note: trackEquity is now called inside processSignal with position status
                 } catch (Exception e) {
                     log.trace("Error in backtest for strategy {}: {}", strategy.getName(), e.getMessage());
                 }
@@ -1073,22 +1374,57 @@ public class BacktestService {
         // Get stock name from historical data (already in database from download)
         String stockName = historyDataService.getStockNameFromHistory(symbol);
         
+        // Calculate duration in days
+        int durationDays = (int) ChronoUnit.DAYS.between(periodStart, periodEnd);
+        if (durationDays < 1) durationDays = 1;
+        
         return BacktestResult.builder()
             .backtestRunId(backtestRunId)
             .symbol(symbol)
             .stockName(stockName)
             .strategyName(strategyName)
+            // Configuration
             .initialCapital(result.getInitialCapital())
-            .finalEquity(result.getFinalEquity())
-            .totalReturnPct(result.getTotalReturnPercentage())
-            .sharpeRatio(result.getSharpeRatio())
-            .maxDrawdownPct(result.getMaxDrawdownPercentage())
-            .totalTrades(result.getTotalTrades())
-            .winningTrades(result.getWinningTrades())
-            .winRatePct(result.getWinRate())
-            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            .commissionRate(result.getCommissionRate())
+            .slippageRate(result.getSlippageRate())
+            // Time metrics
             .backtestPeriodStart(periodStart)
             .backtestPeriodEnd(periodEnd)
+            .durationDays(durationDays)
+            .exposureTimePct(result.getExposureTimePct())
+            // Equity metrics
+            .finalEquity(result.getFinalEquity())
+            .equityPeak(result.getEquityPeak())
+            .totalReturnPct(result.getTotalReturnPercentage())
+            .buyHoldReturnPct(result.getBuyHoldReturnPct())
+            // Annualized metrics
+            .annualReturnPct(result.getAnnualReturnPct())
+            .annualVolatilityPct(result.getAnnualVolatilityPct())
+            // Risk-adjusted ratios
+            .sharpeRatio(result.getSharpeRatio())
+            .sortinoRatio(result.getSortinoRatio())
+            .calmarRatio(result.getCalmarRatio())
+            // Drawdown metrics
+            .maxDrawdownPct(result.getMaxDrawdownPercentage())
+            .avgDrawdownPct(result.getAvgDrawdownPercentage())
+            .maxDrawdownDurationDays(result.getMaxDrawdownDurationDays())
+            .avgDrawdownDurationDays(result.getAvgDrawdownDurationDays())
+            // Trade statistics
+            .totalTrades(result.getTotalTrades())
+            .winningTrades(result.getWinningTrades())
+            .losingTrades(result.getLosingTrades())
+            .winRatePct(result.getWinRate())
+            .bestTradePct(result.getBestTradePct())
+            .worstTradePct(result.getWorstTradePct())
+            .avgTradePct(result.getAvgTradePct())
+            .avgProfitPerTrade(result.getTotalTrades() > 0 ? result.getTotalPnL() / result.getTotalTrades() : 0.0)
+            // Trade duration
+            .maxTradeDurationDays(result.getMaxTradeDurationDays())
+            .avgTradeDurationDays(result.getAvgTradeDurationDays())
+            // Quality metrics
+            .profitFactor(Double.isFinite(result.getProfitFactor()) ? result.getProfitFactor() : null)
+            .expectancy(result.getExpectancy())
+            .sqn(result.getSqn())
             .dataPoints(dataPoints)
             .build();
     }
@@ -1179,11 +1515,19 @@ public class BacktestService {
     protected int jdbcBatchInsertBacktestResults(List<BacktestResult> results) {
         String sql = """
             INSERT INTO backtest_results (
-                backtest_run_id, symbol, stock_name, strategy_name, initial_capital, final_equity,
-                total_return_pct, sharpe_ratio, max_drawdown_pct, total_trades, winning_trades,
-                win_rate_pct, avg_profit_per_trade, backtest_period_start, backtest_period_end,
+                backtest_run_id, symbol, stock_name, strategy_name,
+                initial_capital, commission_rate, slippage_rate,
+                backtest_period_start, backtest_period_end, duration_days, exposure_time_pct,
+                final_equity, equity_peak, total_return_pct, buy_hold_return_pct,
+                annual_return_pct, annual_volatility_pct,
+                sharpe_ratio, sortino_ratio, calmar_ratio,
+                max_drawdown_pct, avg_drawdown_pct, max_drawdown_duration_days, avg_drawdown_duration_days,
+                total_trades, winning_trades, losing_trades, win_rate_pct,
+                best_trade_pct, worst_trade_pct, avg_trade_pct, avg_profit_per_trade,
+                max_trade_duration_days, avg_trade_duration_days,
+                profit_factor, expectancy, sqn,
                 data_points, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         
         try {
@@ -1192,19 +1536,51 @@ public class BacktestService {
                 ps.setString(2, r.getSymbol());
                 ps.setString(3, r.getStockName());
                 ps.setString(4, r.getStrategyName());
+                // Configuration
                 ps.setDouble(5, r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
-                ps.setDouble(6, r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
-                ps.setDouble(7, r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
-                ps.setDouble(8, r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
-                ps.setDouble(9, r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
-                ps.setInt(10, r.getTotalTrades() != null ? r.getTotalTrades() : 0);
-                ps.setInt(11, r.getWinningTrades() != null ? r.getWinningTrades() : 0);
-                ps.setDouble(12, r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
-                ps.setDouble(13, r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
-                ps.setObject(14, r.getBacktestPeriodStart());
-                ps.setObject(15, r.getBacktestPeriodEnd());
-                ps.setInt(16, r.getDataPoints() != null ? r.getDataPoints() : 0);
-                ps.setObject(17, r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
+                ps.setDouble(6, r.getCommissionRate() != null ? r.getCommissionRate() : 0.0);
+                ps.setDouble(7, r.getSlippageRate() != null ? r.getSlippageRate() : 0.0);
+                // Time metrics
+                ps.setObject(8, r.getBacktestPeriodStart());
+                ps.setObject(9, r.getBacktestPeriodEnd());
+                ps.setInt(10, r.getDurationDays() != null ? r.getDurationDays() : 0);
+                ps.setDouble(11, r.getExposureTimePct() != null ? r.getExposureTimePct() : 0.0);
+                // Equity metrics
+                ps.setDouble(12, r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
+                ps.setDouble(13, r.getEquityPeak() != null ? r.getEquityPeak() : 0.0);
+                ps.setDouble(14, r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
+                ps.setDouble(15, r.getBuyHoldReturnPct() != null ? r.getBuyHoldReturnPct() : 0.0);
+                // Annualized metrics
+                ps.setDouble(16, r.getAnnualReturnPct() != null ? r.getAnnualReturnPct() : 0.0);
+                ps.setDouble(17, r.getAnnualVolatilityPct() != null ? r.getAnnualVolatilityPct() : 0.0);
+                // Risk-adjusted ratios
+                ps.setDouble(18, r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
+                ps.setDouble(19, r.getSortinoRatio() != null ? r.getSortinoRatio() : 0.0);
+                ps.setDouble(20, r.getCalmarRatio() != null ? r.getCalmarRatio() : 0.0);
+                // Drawdown metrics
+                ps.setDouble(21, r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
+                ps.setDouble(22, r.getAvgDrawdownPct() != null ? r.getAvgDrawdownPct() : 0.0);
+                ps.setInt(23, r.getMaxDrawdownDurationDays() != null ? r.getMaxDrawdownDurationDays() : 0);
+                ps.setDouble(24, r.getAvgDrawdownDurationDays() != null ? r.getAvgDrawdownDurationDays() : 0.0);
+                // Trade statistics
+                ps.setInt(25, r.getTotalTrades() != null ? r.getTotalTrades() : 0);
+                ps.setInt(26, r.getWinningTrades() != null ? r.getWinningTrades() : 0);
+                ps.setInt(27, r.getLosingTrades() != null ? r.getLosingTrades() : 0);
+                ps.setDouble(28, r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
+                ps.setDouble(29, r.getBestTradePct() != null ? r.getBestTradePct() : 0.0);
+                ps.setDouble(30, r.getWorstTradePct() != null ? r.getWorstTradePct() : 0.0);
+                ps.setDouble(31, r.getAvgTradePct() != null ? r.getAvgTradePct() : 0.0);
+                ps.setDouble(32, r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+                // Trade duration
+                ps.setInt(33, r.getMaxTradeDurationDays() != null ? r.getMaxTradeDurationDays() : 0);
+                ps.setDouble(34, r.getAvgTradeDurationDays() != null ? r.getAvgTradeDurationDays() : 0.0);
+                // Quality metrics
+                ps.setObject(35, r.getProfitFactor());
+                ps.setDouble(36, r.getExpectancy() != null ? r.getExpectancy() : 0.0);
+                ps.setDouble(37, r.getSqn() != null ? r.getSqn() : 0.0);
+                // Misc
+                ps.setInt(38, r.getDataPoints() != null ? r.getDataPoints() : 0);
+                ps.setObject(39, r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
             });
             return results.size();
         } catch (Exception e) {
@@ -1223,17 +1599,49 @@ public class BacktestService {
             mapText("symbol", BacktestResult::getSymbol);
             mapText("stock_name", BacktestResult::getStockName);
             mapText("strategy_name", BacktestResult::getStrategyName);
+            // Configuration
             mapDouble("initial_capital", r -> r.getInitialCapital() != null ? r.getInitialCapital() : 0.0);
-            mapDouble("final_equity", r -> r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
-            mapDouble("total_return_pct", r -> r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
-            mapDouble("sharpe_ratio", r -> r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
-            mapDouble("max_drawdown_pct", r -> r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
-            mapInteger("total_trades", r -> r.getTotalTrades() != null ? r.getTotalTrades() : 0);
-            mapInteger("winning_trades", r -> r.getWinningTrades() != null ? r.getWinningTrades() : 0);
-            mapDouble("win_rate_pct", r -> r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
-            mapDouble("avg_profit_per_trade", r -> r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+            mapDouble("commission_rate", r -> r.getCommissionRate() != null ? r.getCommissionRate() : 0.0);
+            mapDouble("slippage_rate", r -> r.getSlippageRate() != null ? r.getSlippageRate() : 0.0);
+            // Time metrics
             mapTimeStamp("backtest_period_start", BacktestResult::getBacktestPeriodStart);
             mapTimeStamp("backtest_period_end", BacktestResult::getBacktestPeriodEnd);
+            mapInteger("duration_days", r -> r.getDurationDays() != null ? r.getDurationDays() : 0);
+            mapDouble("exposure_time_pct", r -> r.getExposureTimePct() != null ? r.getExposureTimePct() : 0.0);
+            // Equity metrics
+            mapDouble("final_equity", r -> r.getFinalEquity() != null ? r.getFinalEquity() : 0.0);
+            mapDouble("equity_peak", r -> r.getEquityPeak() != null ? r.getEquityPeak() : 0.0);
+            mapDouble("total_return_pct", r -> r.getTotalReturnPct() != null ? r.getTotalReturnPct() : 0.0);
+            mapDouble("buy_hold_return_pct", r -> r.getBuyHoldReturnPct() != null ? r.getBuyHoldReturnPct() : 0.0);
+            // Annualized metrics
+            mapDouble("annual_return_pct", r -> r.getAnnualReturnPct() != null ? r.getAnnualReturnPct() : 0.0);
+            mapDouble("annual_volatility_pct", r -> r.getAnnualVolatilityPct() != null ? r.getAnnualVolatilityPct() : 0.0);
+            // Risk-adjusted ratios
+            mapDouble("sharpe_ratio", r -> r.getSharpeRatio() != null ? r.getSharpeRatio() : 0.0);
+            mapDouble("sortino_ratio", r -> r.getSortinoRatio() != null ? r.getSortinoRatio() : 0.0);
+            mapDouble("calmar_ratio", r -> r.getCalmarRatio() != null ? r.getCalmarRatio() : 0.0);
+            // Drawdown metrics
+            mapDouble("max_drawdown_pct", r -> r.getMaxDrawdownPct() != null ? r.getMaxDrawdownPct() : 0.0);
+            mapDouble("avg_drawdown_pct", r -> r.getAvgDrawdownPct() != null ? r.getAvgDrawdownPct() : 0.0);
+            mapInteger("max_drawdown_duration_days", r -> r.getMaxDrawdownDurationDays() != null ? r.getMaxDrawdownDurationDays() : 0);
+            mapDouble("avg_drawdown_duration_days", r -> r.getAvgDrawdownDurationDays() != null ? r.getAvgDrawdownDurationDays() : 0.0);
+            // Trade statistics
+            mapInteger("total_trades", r -> r.getTotalTrades() != null ? r.getTotalTrades() : 0);
+            mapInteger("winning_trades", r -> r.getWinningTrades() != null ? r.getWinningTrades() : 0);
+            mapInteger("losing_trades", r -> r.getLosingTrades() != null ? r.getLosingTrades() : 0);
+            mapDouble("win_rate_pct", r -> r.getWinRatePct() != null ? r.getWinRatePct() : 0.0);
+            mapDouble("best_trade_pct", r -> r.getBestTradePct() != null ? r.getBestTradePct() : 0.0);
+            mapDouble("worst_trade_pct", r -> r.getWorstTradePct() != null ? r.getWorstTradePct() : 0.0);
+            mapDouble("avg_trade_pct", r -> r.getAvgTradePct() != null ? r.getAvgTradePct() : 0.0);
+            mapDouble("avg_profit_per_trade", r -> r.getAvgProfitPerTrade() != null ? r.getAvgProfitPerTrade() : 0.0);
+            // Trade duration
+            mapInteger("max_trade_duration_days", r -> r.getMaxTradeDurationDays() != null ? r.getMaxTradeDurationDays() : 0);
+            mapDouble("avg_trade_duration_days", r -> r.getAvgTradeDurationDays() != null ? r.getAvgTradeDurationDays() : 0.0);
+            // Quality metrics
+            mapDouble("profit_factor", r -> r.getProfitFactor() != null && Double.isFinite(r.getProfitFactor()) ? r.getProfitFactor() : 0.0);
+            mapDouble("expectancy", r -> r.getExpectancy() != null ? r.getExpectancy() : 0.0);
+            mapDouble("sqn", r -> r.getSqn() != null ? r.getSqn() : 0.0);
+            // Misc
             mapInteger("data_points", r -> r.getDataPoints() != null ? r.getDataPoints() : 0);
             mapTimeStamp("created_at", r -> r.getCreatedAt() != null ? r.getCreatedAt() : LocalDateTime.now());
         }

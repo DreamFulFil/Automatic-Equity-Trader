@@ -577,7 +577,7 @@ class BacktestServiceCoverageTest {
         }
         writer.close();
 
-        assertEquals(17, columns.size());
+        assertEquals(39, columns.size());
     }
 
     @Test
@@ -588,14 +588,38 @@ class BacktestServiceCoverageTest {
             .stockName("Test2")
             .strategyName("S2")
             .initialCapital(1000.0)
+            .commissionRate(0.005)
+            .slippageRate(0.001)
+            .backtestPeriodStart(LocalDateTime.now().minusDays(30))
+            .backtestPeriodEnd(LocalDateTime.now())
+            .durationDays(30)
+            .exposureTimePct(75.0)
             .finalEquity(1100.0)
+            .equityPeak(1150.0)
             .totalReturnPct(10.0)
+            .buyHoldReturnPct(8.0)
+            .annualReturnPct(120.0)
+            .annualVolatilityPct(25.0)
             .sharpeRatio(1.2)
+            .sortinoRatio(1.5)
+            .calmarRatio(2.0)
             .maxDrawdownPct(5.0)
+            .avgDrawdownPct(2.5)
+            .maxDrawdownDurationDays(5)
+            .avgDrawdownDurationDays(2.5)
             .totalTrades(12)
             .winningTrades(7)
+            .losingTrades(5)
             .winRatePct(58.3)
+            .bestTradePct(15.0)
+            .worstTradePct(-8.0)
+            .avgTradePct(3.5)
             .avgProfitPerTrade(12.5)
+            .maxTradeDurationDays(10)
+            .avgTradeDurationDays(5.5)
+            .profitFactor(2.5)
+            .expectancy(50.0)
+            .sqn(2.0)
             .dataPoints(200)
             .createdAt(LocalDateTime.now())
             .build();
@@ -612,7 +636,7 @@ class BacktestServiceCoverageTest {
         }
         writer.close();
 
-        assertEquals(17, columns.size());
+        assertEquals(39, columns.size());
     }
 
     @Test
