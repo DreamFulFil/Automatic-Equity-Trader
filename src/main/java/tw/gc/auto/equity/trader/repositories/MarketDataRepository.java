@@ -22,6 +22,8 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
 
     Optional<MarketData> findFirstBySymbolAndTimeframeOrderByTimestampDesc(String symbol, Timeframe timeframe);
 
+       Optional<MarketData> findFirstBySymbolAndTimeframeOrderByTimestampAsc(String symbol, Timeframe timeframe);
+
     @Query("SELECT m FROM MarketData m WHERE m.symbol = :symbol AND m.timeframe = :timeframe " +
            "ORDER BY m.timestamp DESC LIMIT :limit")
     List<MarketData> findRecentBySymbolAndTimeframe(

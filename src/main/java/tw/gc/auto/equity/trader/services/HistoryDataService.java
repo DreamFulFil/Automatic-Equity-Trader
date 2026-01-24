@@ -65,6 +65,9 @@ public class HistoryDataService {
     private static final int BULK_INSERT_BATCH_SIZE = 2_000;
     private static final int MAX_CONCURRENT_DOWNLOADS = 8;
     private static final int FLUSH_TIMEOUT_MS = 500;
+
+    private static final int COVERAGE_START_TOLERANCE_DAYS = 30;
+    private static final int COVERAGE_STALE_DAYS = 7;
     
     // Single-stock queue capacity (legacy compatibility)
     private static final int QUEUE_CAPACITY = 5_000;
@@ -174,6 +177,11 @@ public class HistoryDataService {
             allDownloadsComplete.set(true);
 
             awaitWriterLatch(writerLatch, writerTimeout, writerTimeoutUnit);
+
+            List<String> coverageIssues = validateHistoricalCoverage(symbols, years);
+            if (!coverageIssues.isEmpty()) {
+                log.warn("⚠️ Historical coverage incomplete for {} symbols: {}", coverageIssues.size(), coverageIssues);
+            }
 
             // Update results with actual inserted counts
             int totalDownloaded = results.values().stream().mapToInt(DownloadResult::getTotalRecords).sum();
@@ -646,6 +654,8 @@ public class HistoryDataService {
             Thread.currentThread().interrupt();
             log.error("❌ Interrupted waiting for writer thread: {}", e.getMessage());
         }
+
+        validateHistoricalCoverage(List.of(symbol), years);
         
         log.info("✅ All {} batches completed. Total: {} downloaded, {} inserted for {}", 
             totalBatches, totalDownloaded.get(), totalInserted.get(), symbol);
@@ -965,6 +975,49 @@ public class HistoryDataService {
      */
     public void resetTruncationFlag() {
         tablesCleared.set(false);
+    }
+
+    private List<String> validateHistoricalCoverage(List<String> symbols, int years) {
+        if (symbols == null || symbols.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expectedStart = now.minusYears(years);
+        LocalDateTime startThreshold = expectedStart.plusDays(COVERAGE_START_TOLERANCE_DAYS);
+        LocalDateTime staleThreshold = now.minusDays(COVERAGE_STALE_DAYS);
+
+        List<String> issues = new ArrayList<>();
+
+        for (String symbol : symbols) {
+            Optional<MarketData> earliest = marketDataRepository
+                .findFirstBySymbolAndTimeframeOrderByTimestampAsc(symbol, MarketData.Timeframe.DAY_1);
+            Optional<MarketData> latest = marketDataRepository
+                .findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1);
+
+            if (earliest.isEmpty() || latest.isEmpty()) {
+                issues.add(symbol);
+                log.warn("⚠️ Coverage check failed for {}: missing earliest/latest data", symbol);
+                continue;
+            }
+
+            long count = marketDataRepository.countSince(symbol, MarketData.Timeframe.DAY_1, expectedStart);
+            LocalDateTime earliestTs = earliest.get().getTimestamp();
+            LocalDateTime latestTs = latest.get().getTimestamp();
+
+            boolean startTooRecent = earliestTs.isAfter(startThreshold);
+            boolean latestTooOld = latestTs.isBefore(staleThreshold);
+
+            if (count == 0 || startTooRecent || latestTooOld) {
+                issues.add(symbol);
+                log.warn(
+                    "⚠️ Coverage gap for {}: earliest={}, latest={}, countSinceStart={} (expectedStart={})",
+                    symbol, earliestTs, latestTs, count, expectedStart
+                );
+            }
+        }
+
+        return issues;
     }
     
     /**

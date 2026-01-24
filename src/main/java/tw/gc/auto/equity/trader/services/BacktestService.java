@@ -22,6 +22,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -712,29 +713,68 @@ public class BacktestService {
      * @param initialCapital Starting capital for backtest
      * @return Map of stock symbol to backtest results
      */
+    public Map<String, Map<String, InMemoryBacktestResult>> runParallelizedBacktest(double initialCapital) {
+        return runParallelizedBacktestInternal(this::getAllStrategies, initialCapital);
+    }
+
     public Map<String, Map<String, InMemoryBacktestResult>> runParallelizedBacktest(
             List<IStrategy> strategies, double initialCapital) {
-        
-        log.info("🚀 Starting Parallelized Backtest with {} strategies", strategies.size());
-        
+        return runSequentialBacktestInternal(strategies, initialCapital);
+    }
+
+    private Map<String, Map<String, InMemoryBacktestResult>> runParallelizedBacktestInternal(
+            Supplier<List<IStrategy>> strategySupplier, double initialCapital) {
+        List<IStrategy> initialStrategies = strategySupplier.get();
+        int strategyCount = initialStrategies == null ? 0 : initialStrategies.size();
+
+        log.info("🚀 Starting Parallelized Backtest with {} strategies", strategyCount);
+
         systemStatusService.startBacktest();
-        
+
         try {
             List<String> stocks = fetchTop50Stocks();
             log.info("📊 Selected {} stocks for backtesting", stocks.size());
-            
+
             // Check data availability - do NOT download
             List<String> stocksWithData = filterStocksWithHistoricalData(stocks);
-            
+
             if (stocksWithData.isEmpty()) {
                 log.warn("⚠️ No historical data available for any stocks. " +
                     "Use /api/history/download to download data first.");
                 return new HashMap<>();
             }
-            
+
             log.info("📊 Found historical data for {}/{} stocks", stocksWithData.size(), stocks.size());
-            
-            return executeParallelBacktests(stocksWithData, strategies, initialCapital);
+
+            return executeParallelBacktests(stocksWithData, strategySupplier, initialCapital);
+        } finally {
+            systemStatusService.completeBacktest();
+        }
+    }
+
+    private Map<String, Map<String, InMemoryBacktestResult>> runSequentialBacktestInternal(
+            List<IStrategy> strategies, double initialCapital) {
+        int strategyCount = strategies == null ? 0 : strategies.size();
+
+        log.info("🚀 Starting Backtest (sequential) with {} strategies", strategyCount);
+
+        systemStatusService.startBacktest();
+
+        try {
+            List<String> stocks = fetchTop50Stocks();
+            log.info("📊 Selected {} stocks for backtesting", stocks.size());
+
+            List<String> stocksWithData = filterStocksWithHistoricalData(stocks);
+
+            if (stocksWithData.isEmpty()) {
+                log.warn("⚠️ No historical data available for any stocks. " +
+                    "Use /api/history/download to download data first.");
+                return new HashMap<>();
+            }
+
+            log.info("📊 Found historical data for {}/{} stocks", stocksWithData.size(), stocks.size());
+
+            return executeSequentialBacktests(stocksWithData, strategies, initialCapital);
         } finally {
             systemStatusService.completeBacktest();
         }
@@ -762,8 +802,8 @@ public class BacktestService {
     /**
      * Execute parallel backtests with single-writer persistence pattern.
      */
-    private Map<String, Map<String, InMemoryBacktestResult>> executeParallelBacktests(
-            List<String> stocks, List<IStrategy> strategies, double initialCapital) {
+        private Map<String, Map<String, InMemoryBacktestResult>> executeParallelBacktests(
+            List<String> stocks, Supplier<List<IStrategy>> strategySupplier, double initialCapital) {
         
         log.info("🧪 Running backtests with single-writer persistence pattern...");
         
@@ -802,8 +842,9 @@ public class BacktestService {
                     try {
                         backtestPermits.acquire();
                         try {
+                            List<IStrategy> strategies = strategySupplier.get();
                             Map<String, InMemoryBacktestResult> results = runBacktestForStock(
-                                symbol, strategies, initialCapital, backtestRunId, 
+                                symbol, strategies, initialCapital, backtestRunId,
                                 tenYearsAgo, now, resultQueue
                             );
                             synchronized (allResults) {
@@ -843,6 +884,65 @@ public class BacktestService {
         
         return allResults;
     }
+
+    private Map<String, Map<String, InMemoryBacktestResult>> executeSequentialBacktests(
+            List<String> stocks, List<IStrategy> strategies, double initialCapital) {
+
+        log.info("🧪 Running backtests sequentially with single-writer persistence pattern...");
+
+        String backtestRunId = generateBacktestRunId();
+        BlockingQueue<BacktestResult> resultQueue = new ArrayBlockingQueue<>(BACKTEST_QUEUE_CAPACITY);
+        AtomicBoolean allBacktestsComplete = new AtomicBoolean(false);
+        AtomicInteger totalInserted = new AtomicInteger(0);
+        CountDownLatch writerLatch = new CountDownLatch(1);
+
+        Map<String, Map<String, InMemoryBacktestResult>> allResults = new HashMap<>();
+
+        Thread.ofPlatform()
+            .name("BacktestResultWriter")
+            .start(() -> {
+                try {
+                    int inserted = runBacktestResultWriter(resultQueue, allBacktestsComplete);
+                    totalInserted.set(inserted);
+                    log.info("✅ BacktestResult writer completed. Total inserted: {}", inserted);
+                } catch (Exception e) {
+                    log.error("❌ BacktestResult writer failed: {}", e.getMessage(), e);
+                } finally {
+                    writerLatch.countDown();
+                }
+            });
+
+        LocalDateTime tenYearsAgo = LocalDateTime.now().minusYears(10);
+        LocalDateTime now = LocalDateTime.now();
+
+        for (String symbol : stocks) {
+            try {
+                Map<String, InMemoryBacktestResult> results = runBacktestForStock(
+                    symbol, strategies, initialCapital, backtestRunId,
+                    tenYearsAgo, now, resultQueue
+                );
+                allResults.put(symbol, results);
+            } catch (Exception e) {
+                log.error("❌ Backtest failed for {}: {}", symbol, e.getMessage());
+                allResults.put(symbol, new HashMap<>());
+            }
+        }
+
+        allBacktestsComplete.set(true);
+
+        try {
+            if (!writerLatch.await(10, TimeUnit.MINUTES)) {
+                log.warn("⚠️ BacktestResult writer timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        log.info("✅ Sequential backtest completed. {} stocks tested, {} results persisted.",
+            allResults.size(), totalInserted.get());
+
+        return allResults;
+    }
     
     /**
      * Run backtest for a single stock and queue results for persistence.
@@ -875,16 +975,34 @@ public class BacktestService {
                 periodStart, periodEnd, history.size()
             );
             
-            try {
-                if (!resultQueue.offer(entity, 100, TimeUnit.MILLISECONDS)) {
-                    log.warn("⚠️ Result queue full for {}/{}", symbol, entry.getKey());
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            enqueueBacktestResult(resultQueue, entity, symbol, entry.getKey());
         }
         
         return results;
+    }
+
+    private void enqueueBacktestResult(BlockingQueue<BacktestResult> queue, BacktestResult entity,
+                                       String symbol, String strategyName) {
+        boolean enqueued = false;
+        int attempts = 0;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (!enqueued && System.nanoTime() < deadline) {
+            try {
+                enqueued = queue.offer(entity, 500, TimeUnit.MILLISECONDS);
+                if (!enqueued) {
+                    attempts++;
+                    if (attempts % 5 == 0) {
+                        log.warn("⚠️ Result queue still full for {}/{} - retrying", symbol, strategyName);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        if (!enqueued) {
+            log.error("❌ Result queue still full for {}/{} after 30s - dropping result", symbol, strategyName);
+        }
     }
     
     /**
@@ -1122,7 +1240,7 @@ public class BacktestService {
     }
     
     /**
-     * Get all 99 strategies for backtesting.
+     * Get all 100 strategies for backtesting.
      * This is the canonical source for available strategies.
      * 
      * @return List of all available trading strategies
@@ -1150,7 +1268,7 @@ public class BacktestService {
         strategies.add(new TaxLossHarvestingStrategy());
         strategies.add(new VWAPExecutionStrategy(100, 30, 0.003, 1));
         
-        // Technical indicators (33)
+        // Technical indicators (34)
         strategies.add(new KeltnerChannelStrategy());
         strategies.add(new IchimokuCloudStrategy());
         strategies.add(new ParabolicSARStrategy());
@@ -1159,6 +1277,7 @@ public class BacktestService {
         strategies.add(new CCIStrategy());
         strategies.add(new VolumeWeightedStrategy());
         strategies.add(new TripleEMAStrategy());
+        strategies.add(new EmaVolumeCrossoverStrategy());
         strategies.add(new FibonacciRetracementStrategy());
         strategies.add(new DonchianChannelStrategy());
         strategies.add(new SupertrendStrategy());

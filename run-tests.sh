@@ -33,6 +33,9 @@ PROGRESS_FILLED='█'
 PROGRESS_EMPTY='░'
 PROGRESS_WIDTH=40
 
+# Timeouts (seconds)
+JAVA_UNIT_TIMEOUT_SECONDS=${JAVA_UNIT_TIMEOUT_SECONDS:-900}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ###############################################################################
@@ -153,6 +156,50 @@ draw_progress_bar() {
     esac
     
     printf "\r${CYAN}[${bar}]${NC} ${BOLD}%3d%%${NC} ${status_color}${status_icon} %s${NC}    " "$percent" "$phase_name"
+}
+
+run_with_timeout() {
+    local seconds=$1
+    shift
+    local cmd="$*"
+    local timeout_cmd=""
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_cmd="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        timeout_cmd="gtimeout"
+    fi
+
+    if [ -n "$timeout_cmd" ]; then
+        eval "$timeout_cmd $seconds $cmd"
+    else
+        local tmp
+        tmp=$(mktemp)
+        bash -c "$cmd" >"$tmp" 2>&1 &
+        local pid=$!
+        local elapsed=0
+
+        while kill -0 $pid >/dev/null 2>&1; do
+            if [ $elapsed -ge $seconds ]; then
+                kill -TERM $pid >/dev/null 2>&1 || true
+                sleep 2
+                if kill -0 $pid >/dev/null 2>&1; then
+                    kill -KILL $pid >/dev/null 2>&1 || true
+                fi
+                cat "$tmp"
+                rm -f "$tmp"
+                return 124
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+
+        wait $pid
+        local status=$?
+        cat "$tmp"
+        rm -f "$tmp"
+        return $status
+    fi
 }
 
 print_phase_header() {
@@ -377,12 +424,19 @@ print_phase_header 1 "Java Unit Tests" $TOTAL_PHASES
 draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "RUNNING"
 
 JAVA_UNIT_START=$(date +%s)
-JAVA_UNIT_OUTPUT=$($MVN_CMD test -DexcludedGroups=integration -Dspring.profiles.active=ci 2>&1) || true
+JAVA_UNIT_CMD="$MVN_CMD test -DexcludedGroups=integration -Dspring.profiles.active=ci"
+set +e
+JAVA_UNIT_OUTPUT=$(run_with_timeout "$JAVA_UNIT_TIMEOUT_SECONDS" "$JAVA_UNIT_CMD" 2>&1)
+JAVA_UNIT_EXIT_CODE=$?
+set -e
 JAVA_UNIT_END=$(date +%s)
 JAVA_UNIT_DURATION=$((JAVA_UNIT_END - JAVA_UNIT_START))
 JAVA_UNIT_SUMMARY=$(echo "$JAVA_UNIT_OUTPUT" | grep -E "Tests run:" | tail -1)
 
-if echo "$JAVA_UNIT_OUTPUT" | grep -q "BUILD SUCCESS"; then
+if [ $JAVA_UNIT_EXIT_CODE -eq 124 ]; then
+    JAVA_UNIT_RESULT="FAILED"
+    draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "FAILED"
+elif echo "$JAVA_UNIT_OUTPUT" | grep -q "BUILD SUCCESS"; then
     JAVA_UNIT_RESULT="PASSED"
     COMPLETED_PHASES=$((COMPLETED_PHASES + 1))
     draw_progress_bar $COMPLETED_PHASES $TOTAL_PHASES "Java Unit Tests" "PASSED"

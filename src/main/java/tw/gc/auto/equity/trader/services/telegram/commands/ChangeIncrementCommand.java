@@ -25,7 +25,7 @@ public class ChangeIncrementCommand implements TelegramCommand {
     @Override
     public void execute(String args, TelegramCommandContext context) {
         if (args == null || args.trim().isEmpty()) {
-            sendError(context, "❌ Usage: /change-increment <number>\nExample: /change-increment 100");
+            sendError(context, "❌ Usage: /change-increment [number]\nExample: /change-increment 100");
             return;
         }
         
@@ -51,7 +51,7 @@ public class ChangeIncrementCommand implements TelegramCommand {
     
     @Override
     public String getHelpText() {
-        return "/change-increment <number> - Change share increment";
+        return "/change-increment [number] - Change share increment";
     }
     
     private void sendMessage(TelegramCommandContext context, String message) {

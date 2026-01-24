@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class TelegramCommandHandler {
 
+    private static final double DEFAULT_BACKTEST_INITIAL_CAPITAL = 80_000.0;
+
     private final TelegramService telegramService;
     private final TradingStateService tradingStateService;
     private final PositionManager positionManager;
@@ -228,7 +230,7 @@ public class TelegramCommandHandler {
             StringBuilder help = new StringBuilder();
             help.append("📊 SET MAIN STRATEGY\n");
             help.append("━━━━━━━━━━━━━━━━\n");
-            help.append("Usage: /set-main-strategy <strategy-name>\n\n");
+                help.append("Usage: /set-main-strategy [strategy-name]\n\n");
             help.append("Available strategies:\n");
             
             for (IStrategy strategy : activeStrategies) {
@@ -308,7 +310,7 @@ public class TelegramCommandHandler {
                     "━━━━━━━━━━━━━━━━\n" +
                     "No performance data available yet.\n" +
                     "Run strategies in shadow mode to gather data.\n\n" +
-                    "💡 Tip: Use /ask <question> to ask about trading concepts"
+                    "💡 Tip: Use /ask [question] to ask about trading concepts"
                 );
                 return;
             }
@@ -335,7 +337,7 @@ public class TelegramCommandHandler {
                 message.append(String.format("\nUse: /set-main-strategy %s", bestPerf.getStrategyName()));
             }
             
-            message.append("\n\n💡 Tip: Use /ask <question> to ask about trading concepts");
+            message.append("\n\n💡 Tip: Use /ask [question] to ask about trading concepts");
             
             telegramService.sendMessage(message.toString());
             
@@ -469,7 +471,7 @@ public class TelegramCommandHandler {
             telegramService.sendMessage(
                 "📊 BACKTEST\n" +
                 "━━━━━━━━━━━━━━━━\n" +
-                "Usage: /backtest <symbol> <days>\n\n" +
+                    "Usage: /backtest [symbol] [days]\n\n" +
                 "Example: /backtest 2330.TW 365\n\n" +
                 "Runs all 54 strategies against historical data.\n" +
                 "Results saved to strategy_stock_mapping table."
@@ -479,7 +481,7 @@ public class TelegramCommandHandler {
         
         String[] parts = args.trim().split("\\s+");
         if (parts.length < 2) {
-            telegramService.sendMessage("❌ Invalid format. Use: /backtest <symbol> <days>");
+            telegramService.sendMessage("❌ Invalid format. Use: /backtest [symbol] [days]");
             return;
         }
         
@@ -563,11 +565,29 @@ public class TelegramCommandHandler {
             telegramService.sendMessage(
                 "📥 DOWNLOAD HISTORY\n" +
                 "━━━━━━━━━━━━━━━━\n" +
-                "Usage: /download-history <symbol> [years]\n\n" +
-                "Example: /download-history 2330.TW 5\n\n" +
-                "Downloads historical data from Yahoo Finance.\n" +
-                "Default: 10 years"
+                "No symbol provided — downloading top 50 stocks.\n" +
+                "Default: 10 years\n\n" +
+                "Tip: /download-history [symbol] [years]"
             );
+
+            new Thread(() -> {
+                try {
+                    List<String> symbols = backtestService.fetchTop50Stocks();
+                    int years = 10;
+                    historyDataService.downloadHistoricalDataForMultipleStocks(symbols, years);
+                    telegramService.sendMessage(String.format(
+                        "✅ DOWNLOAD COMPLETE\n" +
+                        "━━━━━━━━━━━━━━━━\n" +
+                        "Symbols: %d\n" +
+                        "Years: %d\n\n" +
+                        "💡 Use /run-backtests to start backtesting",
+                        symbols.size(), years
+                    ));
+                } catch (Exception e) {
+                    log.error("Download failed", e);
+                    telegramService.sendMessage("❌ Download failed: " + e.getMessage());
+                }
+            }).start();
             return;
         }
         
@@ -604,7 +624,7 @@ public class TelegramCommandHandler {
                     "Total records: %d\n" +
                     "Inserted: %d\n" +
                     "Skipped (duplicates): %d\n\n" +
-                    "💡 Use /backtest %s <days> to test strategies",
+                    "💡 Use /backtest %s [days] to test strategies",
                     result.getSymbol(),
                     result.getTotalRecords(),
                     result.getInserted(),
@@ -634,7 +654,7 @@ public class TelegramCommandHandler {
                 "📊 CHANGE ACTIVE STOCK\n" +
                 "━━━━━━━━━━━━━━━━\n" +
                 "Current stock: %s\n\n" +
-                "Usage: /change-stock <symbol>\n" +
+                "Usage: /change-stock [symbol]\n" +
                 "Example: /change-stock 2330.TW\n\n" +
                 "⚠️ WARNING: This will flatten current position and switch to new stock",
                 currentStock
@@ -719,7 +739,7 @@ public class TelegramCommandHandler {
         
         String[] parts = args.trim().split("\\s+", 2);
         if (parts.length < 2) {
-            telegramService.sendMessage("❌ Usage: /config <key> <value>\nExample: /config daily_loss_limit 2000");
+            telegramService.sendMessage("❌ Usage: /config [key] [value]\nExample: /config daily_loss_limit 2000");
             return;
         }
         
@@ -791,7 +811,7 @@ public class TelegramCommandHandler {
         
         String[] parts = args.trim().split("\\s+", 2);
         if (parts.length < 2) {
-            telegramService.sendMessage("❌ Usage: /risk <key> <value>\n\nUse /risk help for all available keys");
+            telegramService.sendMessage("❌ Usage: /risk [key] [value]\n\nUse /risk help for all available keys");
             return;
         }
         
@@ -814,7 +834,70 @@ public class TelegramCommandHandler {
     }
     
     private void handleRunBacktestsCommand(String args) {
-        telegramService.sendMessage("⚠️ This command is deprecated.\nUse the REST API: POST /api/backtest/run");
+        if (args != null && !args.trim().isEmpty() && "help".equalsIgnoreCase(args.trim())) {
+            telegramService.sendMessage(
+                "📊 RUN BACKTESTS\n" +
+                "━━━━━━━━━━━━━━━━\n" +
+                "Usage: /run-backtests [initialCapital]\n" +
+                "Example: /run-backtests 80000\n\n" +
+                "Runs all strategies across the top 50 stocks with available data."
+            );
+            return;
+        }
+
+        double initialCapital = DEFAULT_BACKTEST_INITIAL_CAPITAL;
+        if (args != null && !args.trim().isEmpty()) {
+            try {
+                initialCapital = Double.parseDouble(args.trim());
+                if (!Double.isFinite(initialCapital) || initialCapital <= 0) {
+                    telegramService.sendMessage("❌ Initial capital must be a positive number");
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                telegramService.sendMessage("❌ Invalid initial capital: " + args.trim());
+                return;
+            }
+        }
+
+        double capital = initialCapital;
+        telegramService.sendMessage(String.format(
+            "🚀 RUN BACKTESTS STARTED\n" +
+            "Initial capital: %.2f\n" +
+            "Fetching top 50 stocks with available data...",
+            capital
+        ));
+
+        new Thread(() -> {
+            try {
+                Map<String, Map<String, BacktestService.InMemoryBacktestResult>> results =
+                    backtestService.runParallelizedBacktest(capital);
+
+                int stocksTested = results.size();
+                int totalStrategyResults = results.values().stream()
+                    .mapToInt(Map::size)
+                    .sum();
+
+                if (stocksTested == 0) {
+                    telegramService.sendMessage(
+                        "⚠️ RUN BACKTESTS COMPLETE\n" +
+                        "No stocks had historical data.\n" +
+                        "Use /download-history first."
+                    );
+                    return;
+                }
+
+                telegramService.sendMessage(String.format(
+                    "✅ RUN BACKTESTS COMPLETE\n" +
+                    "Stocks tested: %d\n" +
+                    "Strategy results: %d",
+                    stocksTested,
+                    totalStrategyResults
+                ));
+            } catch (Exception e) {
+                log.error("Run backtests failed", e);
+                telegramService.sendMessage("❌ Run backtests failed: " + e.getMessage());
+            }
+        }).start();
     }
     
     private void handleSelectStrategyCommand(String args) {

@@ -244,12 +244,26 @@ class TelegramCommandHandlerBacktestTest {
 
     @Test
     void downloadHistory_invalidFormat_shouldSendUsageAndNotCallService() throws Exception {
+        List<String> messages = new CopyOnWriteArrayList<>();
+        doAnswer(invocation -> {
+            messages.add(invocation.getArgument(0));
+            return null;
+        }).when(telegramService).sendMessage(anyString());
+
         handler.registerCommands(List.of());
         Consumer<String> download = TelegramTestHelper.captureCommandHandler(telegramService, "/download-history");
 
+        when(backtestService.fetchTop50Stocks()).thenReturn(List.of("2330.TW", "2454.TW"));
+
         download.accept(" ");
 
-        TelegramTestHelper.verifyMessageContains(telegramService, "Usage: /download-history");
+        assertThat(AsyncTestHelper.waitForAsync(2000, () ->
+            messages.stream().anyMatch(m -> m.contains("DOWNLOAD HISTORY"))
+        )).isTrue();
+
+        verify(backtestService, timeout(2000)).fetchTop50Stocks();
+        verify(historyDataService, timeout(2000))
+            .downloadHistoricalDataForMultipleStocks(List.of("2330.TW", "2454.TW"), 10);
         verify(historyDataService, never()).downloadHistoricalData(anyString(), anyInt());
     }
 

@@ -136,6 +136,12 @@ class TelegramCommandsTest {
     @Test
     void testHelpCommand() {
         HelpCommand command = new HelpCommand();
+        when(telegramService.getRegistryHelpLines()).thenReturn(java.util.List.of(
+            "/status - Bot status & position",
+            "/agent - List agents",
+            "/golive - Check live eligibility"
+        ));
+        when(telegramService.getCustomCommandNames()).thenReturn(java.util.List.of());
         
         command.execute("", context);
         
@@ -249,7 +255,7 @@ class TelegramCommandsTest {
             msg.contains("8 questions remaining today")
         ));
         assertEquals("talk", command.getCommandName());
-        assertEquals("/talk <question> - Ask TutorBot", command.getHelpText());
+        assertEquals("/talk [question] - Ask TutorBot", command.getHelpText());
     }
 
     @Test
@@ -436,7 +442,7 @@ class TelegramCommandsTest {
         verify(stockSettingsService).updateSettings(100, 10);
         verify(telegramService).sendMessage("✅ Share increment updated to: 10");
         assertEquals("change-increment", command.getCommandName());
-        assertEquals("/change-increment <number> - Change share increment", command.getHelpText());
+        assertEquals("/change-increment [number] - Change share increment", command.getHelpText());
     }
 
     @Test

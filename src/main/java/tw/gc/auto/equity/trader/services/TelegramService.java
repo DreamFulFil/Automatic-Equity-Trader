@@ -18,8 +18,11 @@ import tw.gc.auto.equity.trader.services.telegram.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -212,6 +215,21 @@ public class TelegramService {
         log.info("✅ Registered custom command: {}", command);
     }
 
+    public List<String> getRegistryHelpLines() {
+        return commandRegistry.getAllCommands().stream()
+            .map(TelegramCommand::getHelpText)
+            .filter(Objects::nonNull)
+            .filter(text -> !text.isBlank())
+            .sorted()
+            .toList();
+    }
+
+    public List<String> getCustomCommandNames() {
+        List<String> names = new ArrayList<>(customCommands.keySet());
+        names.sort(String::compareToIgnoreCase);
+        return names;
+    }
+
     /**
      * Poll for Telegram updates every 5 seconds.
      * JUSTIFICATION: Required for Telegram bot command interface to work.
@@ -389,8 +407,20 @@ public class TelegramService {
     }
 
     public void sendMessage(String message) {
+        sendMessageInternal(message, true);
+    }
+
+    public void sendHtmlMessage(String htmlMessage) {
+        sendMessageInternal(htmlMessage, false);
+    }
+
+    private void sendMessageInternal(String message, boolean escapeHtml) {
         if (!telegramProperties.isEnabled()) {
             log.info("[Telegram disabled] {}", message);
+            return;
+        }
+
+        if (message == null) {
             return;
         }
 
@@ -406,12 +436,11 @@ public class TelegramService {
                 message = "🤖 " + message;
             }
 
-            // Replace \n with <br> for HTML parse_mode
-            // message = message.replace("\n", "<br>");
+            String payload = escapeHtml ? escapeHtml(message) : message;
 
             Map<String, Object> body = new HashMap<>();
             body.put("chat_id", telegramProperties.getChatId());
-            body.put("text", message);
+            body.put("text", payload);
             body.put("parse_mode", "HTML");
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
@@ -421,5 +450,12 @@ public class TelegramService {
         } catch (Exception e) {
             log.error("Failed to send Telegram message", e);
         }
+    }
+
+    private String escapeHtml(String input) {
+        return input
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
     }
 }

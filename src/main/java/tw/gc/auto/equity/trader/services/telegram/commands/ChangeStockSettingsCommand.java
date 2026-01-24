@@ -25,12 +25,12 @@ public class ChangeStockSettingsCommand implements TelegramCommand {
     @Override
     public void execute(String args, TelegramCommandContext context) {
         if (args == null || args.trim().isEmpty()) {
-            sendError(context, "❌ Usage: /change-stock-settings <type> <number>\nExample: /change-stock-settings share 100\nExample: /change-stock-settings shareIncrement 10");
+            sendError(context, "❌ Usage: /change-stock-settings [type] [number]\nExample: /change-stock-settings share 100\nExample: /change-stock-settings shareIncrement 10");
             return;
         }
         String[] parts = args.trim().split(" ");
         if (parts.length != 2) {
-            sendError(context, "❌ Usage: /change-stock-settings <type> <number>");
+            sendError(context, "❌ Usage: /change-stock-settings [type] [number]");
             return;
         }
         String type = parts[0];
@@ -66,7 +66,7 @@ public class ChangeStockSettingsCommand implements TelegramCommand {
     
     @Override
     public String getHelpText() {
-        return "/change-stock-settings <type> <number> - Change stock settings. Type: share or shareIncrement";
+        return "/change-stock-settings [type] [number] - Change stock settings. Type: share or shareIncrement";
     }
     
     private void sendMessage(TelegramCommandContext context, String message) {

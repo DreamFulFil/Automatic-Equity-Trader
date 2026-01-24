@@ -567,7 +567,7 @@ class TelegramCommandHandlerTest {
         // invalid usage
         reset(telegramService);
         consumer.accept("onlykey");
-        verify(telegramService).sendMessage(contains("Usage: /config <key> <value>"));
+        verify(telegramService).sendMessage(contains("Usage: /config [key] [value]"));
 
         // successful update
         reset(telegramService);
@@ -703,13 +703,6 @@ class TelegramCommandHandlerTest {
         pop.accept(null);
         verify(telegramService).sendMessage(contains("deprecated"));
 
-        // /run-backtests
-        ArgumentCaptor<Consumer> cap2 = ArgumentCaptor.forClass(Consumer.class);
-        verify(telegramService).registerCustomCommand(eq("/run-backtests"), cap2.capture());
-        @SuppressWarnings("unchecked") Consumer<String> run = cap2.getValue();
-        run.accept(null);
-        verify(telegramService, atLeastOnce()).sendMessage(contains("deprecated"));
-
         // /full-pipeline
         ArgumentCaptor<Consumer> cap3 = ArgumentCaptor.forClass(Consumer.class);
         verify(telegramService).registerCustomCommand(eq("/full-pipeline"), cap3.capture());
@@ -723,6 +716,56 @@ class TelegramCommandHandlerTest {
         @SuppressWarnings("unchecked") Consumer<String> data = cap4.getValue();
         data.accept(null);
         verify(telegramService, atLeastOnce()).sendMessage(contains("deprecated"));
+    }
+
+    @Test
+    void runBacktests_startsParallelizedBacktest_withDefaultCapital() {
+        handler.registerCommands(java.util.List.of());
+
+        ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
+        verify(telegramService).registerCustomCommand(eq("/run-backtests"), captor.capture());
+        @SuppressWarnings("unchecked") Consumer<String> run = captor.getValue();
+
+        when(backtestService.runParallelizedBacktest(80_000.0))
+            .thenReturn(java.util.Map.of("2330.TW", java.util.Map.of()));
+
+        run.accept(null);
+
+        boolean started = false;
+        for (int i = 0; i < 40; i++) {
+            try {
+                verify(telegramService, atLeastOnce()).sendMessage(contains("RUN BACKTESTS STARTED"));
+                started = true;
+                break;
+            } catch (AssertionError e) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Interrupted while waiting for start message");
+                }
+            }
+        }
+        if (!started) throw new AssertionError("Expected RUN BACKTESTS STARTED message not sent");
+
+        boolean completed = false;
+        for (int i = 0; i < 40; i++) {
+            try {
+                verify(telegramService, atLeastOnce()).sendMessage(contains("RUN BACKTESTS COMPLETE"));
+                completed = true;
+                break;
+            } catch (AssertionError e) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Interrupted while waiting for completion message");
+                }
+            }
+        }
+        if (!completed) throw new AssertionError("Expected RUN BACKTESTS COMPLETE message not sent");
+
+        verify(backtestService, atLeastOnce()).runParallelizedBacktest(80_000.0);
     }
 
 

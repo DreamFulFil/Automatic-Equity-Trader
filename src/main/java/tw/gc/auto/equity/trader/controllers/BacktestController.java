@@ -40,9 +40,9 @@ public class BacktestController {
         log.info("🚀 Running parallelized backtest with initial capital: {} TWD", initialCapital);
         
         List<IStrategy> strategies = backtestService.getAllStrategies();
-        
+
         log.info("📊 Testing {} strategies across stocks with available data", strategies.size());
-        
-        return backtestService.runParallelizedBacktest(strategies, initialCapital);
+
+        return backtestService.runParallelizedBacktest(initialCapital);
     }
 }

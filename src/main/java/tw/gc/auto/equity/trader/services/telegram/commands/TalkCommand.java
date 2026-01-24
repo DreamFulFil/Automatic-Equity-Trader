@@ -35,7 +35,7 @@ public class TalkCommand implements TelegramCommand {
         String question = args != null ? args.trim() : "";
         
         if (question.isEmpty()) {
-            sendMessage(context, "❓ Usage: /talk <your question>\n\nExample: /talk What is momentum trading?");
+            sendMessage(context, "❓ Usage: /talk [your question]\n\nExample: /talk What is momentum trading?");
             return;
         }
         
@@ -61,7 +61,7 @@ public class TalkCommand implements TelegramCommand {
     
     @Override
     public String getHelpText() {
-        return "/talk <question> - Ask TutorBot";
+        return "/talk [question] - Ask TutorBot";
     }
     
     private void sendMessage(TelegramCommandContext context, String message) {

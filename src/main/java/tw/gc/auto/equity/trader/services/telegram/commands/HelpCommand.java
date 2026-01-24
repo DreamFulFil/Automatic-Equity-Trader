@@ -24,27 +24,26 @@ public class HelpCommand implements TelegramCommand {
         StringBuilder help = new StringBuilder();
         help.append("📖 AVAILABLE COMMANDS\n");
         help.append("━━━━━━━━━━━━━━━━━━━━\n\n");
-        
-        help.append("📊 TRADING CONTROL:\n");
-        help.append("/status - Bot status & position\n");
-        help.append("/pause - Pause trading\n");
-        help.append("/resume - Resume trading\n");
-        help.append("/close - Close position\n");
-        help.append("/shutdown - Stop application\n\n");
-        
-        help.append("🤖 AI AGENTS:\n");
-        help.append("/agent - List agents\n");
-        help.append("/talk <question> - Ask TutorBot\n");
-        help.append("/insight - Daily insight\n\n");
-        
-        help.append("🟢 LIVE MODE:\n");
-        help.append("/golive - Check live eligibility\n");
-        help.append("/confirmlive - Confirm live switch\n");
-        help.append("/backtosim - Switch to simulation\n\n");
-        
-        help.append("⚙️ CONFIGURATION:\n");
-        help.append("/change-share <number> - Change base shares\n");
-        help.append("/change-increment <number> - Change share increment\n");
+
+        if (context.getTelegramService() != null) {
+            var service = context.getTelegramService();
+            var registryLines = service.getRegistryHelpLines();
+            if (!registryLines.isEmpty()) {
+                help.append("✅ BUILT-IN COMMANDS:\n");
+                for (String line : registryLines) {
+                    help.append(line).append("\n");
+                }
+                help.append("\n");
+            }
+
+            var customNames = service.getCustomCommandNames();
+            if (!customNames.isEmpty()) {
+                help.append("🧰 LEGACY COMMANDS:\n");
+                for (String cmd : customNames) {
+                    help.append("/").append(cmd).append("\n");
+                }
+            }
+        }
         
         if (context.getTelegramService() != null) {
             context.getTelegramService().sendMessage(help.toString());

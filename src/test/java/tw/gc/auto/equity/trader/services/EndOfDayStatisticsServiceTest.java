@@ -749,7 +749,7 @@ class EndOfDayStatisticsServiceTest {
         assertEquals("AI generated insight about trading", stats.getLlamaInsight());
         assertNotNull(stats.getInsightGeneratedAt());
         verify(dailyStatisticsRepository).save(stats);
-        verify(telegramService).sendMessage(contains("Daily Trading Summary"));
+        verify(telegramService).sendHtmlMessage(contains("Daily Trading Summary"));
     }
 
     @Test
@@ -780,7 +780,7 @@ class EndOfDayStatisticsServiceTest {
 
         assertNull(stats.getLlamaInsight());
         verify(dailyStatisticsRepository, never()).save(any());
-        verify(telegramService, never()).sendMessage(anyString());
+        verify(telegramService, never()).sendHtmlMessage(anyString());
     }
 
     @Test
@@ -841,7 +841,7 @@ class EndOfDayStatisticsServiceTest {
         assertDoesNotThrow(() -> service.generateInsightAsync(stats));
 
         verify(dailyStatisticsRepository, never()).save(any());
-        verify(telegramService, never()).sendMessage(anyString());
+        verify(telegramService, never()).sendHtmlMessage(anyString());
     }
 
     @Test
@@ -866,7 +866,7 @@ class EndOfDayStatisticsServiceTest {
 
         service.sendTelegramSummary(stats);
 
-        verify(telegramService).sendMessage(argThat(message ->
+        verify(telegramService).sendHtmlMessage(argThat(message ->
                 message.contains("Daily Trading Summary") &&
                 message.contains(symbol) &&
                 message.contains("500") &&
@@ -1038,7 +1038,7 @@ class EndOfDayStatisticsServiceTest {
         assertEquals("Trimmed insight", stats.getLlamaInsight());
         assertNotNull(stats.getInsightGeneratedAt());
         verify(dailyStatisticsRepository).save(stats);
-        verify(telegramService).sendMessage(anyString());
+        verify(telegramService).sendHtmlMessage(anyString());
     }
 
     @Test
@@ -1072,7 +1072,7 @@ class EndOfDayStatisticsServiceTest {
         assertEquals("Generated insight", stats.getLlamaInsight());
         assertNotNull(stats.getInsightGeneratedAt());
         verify(dailyStatisticsRepository).save(stats);
-        verify(telegramService).sendMessage(contains("Daily Trading Summary"));
+        verify(telegramService).sendHtmlMessage(contains("Daily Trading Summary"));
     }
 
     @Test
@@ -1106,7 +1106,7 @@ class EndOfDayStatisticsServiceTest {
         
         // Verify no save or telegram sent
         verify(dailyStatisticsRepository, never()).save(any());
-        verify(telegramService, never()).sendMessage(anyString());
+        verify(telegramService, never()).sendHtmlMessage(anyString());
     }
 
     @Test
@@ -1132,7 +1132,7 @@ class EndOfDayStatisticsServiceTest {
 
         service.sendTelegramSummary(stats);
 
-        verify(telegramService).sendMessage(argThat(message ->
+        verify(telegramService).sendHtmlMessage(argThat(message ->
                 message.contains("Daily Trading Summary") &&
                 message.contains(testDate.toString()) &&
                 message.contains(symbol) &&

@@ -403,13 +403,13 @@ class BacktestServiceTest {
     }
     
     @Test
-    void testGetAllStrategies_shouldReturn99Strategies() {
+    void testGetAllStrategies_shouldReturn100Strategies() {
         // When
         List<IStrategy> strategies = backtestService.getAllStrategies();
         
         // Then
         assertNotNull(strategies, "Strategies list should not be null");
-        assertEquals(99, strategies.size(), "Should return exactly 99 strategies");
+        assertEquals(100, strategies.size(), "Should return exactly 100 strategies");
         
         // Verify all strategies have names
         for (IStrategy strategy : strategies) {
@@ -422,9 +422,9 @@ class BacktestServiceTest {
             .map(IStrategy::getName)
             .distinct()
             .count();
-        assertEquals(99, uniqueCount, "All 99 strategies should have unique names");
+        assertEquals(100, uniqueCount, "All 100 strategies should have unique names");
         
-        System.out.println("\n=== All 99 Strategies ===");
+        System.out.println("\n=== All 100 Strategies ===");
         for (int i = 0; i < strategies.size(); i++) {
             System.out.println((i + 1) + ". " + strategies.get(i).getName());
         }

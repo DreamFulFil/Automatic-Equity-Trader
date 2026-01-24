@@ -346,7 +346,7 @@ public class EndOfDayStatisticsService {
             stats.getLlamaInsight()
         );
         
-        telegramService.sendMessage(message);
+                telegramService.sendHtmlMessage(message);
     }
 
     String buildInsightPrompt(DailyStatistics stats) {
