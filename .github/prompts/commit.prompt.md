@@ -17,6 +17,7 @@ Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `chore`
 
 ## VERSION + tagging + release rules
 - `feat|perf|refactor` commits require a `VERSION` update included in the same commit.
+- If `VERSION` is updated, **do not** commit it alone—commit it together with all other staged files for that change set.
 - Use the canonical script with a commit type (NOT `minor`/`patch`):
   - `./scripts/operational/bump-version.sh <commit-type>`
 - For `feat|perf|refactor`, also ensure tag `v$(cat VERSION)` points at the new commit and is pushed.
@@ -50,7 +51,7 @@ Use fish-compatible shell syntax (`set VAR (cmd)`), and never echo secrets.
    - Save to `$MSGFILE`
    - Body: 2–6 bullets describing the impact of the staged changes.
 8. Run validator on the message file; if it fails, abort and save details to `$RUNLOG`.
-9. Commit: `git commit -F $MSGFILE`.
+9. Commit **all staged files**: `git commit -F $MSGFILE` (do not commit only `VERSION`).
 10. If type is `feat|perf|refactor`, force-move the version tag to this commit:
    - `set NEW_VERSION (cat VERSION)`
    - `set TAG v$NEW_VERSION`
@@ -58,9 +59,7 @@ Use fish-compatible shell syntax (`set VAR (cmd)`), and never echo secrets.
 11. Push branch: `git push origin HEAD`.
 12. If type is `feat|perf|refactor`, push the updated tag:
    - `git push --force-with-lease origin "$TAG"`
-13. If type is `feat|perf|refactor` and `gh` exists and `GITHUB_TOKEN` is set:
-   - Attempt release creation: `./scripts/operational/create-release.sh "$TAG"`.
-   - If the release already exists, treat as `[SKIPPED]` rather than failure.
+13. If `VERSION` was updated **and** the commit + tag were pushed, trigger the release workflow in [release.prompt.md](release.prompt.md).
 
 ## Heuristics (only if no user header supplied)
 - If changes are only `docs/**` → `docs(<scope>): ...`
