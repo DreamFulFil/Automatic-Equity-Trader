@@ -15,6 +15,46 @@ Purpose: Create or update a GitHub Release using the GitHub Releases REST API.
 - `GITHUB_TOKEN` is exported in the environment and has `repo` scope.
 - Logs must be written under `logs/`.
 
+### Pre-flight validation (recommended)
+Run these checks before attempting to create a release. These catch common causes of failure (missing/invalid token, missing tag) and provide clear diagnostics.
+
+Fish-compatible token & permission check:
+
+```fish
+# Ensure token present
+if test -z "$GITHUB_TOKEN"
+  echo "ERROR: GITHUB_TOKEN not set. Export a PAT with 'repo' scope and retry." >&2
+  exit 1
+end
+
+# Quick token validation: call /user to confirm token is valid and reachable
+set status (curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user)
+if test "$status" -ne 200
+  echo "ERROR: GITHUB_TOKEN invalid or lacks permissions (HTTP $status). Ensure token has 'repo' scope." >&2
+  exit 1
+end
+
+# Confirm tag exists on origin
+if not git ls-remote --tags origin | rg -q "v${NEW_VERSION}"
+  echo "ERROR: Tag v${NEW_VERSION} not found on origin. Push the tag first: git push origin v${NEW_VERSION}" >&2
+  exit 1
+end
+```
+
+Bash example (portable):
+
+```bash
+if [ -z "$GITHUB_TOKEN" ]; then
+  echo "ERROR: GITHUB_TOKEN not set" >&2; exit 1; fi
+status=$(curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user)
+if [ "$status" -ne 200 ]; then
+  echo "ERROR: GITHUB_TOKEN invalid or lacks permissions (HTTP $status)" >&2; exit 1; fi
+if ! git ls-remote --tags origin | rg -q "v${NEW_VERSION}"; then
+  echo "ERROR: Tag v${NEW_VERSION} not found on origin. Push tag first." >&2; exit 1; fi
+```
+
+These pre-flight checks reduce the chance of a 401 or 'tag not found' error and provide actionable messages.
+
 ## Checklist
 1) Confirm current version
 ```bash
