@@ -46,9 +46,12 @@ class BacktestServiceTest {
         // Mock StrategyStockMappingService to ensure Backtest persists mappings
         StrategyStockMappingService mockMappingService = org.mockito.Mockito.mock(StrategyStockMappingService.class);
         
+        // Mock FundamentalDataService for fundamental data strategies
+        FundamentalDataService mockFundamentalDataService = org.mockito.Mockito.mock(FundamentalDataService.class);
+        
         backtestService = new BacktestService(
             mockRepo, mockMarketDataRepo, mockHistoryService, mockSystemStatusService,
-            mockDataSource, mockJdbcTemplate, mockMappingService
+            mockDataSource, mockJdbcTemplate, mockMappingService, mockFundamentalDataService
         );
         
         // Expose mapping service for verification via a field on test instance (reflection)
@@ -137,9 +140,10 @@ class BacktestServiceTest {
         StrategyStockMappingService mockMapping = org.mockito.Mockito.mock(StrategyStockMappingService.class);
         HistoryDataService mockHistory = org.mockito.Mockito.mock(HistoryDataService.class);
         org.mockito.Mockito.when(mockHistory.getStockNameFromHistory(anyString())).thenReturn("MockName");
+        FundamentalDataService mockFundamental = org.mockito.Mockito.mock(FundamentalDataService.class);
 
         BacktestService svc = new BacktestService(
-            mockRepo, mockMarketDataRepo, mockHistory, mockSystemStatusService, org.mockito.Mockito.mock(DataSource.class), org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class), mockMapping
+            mockRepo, mockMarketDataRepo, mockHistory, mockSystemStatusService, org.mockito.Mockito.mock(DataSource.class), org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class), mockMapping, mockFundamental
         );
 
         // Strategy that returns LONG on first call, SHORT on subsequent calls

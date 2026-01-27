@@ -35,6 +35,8 @@ class BacktestServiceCoveragePatchTest {
     private JdbcTemplate jdbcTemplate;
     @Mock
     private StrategyStockMappingService strategyStockMappingService;
+    @Mock
+    private FundamentalDataService fundamentalDataService;
 
     private BacktestService service;
 
@@ -47,7 +49,8 @@ class BacktestServiceCoveragePatchTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         );
     }
 

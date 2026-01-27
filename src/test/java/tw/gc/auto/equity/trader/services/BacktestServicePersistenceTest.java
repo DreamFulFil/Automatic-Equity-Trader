@@ -28,6 +28,7 @@ class BacktestServicePersistenceTest {
     private DataSource mockDataSource;
     private JdbcTemplate mockJdbc;
     private StrategyStockMappingService mockMapping;
+    private FundamentalDataService mockFundamentalDataService;
 
     @BeforeEach
     void setUp() {
@@ -39,8 +40,9 @@ class BacktestServicePersistenceTest {
         mockDataSource = mock(DataSource.class);
         mockJdbc = mock(JdbcTemplate.class);
         mockMapping = mock(StrategyStockMappingService.class);
+        mockFundamentalDataService = mock(FundamentalDataService.class);
 
-        service = new BacktestService(mockRepo, mockMarketRepo, mockHistoryService, mockSystemStatusService, mockDataSource, mockJdbc, mockMapping);
+        service = new BacktestService(mockRepo, mockMarketRepo, mockHistoryService, mockSystemStatusService, mockDataSource, mockJdbc, mockMapping, mockFundamentalDataService);
     }
 
     @Test

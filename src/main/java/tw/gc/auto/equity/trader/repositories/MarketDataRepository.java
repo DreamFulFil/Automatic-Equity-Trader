@@ -31,6 +31,23 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
             @Param("timeframe") Timeframe timeframe, 
             @Param("limit") int limit);
 
+    /**
+     * Find market data by symbol within a date range.
+     * Used for beta calculation to align with index data.
+     * 
+     * @param symbol Stock symbol
+     * @param start Start datetime (inclusive)
+     * @param end End datetime (inclusive)
+     * @return Market data ordered by timestamp ascending
+     */
+    @Query("SELECT m FROM MarketData m WHERE m.symbol = :symbol " +
+           "AND m.timestamp >= :start AND m.timestamp <= :end " +
+           "ORDER BY m.timestamp ASC")
+    List<MarketData> findBySymbolAndDateRange(
+            @Param("symbol") String symbol,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
     @Query("SELECT AVG(m.close) FROM MarketData m WHERE m.symbol = :symbol AND m.timeframe = :timeframe " +
            "AND m.timestamp >= :since")
     Double averageCloseSince(@Param("symbol") String symbol, @Param("timeframe") Timeframe timeframe,

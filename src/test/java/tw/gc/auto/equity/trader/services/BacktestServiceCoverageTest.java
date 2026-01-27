@@ -74,6 +74,9 @@ class BacktestServiceCoverageTest {
     @Mock
     private StrategyStockMappingService strategyStockMappingService;
 
+    @Mock
+    private FundamentalDataService fundamentalDataService;
+
     private BacktestService backtestService;
 
     @BeforeEach
@@ -85,7 +88,8 @@ class BacktestServiceCoverageTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         );
     }
 
@@ -778,7 +782,8 @@ class BacktestServiceCoverageTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         ) {
             @Override
             public List<String> fetchTop50Stocks() {
@@ -821,7 +826,8 @@ class BacktestServiceCoverageTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         ) {
             @Override
             public List<String> fetchTop50Stocks() {
@@ -898,7 +904,8 @@ class BacktestServiceCoverageTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         ) {
             @Override
             public List<String> fetchTop50Stocks() {
@@ -961,7 +968,8 @@ class BacktestServiceCoverageTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         ) {
             @Override
             public List<String> fetchTop50Stocks() {

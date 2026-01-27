@@ -75,7 +75,8 @@ class Batch17ExtraTests {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            mock(StrategyStockMappingService.class)
+            mock(StrategyStockMappingService.class),
+            mock(FundamentalDataService.class)
         );
 
         // Minimal TelegramCommandHandler for private method testing

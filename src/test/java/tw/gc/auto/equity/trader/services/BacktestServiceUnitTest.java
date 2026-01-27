@@ -44,6 +44,9 @@ class BacktestServiceUnitTest {
     @Mock
     private StrategyStockMappingService strategyStockMappingService;
 
+    @Mock
+    private FundamentalDataService fundamentalDataService;
+
     private BacktestService backtestService;
 
     @BeforeEach
@@ -55,7 +58,8 @@ class BacktestServiceUnitTest {
             systemStatusService,
             dataSource,
             jdbcTemplate,
-            strategyStockMappingService
+            strategyStockMappingService,
+            fundamentalDataService
         );
     }
 

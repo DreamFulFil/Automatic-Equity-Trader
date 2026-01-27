@@ -44,6 +44,7 @@ import tw.gc.auto.equity.trader.entities.BacktestResult;
 import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.BacktestResultRepository;
 import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.strategy.FundamentalDataProvider;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.TradeSignal;
@@ -85,6 +86,7 @@ public class BacktestService {
     
     private volatile PgBulkInsert<BacktestResult> backtestResultBulkInsert;
     private final StrategyStockMappingService strategyStockMappingService;
+    private final FundamentalDataService fundamentalDataService;
     
     public BacktestService(BacktestResultRepository backtestResultRepository,
                           MarketDataRepository marketDataRepository,
@@ -92,7 +94,8 @@ public class BacktestService {
                           SystemStatusService systemStatusService,
                           DataSource dataSource,
                           JdbcTemplate jdbcTemplate,
-                          StrategyStockMappingService strategyStockMappingService) {
+                          StrategyStockMappingService strategyStockMappingService,
+                          FundamentalDataService fundamentalDataService) {
         this.backtestResultRepository = backtestResultRepository;
         this.marketDataRepository = marketDataRepository;
         this.historyDataService = historyDataService;
@@ -100,6 +103,7 @@ public class BacktestService {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
         this.strategyStockMappingService = strategyStockMappingService;
+        this.fundamentalDataService = fundamentalDataService;
     }
     
     /**
@@ -1712,7 +1716,10 @@ public class BacktestService {
         strategies.add(new StandardDeviationStrategy());
         strategies.add(new LinearRegressionStrategy());
         
-        // Factor-based strategies (50)
+        // Create FundamentalDataProvider that fetches from FundamentalDataService
+        FundamentalDataProvider fdProvider = symbol -> fundamentalDataService.getLatestBySymbol(symbol);
+        
+        // Factor-based strategies (50) - using real fundamental data where applicable
         strategies.add(new MeanReversionStrategy(20, 2.0, 0.5));
         strategies.add(new BreakoutMomentumStrategy(20, 0.02));
         strategies.add(new DualMomentumStrategy(60, 120, 0.0));
@@ -1723,13 +1730,13 @@ public class BacktestService {
         strategies.add(new NewsRevisionMomentumStrategy(30, 0.05));
         strategies.add(new AcceleratingMomentumStrategy(30, 10));
         strategies.add(new VolatilityAdjustedMomentumStrategy(30, 20));
-        strategies.add(new BookToMarketStrategy(0.7, 90));
-        strategies.add(new EarningsYieldStrategy(0.05, 60));
+        strategies.add(new BookToMarketStrategy(0.7, 90, fdProvider));
+        strategies.add(new EarningsYieldStrategy(0.05, 60, fdProvider));
         strategies.add(new CashFlowValueStrategy(0.05));
         strategies.add(new EnterpriseValueMultipleStrategy(10.0));
         strategies.add(new SalesGrowthValueStrategy(2.0, 0.10));
         strategies.add(new QualityValueStrategy(0.7, 7));
-        strategies.add(new DividendYieldStrategy(0.03, 3));
+        strategies.add(new DividendYieldStrategy(0.03, 3, fdProvider));
         strategies.add(new NetPayoutYieldStrategy(0.04));
         strategies.add(new ProfitabilityFactorStrategy(0.35));
         strategies.add(new InvestmentFactorStrategy(0.15));
@@ -1739,7 +1746,7 @@ public class BacktestService {
         strategies.add(new FinancialDistressStrategy(0.15));
         strategies.add(new LowVolatilityAnomalyStrategy(60, 20));
         strategies.add(new BettingAgainstBetaStrategy(60, 0.8));
-        strategies.add(new QualityMinusJunkStrategy(60, 30));
+        strategies.add(new QualityMinusJunkStrategy(60, 30, fdProvider));
         strategies.add(new MultiFactorRankingStrategy(new double[]{0.3, 0.3, 0.2, 0.2}, 30));
         strategies.add(new PriceTrendStrengthStrategy(30, 0.7));
         strategies.add(new BollingerSqueezeStrategy(20, 2.0));

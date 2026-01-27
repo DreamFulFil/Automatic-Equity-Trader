@@ -78,7 +78,8 @@ class BettingAgainstBetaStrategyTest {
         // With high volatility, may generate short signal
         if (signal.getDirection() == TradeSignal.SignalDirection.SHORT) {
             assertTrue(signal.getReason().contains("High beta"));
-            assertEquals(0.60, signal.getConfidence());
+            // Confidence is now variable: 0.5 + (beta - 1.5) * 0.25, capped at 0.75
+            assertTrue(signal.getConfidence() >= 0.50 && signal.getConfidence() <= 0.75);
         }
     }
 
@@ -145,8 +146,8 @@ class BettingAgainstBetaStrategyTest {
     }
 
     @Test
-    void getType_shouldReturnLongTerm() {
-        assertEquals(StrategyType.LONG_TERM, strategy.getType());
+    void getType_shouldReturnSwing() {
+        assertEquals(StrategyType.SWING, strategy.getType());
     }
 
     @Test

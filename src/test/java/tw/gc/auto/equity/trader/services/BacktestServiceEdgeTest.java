@@ -33,6 +33,7 @@ class BacktestServiceEdgeTest {
         DataSource dataSource = Mockito.mock(DataSource.class);
         JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         StrategyStockMappingService strategyStockMappingService = Mockito.mock(StrategyStockMappingService.class);
+        FundamentalDataService fundamentalDataService = Mockito.mock(FundamentalDataService.class);
 
         return new BacktestService(
                 backtestResultRepository,
@@ -41,7 +42,8 @@ class BacktestServiceEdgeTest {
                 systemStatusService,
                 dataSource,
                 jdbcTemplate,
-                strategyStockMappingService);
+                strategyStockMappingService,
+                fundamentalDataService);
     }
 
     @Test

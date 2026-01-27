@@ -1,7 +1,9 @@
 package tw.gc.auto.equity.trader.strategy.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import tw.gc.auto.equity.trader.entities.FundamentalData;
 import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.strategy.FundamentalDataProvider;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.StrategyType;
@@ -11,6 +13,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * BookToMarketStrategy
@@ -20,20 +23,36 @@ import java.util.Map;
  * - Fama & French (1992) - 'The Cross-Section of Expected Stock Returns'
  * 
  * Logic:
- * Buy high book-to-market (value) stocks. Uses price-based proxy:
- * stocks trading near 52-week lows with positive momentum reversal signals.
+ * Buy high book-to-market (value) stocks. Book-to-Market (B/M) = Book Value per Share / Price.
+ * Uses real fundamental data when available (via FundamentalDataProvider),
+ * falling back to price-based proxy (distance from 52-week high) when unavailable.
+ * 
+ * @since 2026-01-26 - Updated to use real fundamental data
  */
 @Slf4j
 public class BookToMarketStrategy implements IStrategy {
     
     private final double minBookToMarket;
     private final int rebalanceDays;
+    private final FundamentalDataProvider fundamentalDataProvider;
     private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
     private final Map<String, Integer> holdingDays = new HashMap<>();
     
-    public BookToMarketStrategy(double minBookToMarket, int rebalanceDays) {
+    /**
+     * Constructor with fundamental data provider for real B/M calculation.
+     */
+    public BookToMarketStrategy(double minBookToMarket, int rebalanceDays,
+                                FundamentalDataProvider fundamentalDataProvider) {
         this.minBookToMarket = minBookToMarket;
         this.rebalanceDays = rebalanceDays;
+        this.fundamentalDataProvider = fundamentalDataProvider;
+    }
+    
+    /**
+     * Legacy constructor - uses price-based proxy (backward compatible).
+     */
+    public BookToMarketStrategy(double minBookToMarket, int rebalanceDays) {
+        this(minBookToMarket, rebalanceDays, FundamentalDataProvider.noOp());
     }
 
     @Override
@@ -53,17 +72,27 @@ public class BookToMarketStrategy implements IStrategy {
         Double[] priceArray = prices.toArray(new Double[0]);
         double currentPrice = priceArray[priceArray.length - 1];
         
-        // Calculate 52-week high and low (or available history)
-        double yearHigh = Double.MIN_VALUE;
-        double yearLow = Double.MAX_VALUE;
-        for (Double p : priceArray) {
-            if (p > yearHigh) yearHigh = p;
-            if (p < yearLow) yearLow = p;
-        }
+        // Try to get real book-to-market from fundamental data
+        Optional<FundamentalData> fundamentalOpt = fundamentalDataProvider.apply(symbol);
+        double bookToMarket;
+        boolean usingRealData = false;
         
-        // Book-to-market proxy: distance from 52-week high (value stocks trade near lows)
-        double distanceFromHigh = (yearHigh - currentPrice) / yearHigh;
-        double distanceFromLow = (currentPrice - yearLow) / yearLow;
+        if (fundamentalOpt.isPresent()) {
+            FundamentalData fd = fundamentalOpt.get();
+            Double realBM = fd.getBookToMarket();
+            
+            if (realBM != null && realBM > 0) {
+                bookToMarket = realBM;
+                usingRealData = true;
+                log.trace("Using real B/M for {}: {:.2f}", symbol, bookToMarket);
+            } else {
+                // Fall back to proxy
+                bookToMarket = calculateProxyBookToMarket(priceArray, currentPrice);
+            }
+        } else {
+            // Fall back to proxy
+            bookToMarket = calculateProxyBookToMarket(priceArray, currentPrice);
+        }
         
         // Short-term momentum for reversal confirmation
         double shortTermReturn = 0;
@@ -79,29 +108,43 @@ public class BookToMarketStrategy implements IStrategy {
             holdingDays.put(symbol, days + 1);
         }
         
-        // Value signal: trading in lower portion of range with positive short-term reversal
-        boolean isValue = distanceFromHigh > minBookToMarket;
+        // Value signal: high B/M with positive short-term reversal
+        boolean isValue = bookToMarket > minBookToMarket;
         boolean hasReversal = shortTermReturn > 0.01;
         
         if (isValue && hasReversal && position <= 0) {
             holdingDays.put(symbol, 0);
-            return TradeSignal.longSignal(0.70,
-                String.format("Value entry: %.1f%% below high, reversal %.2f%%", 
-                    distanceFromHigh * 100, shortTermReturn * 100));
+            String dataSource = usingRealData ? "real B/M" : "proxy";
+            return TradeSignal.longSignal(usingRealData ? 0.80 : 0.70,
+                String.format("Value entry (%s): B/M=%.2f, reversal %.2f%%", 
+                    dataSource, bookToMarket, shortTermReturn * 100));
         }
         
-        // Exit after holding period or if price approaches high (no longer value)
+        // Exit after holding period or if B/M becomes too low
         if (position > 0) {
-            if (days >= rebalanceDays || distanceFromHigh < 0.1) {
+            double exitThreshold = usingRealData ? minBookToMarket * 0.5 : 0.1;
+            if (days >= rebalanceDays || bookToMarket < exitThreshold) {
                 holdingDays.put(symbol, 0);
                 return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.65,
-                    String.format("Value exit: held %d days, %.1f%% below high", 
-                        days, distanceFromHigh * 100));
+                    String.format("Value exit: held %d days, B/M=%.2f", 
+                        days, bookToMarket));
             }
         }
         
-        return TradeSignal.neutral(String.format("Distance from high: %.1f%%", 
-            distanceFromHigh * 100));
+        return TradeSignal.neutral(String.format("Book-to-Market: %.2f", bookToMarket));
+    }
+    
+    /**
+     * Calculate proxy B/M from price data.
+     * Uses distance from 52-week high as proxy (value stocks trade near lows).
+     */
+    private double calculateProxyBookToMarket(Double[] priceArray, double currentPrice) {
+        double yearHigh = Double.MIN_VALUE;
+        for (Double p : priceArray) {
+            if (p > yearHigh) yearHigh = p;
+        }
+        // Distance from high as proxy for B/M (inverted relationship)
+        return (yearHigh - currentPrice) / yearHigh;
     }
 
     @Override
@@ -120,3 +163,4 @@ public class BookToMarketStrategy implements IStrategy {
         holdingDays.clear();
     }
 }
+

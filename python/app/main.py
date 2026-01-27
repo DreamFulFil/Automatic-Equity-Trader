@@ -21,6 +21,15 @@ from app.services.shioaji_service import ShioajiWrapper, latest_tick, streaming_
 from app.services.ollama_service import OllamaService
 from app.services.ai_insights_service import AIInsightsService
 from app.services.earnings_service import scrape_earnings_dates
+from app.services.fundamental_service import get_fundamental_data, get_fundamental_data_batch
+from app.services.news_service import get_news_for_symbol, get_news_for_symbols, get_market_news_tw
+from app.services.index_service import get_index_data, get_index_history, get_multiple_indices, calculate_index_volatility, get_index_returns
+from app.services.calendar_service import (
+    get_holidays, is_trading_day, get_next_trading_day, get_previous_trading_day,
+    get_trading_days, count_trading_days, get_futures_expiration, get_next_futures_expiration,
+    get_futures_expirations, get_seasonal_strength, get_all_seasonal_strength,
+    get_event_risk_level, get_market_calendar_summary
+)
 from app.strategies.legacy_strategy import get_signal_legacy, notify_exit_order
 
 # Global state
@@ -705,6 +714,764 @@ def _download_with_yfinance(symbol: str, start_str: str, end_str: str, orig_star
                 "data": []
             }
         )
+
+# ============================================================================
+# FUNDAMENTAL DATA ENDPOINTS
+# ============================================================================
+
+@app.get("/api/fundamentals/{symbol}")
+def get_fundamentals(symbol: str):
+    """
+    Get fundamental financial data for a stock symbol.
+    
+    Args:
+        symbol: Stock ticker (e.g., "2330.TW", "TSM")
+        
+    Returns:
+        Comprehensive fundamental metrics including valuation, profitability,
+        financial health, dividends, cash flow, growth, and analyst data.
+    """
+    try:
+        data = get_fundamental_data(symbol)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "symbol": symbol,
+            "source": "yfinance",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+class FundamentalsBatchRequest(BaseModel):
+    symbols: list[str]
+    delay_seconds: float = 3.0
+
+
+@app.post("/api/fundamentals/batch")
+def get_fundamentals_batch(request: FundamentalsBatchRequest):
+    """
+    Get fundamental data for multiple symbols (with rate limiting).
+    
+    Args:
+        symbols: List of stock tickers
+        delay_seconds: Delay between requests (default 3.0)
+        
+    Returns:
+        List of fundamental data for each symbol.
+    """
+    try:
+        if len(request.symbols) > 50:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "error": "Maximum 50 symbols per batch request"
+                }
+            )
+        
+        results = get_fundamental_data_batch(request.symbols, request.delay_seconds)
+        
+        successful = [r for r in results if "error" not in r or not r.get("error")]
+        failed = [r for r in results if "error" in r and r.get("error")]
+        
+        return {
+            "status": "success",
+            "source": "yfinance",
+            "timestamp": datetime.now().isoformat(),
+            "total": len(request.symbols),
+            "successful": len(successful),
+            "failed": len(failed),
+            "data": results
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+# ============================================================================
+# NEWS DATA ENDPOINTS
+# ============================================================================
+
+@app.get("/api/news/{symbol}")
+def get_news(symbol: str, max_articles: int = 10):
+    """
+    Get news articles for a stock symbol.
+    
+    Args:
+        symbol: Stock ticker (e.g., "2330.TW", "TSM")
+        max_articles: Maximum number of articles to return (default 10)
+        
+    Returns:
+        List of news articles with headlines, summaries, sources, and timestamps.
+    """
+    try:
+        if max_articles > 50:
+            max_articles = 50  # Cap at 50 articles
+            
+        data = get_news_for_symbol(symbol, max_articles)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "symbol": symbol,
+            "source": "yfinance",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+class NewsBatchRequest(BaseModel):
+    symbols: list[str]
+    max_articles_per_symbol: int = 5
+
+
+@app.post("/api/news/batch")
+def get_news_batch(request: NewsBatchRequest):
+    """
+    Get news for multiple symbols.
+    
+    Args:
+        symbols: List of stock tickers
+        max_articles_per_symbol: Max articles per symbol (default 5)
+        
+    Returns:
+        News articles grouped by symbol.
+    """
+    try:
+        if len(request.symbols) > 20:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "error": "Maximum 20 symbols per batch request"
+                }
+            )
+        
+        results = get_news_for_symbols(request.symbols, request.max_articles_per_symbol)
+        
+        return {
+            "status": "success",
+            "source": "yfinance",
+            "timestamp": datetime.now().isoformat(),
+            "symbols": len(request.symbols),
+            "data": results
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/news/market/tw")
+def get_taiwan_market_news():
+    """
+    Get general Taiwan market news from RSS feeds.
+    
+    Returns:
+        Recent market news from MoneyDJ, UDN, and CNYES.
+    """
+    try:
+        data = get_market_news_tw()
+        
+        return {
+            "status": "success",
+            "source": "RSS_feeds",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+# ============================================================================
+# INDEX DATA ENDPOINTS
+# ============================================================================
+
+@app.get("/api/index/{symbol}")
+def get_index(symbol: str):
+    """
+    Get current index data for a symbol.
+    
+    Args:
+        symbol: Index symbol (e.g., "^TWII" for TAIEX, "0050.TW")
+        
+    Returns:
+        Current index data including price, change, volume, moving averages.
+    """
+    try:
+        data = get_index_data(symbol)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/index/{symbol}/history")
+def get_index_historical(symbol: str, days: int = 252):
+    """
+    Get historical index data.
+    
+    Args:
+        symbol: Index symbol
+        days: Number of calendar days to fetch (default 252 for ~1 year)
+        
+    Returns:
+        Historical OHLCV data for the index.
+    """
+    try:
+        data = get_index_history(symbol, days)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/index/{symbol}/returns")
+def get_index_daily_returns(symbol: str, days: int = 60):
+    """
+    Get daily returns for beta calculation.
+    
+    Args:
+        symbol: Index symbol
+        days: Number of trading days
+        
+    Returns:
+        Daily returns data.
+    """
+    try:
+        data = get_index_returns(symbol, days)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/index/{symbol}/volatility")
+def get_index_vol(symbol: str, days: int = 20):
+    """
+    Calculate realized volatility for an index.
+    
+    Args:
+        symbol: Index symbol
+        days: Number of trading days for calculation
+        
+    Returns:
+        Volatility metrics (daily and annualized).
+    """
+    try:
+        data = calculate_index_volatility(symbol, days)
+        
+        if "error" in data and data.get("error"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "symbol": symbol,
+                    "error": data["error"]
+                }
+            )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            **data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "symbol": symbol,
+                "error": str(e)
+            }
+        )
+
+
+class IndexBatchRequest(BaseModel):
+    symbols: list[str]
+
+
+@app.post("/api/index/batch")
+def get_indices_batch(request: IndexBatchRequest):
+    """
+    Get data for multiple indices.
+    
+    Args:
+        symbols: List of index symbols
+        
+    Returns:
+        Data for each index.
+    """
+    try:
+        data = get_multiple_indices(request.symbols)
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "count": len(data),
+            "data": data
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+# ============================================================================
+# CALENDAR ENDPOINTS (Phase 4)
+# ============================================================================
+
+@app.get("/api/calendar/holidays/{country}/{year}")
+def get_market_holidays(country: str, year: int):
+    """
+    Get market holidays for a country and year.
+    
+    Args:
+        country: Country code (TW, US)
+        year: Year
+        
+    Returns:
+        List of holidays with dates and names.
+    """
+    try:
+        holidays = get_holidays(country, year)
+        
+        return {
+            "status": "success",
+            "country": country.upper(),
+            "year": year,
+            "count": len(holidays),
+            "holidays": holidays
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "country": country,
+                "year": year,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/is-trading-day/{date_str}")
+def check_trading_day(date_str: str, country: str = "TW"):
+    """
+    Check if a date is a trading day.
+    
+    Args:
+        date_str: Date in YYYY-MM-DD format
+        country: Country code (default: TW)
+        
+    Returns:
+        Boolean indicating if it's a trading day.
+    """
+    from datetime import date as dt_date
+    try:
+        check_date = dt_date.fromisoformat(date_str)
+        is_trading = is_trading_day(check_date, country)
+        
+        return {
+            "status": "success",
+            "date": date_str,
+            "country": country.upper(),
+            "is_trading_day": is_trading,
+            "day_of_week": check_date.strftime("%A")
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "date": date_str,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/trading-days")
+def get_trading_days_range(start_date: str, end_date: str, country: str = "TW"):
+    """
+    Get all trading days between two dates.
+    
+    Args:
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        country: Country code (default: TW)
+        
+    Returns:
+        List of trading days.
+    """
+    from datetime import date as dt_date
+    try:
+        start = dt_date.fromisoformat(start_date)
+        end = dt_date.fromisoformat(end_date)
+        trading_days = get_trading_days(start, end, country)
+        
+        return {
+            "status": "success",
+            "start_date": start_date,
+            "end_date": end_date,
+            "country": country.upper(),
+            "count": len(trading_days),
+            "trading_days": trading_days
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/futures/expiration/{year}/{month}")
+def get_futures_expiration_date(year: int, month: int):
+    """
+    Get futures expiration date for a specific month.
+    
+    Args:
+        year: Year
+        month: Month (1-12)
+        
+    Returns:
+        Futures expiration date.
+    """
+    try:
+        exp_date = get_futures_expiration(year, month)
+        
+        return {
+            "status": "success",
+            "year": year,
+            "month": month,
+            "expiration_date": exp_date.isoformat(),
+            "day_of_week": exp_date.strftime("%A")
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "year": year,
+                "month": month,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/futures/next")
+def get_next_expiration():
+    """
+    Get the next futures expiration date.
+    
+    Returns:
+        Next expiration date and days until.
+    """
+    try:
+        exp_info = get_next_futures_expiration()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            **exp_info
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/futures/year/{year}")
+def get_year_expirations(year: int):
+    """
+    Get all futures expiration dates for a year.
+    
+    Args:
+        year: Year
+        
+    Returns:
+        List of expiration dates.
+    """
+    try:
+        expirations = get_futures_expirations(year)
+        
+        return {
+            "status": "success",
+            "year": year,
+            "count": len(expirations),
+            "expirations": expirations
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "year": year,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/seasonal")
+def get_seasonal_info(month: int = None):
+    """
+    Get seasonal strength indicator.
+    
+    Args:
+        month: Month (1-12), default: current month
+        
+    Returns:
+        Seasonal strength and classification.
+    """
+    try:
+        if month is not None:
+            info = get_seasonal_strength(month)
+        else:
+            info = get_seasonal_strength()
+        
+        return {
+            "status": "success",
+            **info
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/seasonal/all")
+def get_all_seasonal_info():
+    """
+    Get seasonal strength for all months.
+    
+    Returns:
+        Seasonal strength for all 12 months.
+    """
+    try:
+        all_months = get_all_seasonal_strength()
+        
+        return {
+            "status": "success",
+            "months": all_months
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/risk/{date_str}")
+def get_date_risk(date_str: str):
+    """
+    Get event risk level for a date.
+    
+    Args:
+        date_str: Date in YYYY-MM-DD format
+        
+    Returns:
+        Risk level and position size recommendation.
+    """
+    from datetime import date as dt_date
+    try:
+        check_date = dt_date.fromisoformat(date_str)
+        risk_info = get_event_risk_level(check_date)
+        
+        return {
+            "status": "success",
+            **risk_info
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "date": date_str,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/calendar/summary")
+def get_calendar_summary(days: int = 30):
+    """
+    Get comprehensive market calendar summary.
+    
+    Args:
+        days: Number of days to look ahead (default: 30)
+        
+    Returns:
+        Calendar summary with holidays, expirations, seasonal info.
+    """
+    try:
+        summary = get_market_calendar_summary(days=days)
+        
+        return {
+            "status": "success",
+            **summary
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e)
+            }
+        )
+
 
 if __name__ == "__main__":
     import uvicorn
