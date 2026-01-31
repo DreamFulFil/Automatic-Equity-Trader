@@ -21,7 +21,6 @@ import org.springframework.web.client.RestTemplate;
 public class TaiwanStockComplianceService {
     
     private static final int ROUND_LOT_SIZE = 1000;
-    private static final double MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING_TWD = 2_000_000.0;
     
     private final RestTemplate restTemplate;
     
@@ -33,22 +32,18 @@ public class TaiwanStockComplianceService {
      * @param currentCapitalTwd Account balance in TWD
      * @return Compliance result with veto reason if blocked
      */
-    public ComplianceResult checkTradeCompliance(int shares, boolean isDayTrade, double currentCapitalTwd) {
+    public ComplianceResult checkTradeCompliance(int shares, boolean isDayTrade) {
         boolean isRoundLot = (shares % ROUND_LOT_SIZE == 0);
         boolean isOddLot = !isRoundLot;
-        boolean hasMinimumCapital = currentCapitalTwd >= MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING_TWD;
         
-        if (isDayTrade && isOddLot && !hasMinimumCapital) {
+        // Odd-lot day trading is completely forbidden in Taiwan
+        if (isDayTrade && isOddLot) {
             String reason = String.format(
-                "Taiwan compliance: Odd-lot day trading requires >= 2,000,000 TWD capital (current: %.0f TWD, shares: %d)",
-                currentCapitalTwd, shares
+                "Taiwan compliance: Odd-lot day trading is forbidden (shares: %d). Only round lots (multiples of 1000) can be day-traded.",
+                shares
             );
             log.warn("COMPLIANCE VETO: {}", reason);
             return ComplianceResult.blocked(reason);
-        }
-        
-        if (isDayTrade && isOddLot && hasMinimumCapital) {
-            log.info("Odd-lot day trading approved (capital >= 2M TWD)");
         }
         
         if (isRoundLot) {

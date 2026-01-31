@@ -26,7 +26,7 @@ class TaiwanStockComplianceServiceTest {
 
     @Test
     void testRoundLotTradeAlwaysApproved() {
-        ComplianceResult result = service.checkTradeCompliance(1000, false, 50_000);
+        ComplianceResult result = service.checkTradeCompliance(1000, false);
         
         assertTrue(result.isApproved());
         assertNull(result.getVetoReason());
@@ -34,7 +34,7 @@ class TaiwanStockComplianceServiceTest {
 
     @Test
     void testRoundLotDayTradeAlwaysApproved() {
-        ComplianceResult result = service.checkTradeCompliance(2000, true, 100_000);
+        ComplianceResult result = service.checkTradeCompliance(2000, true);
         
         assertTrue(result.isApproved());
         assertNull(result.getVetoReason());
@@ -42,36 +42,19 @@ class TaiwanStockComplianceServiceTest {
 
     @Test
     void testOddLotNonDayTradeApproved() {
-        ComplianceResult result = service.checkTradeCompliance(500, false, 50_000);
+        ComplianceResult result = service.checkTradeCompliance(500, false);
         
         assertTrue(result.isApproved());
         assertNull(result.getVetoReason());
     }
 
     @Test
-    void testOddLotDayTradeWithInsufficientCapitalBlocked() {
-        ComplianceResult result = service.checkTradeCompliance(500, true, 1_500_000);
+    void testOddLotDayTradeAlwaysBlocked() {
+        ComplianceResult result = service.checkTradeCompliance(500, true);
         
         assertFalse(result.isApproved());
         assertNotNull(result.getVetoReason());
-        assertTrue(result.getVetoReason().contains("Odd-lot day trading"));
-        assertTrue(result.getVetoReason().contains("2,000,000"));
-    }
-
-    @Test
-    void testOddLotDayTradeWithSufficientCapitalApproved() {
-        ComplianceResult result = service.checkTradeCompliance(500, true, 2_000_000);
-        
-        assertTrue(result.isApproved());
-        assertNull(result.getVetoReason());
-    }
-
-    @Test
-    void testOddLotDayTradeWithExcessCapitalApproved() {
-        ComplianceResult result = service.checkTradeCompliance(750, true, 5_000_000);
-        
-        assertTrue(result.isApproved());
-        assertNull(result.getVetoReason());
+        assertTrue(result.getVetoReason().contains("Odd-lot day trading is forbidden"));
     }
 
     @Test

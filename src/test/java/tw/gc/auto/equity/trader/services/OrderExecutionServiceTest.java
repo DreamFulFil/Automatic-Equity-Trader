@@ -232,7 +232,7 @@ class OrderExecutionServiceTest {
                 TaiwanStockComplianceService.ComplianceResult.blocked("Odd-lot day trading requires 500k capital");
         when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(true);
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(300000.0);
-        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble())).thenReturn(vetoResult);
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean())).thenReturn(vetoResult);
 
         orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false, "MA_3_8");
 
@@ -245,7 +245,7 @@ class OrderExecutionServiceTest {
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(true);
         when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(false);
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
-        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
         // Simulate risk scorer veto (AI veto now implemented via TradeRiskScorer)
         when(tradeRiskScorer.quickRiskCheck(any())).thenReturn(Map.of("veto", true, "risk_score", 100.0, "reason", "High volatility detected"));
@@ -261,7 +261,7 @@ class OrderExecutionServiceTest {
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(true);
         when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(false);
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
-        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
         Map<String, Object> vetoResult = new HashMap<>();
         vetoResult.put("veto", false);
@@ -282,7 +282,7 @@ class OrderExecutionServiceTest {
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(true);
         when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(false);
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
-        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
         when(tradeRiskScorer.quickRiskCheck(any())).thenThrow(new RuntimeException("Risk scoring service unavailable"));
 
@@ -419,7 +419,7 @@ class OrderExecutionServiceTest {
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(true);
         when(taiwanComplianceService.isIntradayStrategy(anyString())).thenReturn(false);
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
-        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
+        when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
         Map<String, Object> vetoResult = new HashMap<>();
         vetoResult.put("veto", false);

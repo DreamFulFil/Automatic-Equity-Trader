@@ -183,7 +183,7 @@ public class OrderExecutionService {
         if (!isExit && strategyName != null) {
             boolean isDayTrade = taiwanComplianceService.isIntradayStrategy(strategyName);
             double currentCapital = taiwanComplianceService.fetchCurrentCapital();
-            ComplianceResult complianceResult = taiwanComplianceService.checkTradeCompliance(quantity, isDayTrade, currentCapital);
+            ComplianceResult complianceResult = taiwanComplianceService.checkTradeCompliance(quantity, isDayTrade);
             
             if (!complianceResult.isApproved()) {
                 log.warn("🇹🇼 TAIWAN COMPLIANCE VETO: {}", complianceResult.getVetoReason());
