@@ -76,6 +76,27 @@ public class Trade {
     
     @Column(name = "hold_duration_minutes")
     private Integer holdDurationMinutes;
+
+    @Column(name = "executed_slippage")
+    private Double executedSlippage;
+
+    @Column(name = "market_regime_at_entry", length = 50)
+    private String marketRegimeAtEntry;
+
+    @Column(name = "volatility_at_entry")
+    private Double volatilityAtEntry;
+
+    @Column(name = "order_book_spread_at_entry")
+    private Double orderBookSpreadAtEntry;
+
+    @Column(name = "alternative_signals_json", columnDefinition = "TEXT")
+    private String alternativeSignalsJson;
+
+    @Column(name = "expected_pnl")
+    private Double expectedPnl;
+
+    @Column(name = "news_context_json", columnDefinition = "TEXT")
+    private String newsContextJson;
     
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_status")

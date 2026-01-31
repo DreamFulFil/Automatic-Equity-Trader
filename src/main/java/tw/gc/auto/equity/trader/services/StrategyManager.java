@@ -160,6 +160,10 @@ public class StrategyManager {
     }
 
     public void executeStrategies(MarketData marketData, double currentPrice) {
+        if (tradingStateService.isMultiStrategyExecutionEnabled()) {
+            executeStrategiesConcurrent(marketData, currentPrice);
+            return;
+        }
         for (IStrategy strategy : activeStrategies) {
             try {
                 Portfolio p = strategyPortfolios.get(strategy.getName());
@@ -182,12 +186,106 @@ public class StrategyManager {
         }
     }
 
+    private void executeStrategiesConcurrent(MarketData marketData, double currentPrice) {
+        List<SignalVote> votes = new ArrayList<>();
+
+        for (IStrategy strategy : activeStrategies) {
+            try {
+                Portfolio p = strategyPortfolios.get(strategy.getName());
+                TradeSignal signal = strategy.execute(p, marketData);
+
+                if (signal.getDirection() != TradeSignal.SignalDirection.NEUTRAL) {
+                    log.info("🤝 Strategy [{}] Signal: {} ({})", strategy.getName(), signal.getDirection(), signal.getReason());
+                    executeShadowTrade(strategy.getName(), p, signal, currentPrice);
+                    votes.add(new SignalVote(strategy.getName(), signal));
+                }
+            } catch (Exception e) {
+                log.error("Error running strategy {}", strategy.getName(), e);
+            }
+        }
+
+        if (votes.isEmpty()) {
+            return;
+        }
+
+        SignalAggregation aggregation = aggregateSignals(votes);
+        if (aggregation.direction() == TradeSignal.SignalDirection.NEUTRAL) {
+            log.info("🤝 Multi-strategy conflict - no consensus trade");
+            return;
+        }
+
+        int baseQuantity = getTradingQuantity();
+        int weightedQuantity = Math.max(1, (int) Math.floor(baseQuantity * aggregation.allocationWeight()));
+        TradeSignal aggregatedSignal = TradeSignal.builder()
+                .direction(aggregation.direction())
+                .confidence(aggregation.confidence())
+                .reason(aggregation.reason())
+                .exitSignal(aggregation.exitSignal())
+                .build();
+
+        executeRealStrategyTrade(aggregatedSignal, currentPrice, weightedQuantity, "MultiStrategyConsensus");
+    }
+
+    private SignalAggregation aggregateSignals(List<SignalVote> votes) {
+        double longScore = 0.0;
+        double shortScore = 0.0;
+        boolean hasLongExit = false;
+        boolean hasShortExit = false;
+
+        for (SignalVote vote : votes) {
+            if (vote.signal().getDirection() == TradeSignal.SignalDirection.LONG) {
+                longScore += vote.signal().getConfidence();
+                hasLongExit = hasLongExit || vote.signal().isExitSignal();
+            } else if (vote.signal().getDirection() == TradeSignal.SignalDirection.SHORT) {
+                shortScore += vote.signal().getConfidence();
+                hasShortExit = hasShortExit || vote.signal().isExitSignal();
+            }
+        }
+
+        if (longScore == 0.0 && shortScore == 0.0) {
+            return SignalAggregation.neutral();
+        }
+
+        if (longScore > 0.0 && shortScore > 0.0) {
+            double diff = Math.abs(longScore - shortScore);
+            if (diff < 0.10) {
+                return SignalAggregation.neutral();
+            }
+        }
+
+        TradeSignal.SignalDirection direction = longScore >= shortScore
+                ? TradeSignal.SignalDirection.LONG
+                : TradeSignal.SignalDirection.SHORT;
+
+        double totalScore = longScore + shortScore;
+        double allocationWeight = totalScore > 0.0
+                ? (direction == TradeSignal.SignalDirection.LONG ? longScore : shortScore) / totalScore
+                : 1.0;
+
+        SignalVote bestVote = votes.stream()
+                .filter(vote -> vote.signal().getDirection() == direction)
+                .max((a, b) -> Double.compare(a.signal().getConfidence(), b.signal().getConfidence()))
+                .orElse(votes.getFirst());
+
+        boolean exitSignal = direction == TradeSignal.SignalDirection.LONG ? hasLongExit : hasShortExit;
+        String reason = "Multi-strategy consensus: " + bestVote.signal().getReason();
+        double confidence = Math.min(1.0, direction == TradeSignal.SignalDirection.LONG ? longScore : shortScore);
+
+        return new SignalAggregation(direction, confidence, allocationWeight, exitSignal, reason);
+    }
+
     private void executeRealStrategyTrade(TradeSignal signal, double price) {
+        String strategyName = tradingStateService.getActiveStrategyName();
+        int quantity = getTradingQuantity();
+
+        executeRealStrategyTrade(signal, price, quantity, strategyName);
+    }
+
+    private void executeRealStrategyTrade(TradeSignal signal, double price, int quantity, String strategyName) {
         String symbol = getActiveSymbol();
         int currentPos = positionManager.getPosition(symbol);
         String tradingMode = tradingStateService.getTradingMode();
         boolean emergencyShutdown = tradingStateService.isEmergencyShutdown();
-        String strategyName = tradingStateService.getActiveStrategyName();
         
         // LONG Signal
         if (signal.getDirection() == TradeSignal.SignalDirection.LONG && currentPos <= 0) {
@@ -198,10 +296,9 @@ public class StrategyManager {
             
             // Open Long
             if (positionManager.getPosition(symbol) == 0) {
-                int qty = getTradingQuantity();
-                qty = orderExecutionService.checkBalanceAndAdjustQuantity("BUY", qty, price, symbol, tradingMode);
-                if (qty > 0) {
-                    orderExecutionService.executeOrderWithRetry("BUY", qty, price, symbol, false, emergencyShutdown, strategyName);
+                int adjustedQty = orderExecutionService.checkBalanceAndAdjustQuantity("BUY", quantity, price, symbol, tradingMode);
+                if (adjustedQty > 0) {
+                    orderExecutionService.executeOrderWithRetry("BUY", adjustedQty, price, symbol, false, emergencyShutdown, strategyName);
                 }
             }
         } 
@@ -214,16 +311,29 @@ public class StrategyManager {
             
             // Open Short (only if futures mode or margin allowed)
             if ("futures".equals(tradingMode) && positionManager.getPosition(symbol) == 0) {
-                int qty = getTradingQuantity();
-                qty = orderExecutionService.checkBalanceAndAdjustQuantity("SELL", qty, price, symbol, tradingMode);
-                if (qty > 0) {
-                    orderExecutionService.executeOrderWithRetry("SELL", qty, price, symbol, false, emergencyShutdown, strategyName);
+                int adjustedQty = orderExecutionService.checkBalanceAndAdjustQuantity("SELL", quantity, price, symbol, tradingMode);
+                if (adjustedQty > 0) {
+                    orderExecutionService.executeOrderWithRetry("SELL", adjustedQty, price, symbol, false, emergencyShutdown, strategyName);
                 }
             }
         }
         // EXIT Signal (Explicit Close)
         else if (signal.isExitSignal() && currentPos != 0) {
              orderExecutionService.flattenPosition("Strategy Exit Signal: " + signal.getReason(), symbol, tradingMode, emergencyShutdown);
+        }
+    }
+
+    private record SignalVote(String strategyName, TradeSignal signal) {}
+
+    private record SignalAggregation(
+            TradeSignal.SignalDirection direction,
+            double confidence,
+            double allocationWeight,
+            boolean exitSignal,
+            String reason
+    ) {
+        static SignalAggregation neutral() {
+            return new SignalAggregation(TradeSignal.SignalDirection.NEUTRAL, 0.0, 0.0, false, "No consensus");
         }
     }
 

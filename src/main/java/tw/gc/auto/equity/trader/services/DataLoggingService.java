@@ -28,6 +28,8 @@ public class DataLoggingService {
     private final SignalRepository signalRepository;
     @NonNull
     private final EventRepository eventRepository;
+    @NonNull
+    private final TradeContextService tradeContextService;
 
     /**
      * Log a trade execution
@@ -36,6 +38,7 @@ public class DataLoggingService {
     public Trade logTrade(Trade trade) {
         log.info("📊 Logging trade: {} {} {} @ {}", trade.getAction(), trade.getQuantity(),
                 trade.getSymbol(), trade.getEntryPrice());
+        tradeContextService.enrichTradeContext(trade);
         return tradeRepository.save(trade);
     }
 

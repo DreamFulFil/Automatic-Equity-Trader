@@ -23,6 +23,7 @@ public class TradingStateService {
     private volatile boolean marketDataConnected = false;
     private volatile boolean tradingPaused = false;
     private volatile boolean activePolling = true;
+    private volatile boolean multiStrategyExecutionEnabled = false;
     
     // News veto cache
     private final AtomicBoolean cachedNewsVeto = new AtomicBoolean(false);
@@ -73,5 +74,13 @@ public class TradingStateService {
     
     public void setActivePolling(boolean active) {
         this.activePolling = active;
+    }
+
+    public boolean isMultiStrategyExecutionEnabled() {
+        return multiStrategyExecutionEnabled;
+    }
+
+    public void setMultiStrategyExecutionEnabled(boolean enabled) {
+        this.multiStrategyExecutionEnabled = enabled;
     }
 }

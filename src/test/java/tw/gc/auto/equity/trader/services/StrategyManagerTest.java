@@ -259,6 +259,64 @@ class StrategyManagerTest {
     }
 
     @Test
+    void executeStrategies_multiStrategy_conflict_shouldSkipRealTrade() {
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        when(tradingStateService.isMultiStrategyExecutionEnabled()).thenReturn(true);
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override
+            public List<IStrategy> createStrategies() {
+                return List.of(
+                        new DummyStrategy("Long", TradeSignal.longSignal(0.6, "L")),
+                        new DummyStrategy("Short", TradeSignal.shortSignal(0.6, "S"))
+                );
+            }
+        };
+        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(stockSettingsService.getBaseStockQuantity(100000.0)).thenReturn(10);
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of());
+
+        strategyManager.reinitializeStrategies(factory);
+        strategyManager.executeStrategies(new MarketData(), 100.0);
+
+        verify(orderExecutionService, never()).executeOrderWithRetry(
+                anyString(), anyInt(), anyDouble(), anyString(), anyBoolean(), anyBoolean(), anyString()
+        );
+    }
+
+    @Test
+    void executeStrategies_multiStrategy_weightedSizing_shouldScaleQuantity() {
+        when(tradingStateService.getTradingMode()).thenReturn("stock");
+        when(tradingStateService.isMultiStrategyExecutionEnabled()).thenReturn(true);
+        when(activeStockService.getActiveSymbol(anyString())).thenReturn("2330.TW");
+        when(positionManager.getPosition(anyString())).thenReturn(0);
+        when(orderExecutionService.checkBalanceAndAdjustQuantity(anyString(), anyInt(), anyDouble(), anyString(), anyString()))
+                .thenReturn(6);
+
+        var factory = new tw.gc.auto.equity.trader.strategy.StrategyFactory() {
+            @Override
+            public List<IStrategy> createStrategies() {
+                return List.of(
+                        new DummyStrategy("Long", TradeSignal.longSignal(0.9, "L")),
+                        new DummyStrategy("Short", TradeSignal.shortSignal(0.4, "S"))
+                );
+            }
+        };
+
+        when(contractScalingService.getLastEquity()).thenReturn(100000.0);
+        when(stockSettingsService.getBaseStockQuantity(100000.0)).thenReturn(10);
+        when(shadowModeStockService.getEnabledStocks()).thenReturn(List.of());
+
+        strategyManager.reinitializeStrategies(factory);
+        strategyManager.executeStrategies(new MarketData(), 100.0);
+
+        verify(orderExecutionService).executeOrderWithRetry(
+                eq("BUY"), eq(6), eq(100.0), anyString(), eq(false), anyBoolean(), eq("MultiStrategyConsensus")
+        );
+    }
+
+    @Test
     void executeRealStrategyTrade_shouldHandleShortSignalInFuturesMode() {
         when(tradingStateService.getTradingMode()).thenReturn("futures");
         when(tradingStateService.getActiveStrategyName()).thenReturn("S1");

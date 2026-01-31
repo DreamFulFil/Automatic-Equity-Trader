@@ -11,6 +11,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
+import tw.gc.auto.equity.trader.entities.StockRiskSettings;
 import tw.gc.auto.equity.trader.entities.Trade;
 
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
+@SuppressWarnings("null")
 class OrderExecutionServiceTest {
 
     @Mock
@@ -62,6 +64,12 @@ class OrderExecutionServiceTest {
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         when(earningsBlackoutService.isDateBlackout(any())).thenReturn(false);
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(false);
+        when(stockRiskSettingsService.getSettings()).thenReturn(StockRiskSettings.builder().build());
+        when(riskManagementService.evaluatePreTradeRisk(anyString(), anyInt(), anyDouble(), anyDouble(), anyDouble(), anyLong(), anyDouble()))
+            .thenAnswer(invocation -> {
+                int qty = invocation.getArgument(1, Integer.class);
+                return new RiskManagementService.PreTradeRiskResult(true, qty, "OK", "OK");
+            });
         // By default allow fundamentals to pass so AI veto and risk scoring paths are exercised
         when(fundamentalFilter.evaluateStock(anyString())).thenReturn(FundamentalFilter.FilterResult.builder().passed(true).build());
         // By default, ensure trade risk scorer does not veto so tests can exercise AI veto paths
@@ -131,7 +139,7 @@ class OrderExecutionServiceTest {
         orderExecutionService.flattenPosition("Test reason", "2454.TW", "stock", false);
 
         verify(restTemplate).postForObject(contains("/order"), argThat(obj -> {
-            java.util.Map map = (java.util.Map) obj;
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) obj;
             return map.get("action").equals("SELL") && map.get("quantity").equals("1");
         }), eq(String.class));
         assertEquals(0, positionManager.getPosition("2454.TW"));
@@ -326,7 +334,7 @@ class OrderExecutionServiceTest {
         orderExecutionService.flattenPosition("Stop loss", "TXFR1", "futures", false);
 
         verify(restTemplate).postForObject(contains("/order"), argThat(obj -> {
-            java.util.Map map = (java.util.Map) obj;
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) obj;
             return map.get("action").equals("BUY") && map.get("quantity").equals("1");
         }), eq(String.class));
     }

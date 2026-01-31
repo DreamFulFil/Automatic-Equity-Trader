@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutMeta;
+import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 import tw.gc.auto.equity.trader.services.EarningsBlackoutService;
 
 import jakarta.annotation.PostConstruct;
@@ -14,10 +16,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,9 +45,16 @@ public class RiskManagementService {
     
     @NonNull
     private final EarningsBlackoutService earningsBlackoutService;
+    @NonNull
+    private final PositionManager positionManager;
+    @NonNull
+    private final MarketDataRepository marketDataRepository;
+    @NonNull
+    private final SectorUniverseService sectorUniverseService;
     
     private final AtomicReference<Double> dailyPnL = new AtomicReference<>(0.0);
     private final AtomicReference<Double> weeklyPnL = new AtomicReference<>(0.0);
+    private final AtomicReference<Double> intradayPeakPnL = new AtomicReference<>(0.0);
 
     private final Map<String, AtomicReference<Double>> dailyPnLBySymbol = new ConcurrentHashMap<>();
     private final Map<String, AtomicReference<Double>> weeklyPnLBySymbol = new ConcurrentHashMap<>();
@@ -101,8 +112,9 @@ public class RiskManagementService {
     }
 
     public void recordPnL(String symbol, double pnl, int weeklyLossLimit) {
-        dailyPnL.updateAndGet(v -> v + pnl);
+        double updatedDaily = dailyPnL.updateAndGet(v -> v + pnl);
         weeklyPnL.updateAndGet(v -> v + pnl);
+        intradayPeakPnL.updateAndGet(v -> Math.max(v, updatedDaily));
 
         dailyPnLBySymbol.computeIfAbsent(symbol, k -> new AtomicReference<>(0.0))
                 .updateAndGet(v -> v + pnl);
@@ -118,6 +130,16 @@ public class RiskManagementService {
      */
     public boolean isDailyLimitExceeded(int dailyLossLimit) {
         return dailyPnL.get() <= -dailyLossLimit;
+    }
+
+    public boolean isIntradayLossLimitExceeded(int intradayLossLimit) {
+        return getIntradayDrawdownTwd() >= intradayLossLimit;
+    }
+
+    public double getIntradayDrawdownTwd() {
+        double peak = intradayPeakPnL.get();
+        double current = dailyPnL.get();
+        return Math.max(0.0, peak - current);
     }
     
     private void refreshEarningsBlackoutState() {
@@ -211,6 +233,7 @@ public class RiskManagementService {
      */
     public void resetDailyPnL() {
         dailyPnL.set(0.0);
+        intradayPeakPnL.set(0.0);
     }
     
     // =====================================================================
@@ -287,5 +310,137 @@ public class RiskManagementService {
     public void resetDailyTracking() {
         tradesToday.set(0);
         // Note: Don't reset streaks - they continue across days
+    }
+
+    public PreTradeRiskResult evaluatePreTradeRisk(
+            String symbol,
+            int requestedQuantity,
+            double price,
+            double maxSectorExposurePct,
+            double maxAdvParticipationPct,
+            long minAverageDailyVolume,
+            double baseEquity
+    ) {
+        if (requestedQuantity <= 0) {
+            return new PreTradeRiskResult(false, 0, "Requested quantity is zero", "NO_QUANTITY");
+        }
+
+        LiquidityResult liquidityResult = applyLiquidityLimit(symbol, requestedQuantity, maxAdvParticipationPct, minAverageDailyVolume);
+        if (!liquidityResult.allowed()) {
+            return new PreTradeRiskResult(false, 0, liquidityResult.reason(), "LIQUIDITY_LIMIT");
+        }
+
+        int adjustedQuantity = liquidityResult.adjustedQuantity();
+        SectorExposureResult sectorResult = checkSectorExposure(symbol, adjustedQuantity, price, maxSectorExposurePct, baseEquity);
+        if (!sectorResult.allowed()) {
+            return new PreTradeRiskResult(false, adjustedQuantity, sectorResult.reason(), "SECTOR_LIMIT");
+        }
+
+        return new PreTradeRiskResult(true, adjustedQuantity, "OK", "OK");
+    }
+
+    private LiquidityResult applyLiquidityLimit(
+            String symbol,
+            int requestedQuantity,
+            double maxAdvParticipationPct,
+            long minAverageDailyVolume
+    ) {
+        if (maxAdvParticipationPct <= 0) {
+            return new LiquidityResult(true, requestedQuantity, "Liquidity limit disabled");
+        }
+
+        Optional<Double> avgVolume = Optional.ofNullable(
+                marketDataRepository.averageVolumeSince(
+                        symbol,
+                        MarketData.Timeframe.DAY_1,
+                        LocalDateTime.now(TAIPEI_ZONE).minusDays(20)
+                )
+        );
+
+        if (avgVolume.isEmpty()) {
+            return new LiquidityResult(true, requestedQuantity, "No volume data");
+        }
+
+        double volume = avgVolume.get();
+        if (minAverageDailyVolume > 0 && volume < minAverageDailyVolume) {
+            return new LiquidityResult(false, 0, String.format("Average daily volume %.0f below minimum %d", volume, minAverageDailyVolume));
+        }
+
+        int maxShares = (int) Math.floor(volume * maxAdvParticipationPct);
+        if (maxShares <= 0) {
+            return new LiquidityResult(false, 0, "Liquidity cap resulted in zero shares");
+        }
+
+        if (requestedQuantity > maxShares) {
+            return new LiquidityResult(true, maxShares, String.format("Reduced to %d shares (ADV %.0f)", maxShares, volume));
+        }
+
+        return new LiquidityResult(true, requestedQuantity, "Liquidity OK");
+    }
+
+    private SectorExposureResult checkSectorExposure(
+            String symbol,
+            int quantity,
+            double price,
+            double maxSectorExposurePct,
+            double baseEquity
+    ) {
+        if (maxSectorExposurePct <= 0 || baseEquity <= 0) {
+            return new SectorExposureResult(true, "Sector limit disabled");
+        }
+
+        String sector = sectorUniverseService.findSector(symbol).orElse("UNKNOWN");
+        Map<String, Integer> positions = positionManager.getPositionsSnapshot();
+        Map<String, Double> entryPrices = positionManager.getEntryPriceSnapshot();
+
+        double currentExposure = 0.0;
+        for (Map.Entry<String, Integer> entry : positions.entrySet()) {
+            String posSymbol = entry.getKey();
+            int posQuantity = entry.getValue();
+            if (posQuantity == 0) {
+                continue;
+            }
+
+            String posSector = sectorUniverseService.findSector(posSymbol).orElse("UNKNOWN");
+            if (!sector.equals(posSector)) {
+                continue;
+            }
+
+            double posPrice = latestPrice(posSymbol, entryPrices.get(posSymbol));
+            if (posPrice <= 0) {
+                continue;
+            }
+
+            currentExposure += Math.abs(posQuantity) * posPrice;
+        }
+
+        double proposedExposure = currentExposure + (Math.abs(quantity) * price);
+        double exposurePct = proposedExposure / baseEquity;
+
+        if (exposurePct > maxSectorExposurePct) {
+            return new SectorExposureResult(false, String.format(
+                    "Sector %s exposure %.1f%% exceeds %.1f%%",
+                    sector,
+                    exposurePct * 100.0,
+                    maxSectorExposurePct * 100.0
+            ));
+        }
+
+        return new SectorExposureResult(true, "Sector exposure OK");
+    }
+
+    private double latestPrice(String symbol, Double fallback) {
+        return marketDataRepository.findFirstBySymbolAndTimeframeOrderByTimestampDesc(symbol, MarketData.Timeframe.DAY_1)
+                .map(MarketData::getClose)
+                .orElseGet(() -> fallback != null ? fallback : 0.0);
+    }
+
+    private record LiquidityResult(boolean allowed, int adjustedQuantity, String reason) {
+    }
+
+    private record SectorExposureResult(boolean allowed, String reason) {
+    }
+
+    public record PreTradeRiskResult(boolean allowed, int adjustedQuantity, String reason, String code) {
     }
 }

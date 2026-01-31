@@ -64,6 +64,9 @@ class TradingEngineServiceTest {
     ShioajiSettingsService shioajiSettingsService;
 
     @Mock
+    AdvancedOrderService advancedOrderService;
+
+    @Mock
     TradingStateService tradingStateService;
 
     @Mock
@@ -103,6 +106,7 @@ class TradingEngineServiceTest {
             endOfDayStatisticsService,
             dailyStatisticsRepository,
             shioajiSettingsService,
+            advancedOrderService,
             tradingStateService,
             telegramCommandHandler,
             orderExecutionService,

@@ -60,4 +60,20 @@ public class PositionManager {
     public void clearEntry(String symbol) {
         entryTimeFor(symbol).set(null);
     }
+
+    public Map<String, Integer> getPositionsSnapshot() {
+        return positions.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().get()
+                ));
+    }
+
+    public Map<String, Double> getEntryPriceSnapshot() {
+        return entryPrices.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().get()
+                ));
+    }
 }

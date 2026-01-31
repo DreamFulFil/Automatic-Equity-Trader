@@ -39,6 +39,11 @@ public class StockRiskSettings {
     @Builder.Default
     private int dailyLossLimitTwd = 1000;
 
+    /** Intraday drawdown limit in TWD from peak P&L */
+    @Column(name = "intraday_loss_limit_twd", nullable = false)
+    @Builder.Default
+    private int intradayLossLimitTwd = 1200;
+
     /** Weekly loss limit in TWD - pause trading until next week */
     @Column(name = "weekly_loss_limit_twd", nullable = false)
     @Builder.Default
@@ -109,6 +114,23 @@ public class StockRiskSettings {
     @Column(name = "volatility_threshold_multiplier", nullable = false)
     @Builder.Default
     private double volatilityThresholdMultiplier = 1.8;
+
+    // ========== LIQUIDITY & EXPOSURE LIMITS ==========
+
+    /** Maximum sector exposure as portfolio percentage (0.0-1.0) */
+    @Column(name = "max_sector_exposure_pct", nullable = false)
+    @Builder.Default
+    private double maxSectorExposurePct = 0.30;
+
+    /** Maximum participation of average daily volume (0.0-1.0) */
+    @Column(name = "max_adv_participation_pct", nullable = false)
+    @Builder.Default
+    private double maxAdvParticipationPct = 0.02;
+
+    /** Minimum average daily volume required to allow new entries */
+    @Column(name = "min_average_daily_volume", nullable = false)
+    @Builder.Default
+    private long minAverageDailyVolume = 50000;
 
     // ========== METADATA ==========
     

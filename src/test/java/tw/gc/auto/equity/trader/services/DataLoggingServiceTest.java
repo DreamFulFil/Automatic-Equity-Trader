@@ -32,11 +32,14 @@ class DataLoggingServiceTest {
     @Mock
     private EventRepository eventRepository;
 
+    @Mock
+    private TradeContextService tradeContextService;
+
     private DataLoggingService dataLoggingService;
 
     @BeforeEach
     void setUp() {
-        dataLoggingService = new DataLoggingService(tradeRepository, signalRepository, eventRepository);
+        dataLoggingService = new DataLoggingService(tradeRepository, signalRepository, eventRepository, tradeContextService);
     }
 
     @Test
@@ -135,11 +138,13 @@ class DataLoggingServiceTest {
                 .status(Trade.TradeStatus.OPEN)
                 .build();
 
+            when(tradeContextService.enrichTradeContext(trade)).thenReturn(trade);
         when(tradeRepository.save(trade)).thenReturn(trade);
 
         Trade result = dataLoggingService.logTrade(trade);
 
         assertNotNull(result);
+            verify(tradeContextService).enrichTradeContext(trade);
         verify(tradeRepository).save(trade);
     }
 

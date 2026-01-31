@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
+import tw.gc.auto.equity.trader.entities.StockRiskSettings;
 import tw.gc.auto.equity.trader.entities.Trade;
 import tw.gc.auto.equity.trader.repositories.TradeRepository;
 
@@ -64,6 +65,12 @@ class OrderExecutionServiceCoveragePatchTest {
             tradeRiskScorer,
             fundamentalFilter
         );
+        when(stockRiskSettingsService.getSettings()).thenReturn(StockRiskSettings.builder().build());
+        when(riskManagementService.evaluatePreTradeRisk(anyString(), anyInt(), anyDouble(), anyDouble(), anyDouble(), anyLong(), anyDouble()))
+                .thenAnswer(invocation -> {
+                    int qty = invocation.getArgument(1, Integer.class);
+                    return new RiskManagementService.PreTradeRiskResult(true, qty, "OK", "OK");
+                });
     }
 
     @Test

@@ -7,8 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.AnnualReportMetadata;
+import tw.gc.auto.equity.trader.entities.QuarterlyReportMetadata;
 import tw.gc.auto.equity.trader.repositories.AnnualReportMetadataRepository;
+import tw.gc.auto.equity.trader.repositories.QuarterlyReportMetadataRepository;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,9 @@ public class FundamentalInsightService {
     private final ObjectMapper objectMapper;
     private final TradingProperties tradingProperties;
     private final AnnualReportMetadataRepository reportMetadataRepository;
+    private final QuarterlyReportMetadataRepository quarterlyReportMetadataRepository;
+
+    private static final int QUARTERLY_FRESHNESS_DAYS = 120;
     
     /**
      * Query annual report for specific insights
@@ -91,6 +97,14 @@ public class FundamentalInsightService {
         insight.setPeRatio(report.getPeRatio());
         insight.setRevenueGrowthPct(report.getRevenueGrowthPct());
         insight.setDebtToEquity(report.getDebtToEquity());
+
+        Optional<QuarterlyReportMetadata> latestQuarterly =
+            quarterlyReportMetadataRepository.findFirstByTickerOrderByReportYearDescReportQuarterDesc(ticker);
+        latestQuarterly.ifPresent(quarterly -> {
+            insight.setQuarterlyReportYear(quarterly.getReportYear());
+            insight.setQuarterlyReportQuarter(quarterly.getReportQuarter());
+            insight.setQuarterlySummary(quarterly.getSummary());
+        });
         
         // Query for key insights
         Map<String, Object> risksResult = queryReport(ticker, "What are the main business risks mentioned?");
@@ -160,6 +174,15 @@ public class FundamentalInsightService {
                 score += 10; // Low debt
             }
         }
+
+        Optional<QuarterlyReportMetadata> quarterly =
+            quarterlyReportMetadataRepository.findFirstByTickerOrderByReportYearDescReportQuarterDesc(ticker);
+        if (quarterly.isPresent() && quarterly.get().getDownloadedAt() != null) {
+            LocalDateTime downloadedAt = quarterly.get().getDownloadedAt();
+            if (downloadedAt.isAfter(LocalDateTime.now().minusDays(QUARTERLY_FRESHNESS_DAYS))) {
+                score += 5; // Fresh quarterly report adds confidence
+            }
+        }
         
         // Clamp to 0-100
         return Math.max(0, Math.min(100, score));
@@ -225,6 +248,9 @@ public class FundamentalInsightService {
         private Double peRatio;
         private Double revenueGrowthPct;
         private Double debtToEquity;
+        private Integer quarterlyReportYear;
+        private Integer quarterlyReportQuarter;
+        private String quarterlySummary;
         private String mainRisks;
         private String revenueOutlook;
         private String managementView;

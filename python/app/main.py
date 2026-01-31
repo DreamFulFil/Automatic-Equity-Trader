@@ -51,6 +51,18 @@ from app.services.annual_report_summary_service import (
     AnnualReportSummaryError,
     summarize_annual_report,
 )
+from app.services.quarterly_report_service import (
+    QuarterlyReportRequest,
+    QuarterlyReportResponse,
+    QuarterlyReportDownloadError,
+    download_quarterly_financial_report,
+)
+from app.services.quarterly_report_summary_service import (
+    QuarterlyReportSummaryRequest,
+    QuarterlyReportSummaryResponse,
+    QuarterlyReportSummaryError,
+    summarize_quarterly_report,
+)
 from app.strategies.legacy_strategy import get_signal_legacy, notify_exit_order
 
 # Global state
@@ -411,6 +423,34 @@ def summarize_shareholders_annual_report_endpoint(request: AnnualReportSummaryRe
             force=request.force,
         )
     except (AnnualReportDownloadError, AnnualReportSummaryError) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@app.post("/reports/financial/quarterly", response_model=QuarterlyReportResponse)
+def download_financial_quarterly_report_endpoint(request: QuarterlyReportRequest):
+    try:
+        return download_quarterly_financial_report(
+            ticker=request.ticker,
+            report_year=request.report_year,
+            report_quarter=request.report_quarter,
+            report_type=request.report_type,
+            force=request.force,
+        )
+    except QuarterlyReportDownloadError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@app.post("/reports/financial/quarterly/summary", response_model=QuarterlyReportSummaryResponse)
+def summarize_financial_quarterly_report_endpoint(request: QuarterlyReportSummaryRequest):
+    try:
+        return summarize_quarterly_report(
+            ticker=request.ticker,
+            report_year=request.report_year,
+            report_quarter=request.report_quarter,
+            report_type=request.report_type,
+            force=request.force,
+        )
+    except (QuarterlyReportDownloadError, QuarterlyReportSummaryError) as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
 @app.get("/stream/quotes")

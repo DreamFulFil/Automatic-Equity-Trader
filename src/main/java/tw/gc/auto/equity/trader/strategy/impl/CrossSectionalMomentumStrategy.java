@@ -2,6 +2,8 @@ package tw.gc.auto.equity.trader.strategy.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import tw.gc.auto.equity.trader.entities.MarketData;
+import tw.gc.auto.equity.trader.strategy.CrossSectionalFactorProvider;
+import tw.gc.auto.equity.trader.strategy.CrossSectionalFactorScore;
 import tw.gc.auto.equity.trader.strategy.IStrategy;
 import tw.gc.auto.equity.trader.strategy.Portfolio;
 import tw.gc.auto.equity.trader.strategy.StrategyType;
@@ -11,6 +13,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * CrossSectionalMomentumStrategy
@@ -26,6 +29,8 @@ import java.util.Map;
 @Slf4j
 public class CrossSectionalMomentumStrategy implements IStrategy {
     
+    private static volatile CrossSectionalFactorProvider factorProvider;
+
     private final int rankPeriod;
     private final int topN;
     private final Map<String, Deque<Double>> priceHistory = new HashMap<>();
@@ -34,6 +39,10 @@ public class CrossSectionalMomentumStrategy implements IStrategy {
     public CrossSectionalMomentumStrategy(int rankPeriod, int topN) {
         this.rankPeriod = rankPeriod;
         this.topN = topN;
+    }
+
+    public static void setFactorProvider(CrossSectionalFactorProvider provider) {
+        factorProvider = provider;
     }
 
     @Override
@@ -56,6 +65,11 @@ public class CrossSectionalMomentumStrategy implements IStrategy {
         prices.addLast(currentPrice);
         if (prices.size() > rankPeriod + 10) {
             prices.removeFirst();
+        }
+
+        Optional<CrossSectionalFactorScore> factorScore = getFactorScore(symbol);
+        if (factorScore.isPresent()) {
+            return evaluateCrossSectionalScore(portfolio, symbol, factorScore.get());
         }
         
         if (prices.size() <= rankPeriod) {
@@ -118,6 +132,47 @@ public class CrossSectionalMomentumStrategy implements IStrategy {
         }
         
         return TradeSignal.neutral(String.format("Momentum: %.2f%%", momentum * 100));
+    }
+
+    private Optional<CrossSectionalFactorScore> getFactorScore(String symbol) {
+        CrossSectionalFactorProvider provider = factorProvider;
+        if (provider == null) {
+            return Optional.empty();
+        }
+        return provider.getMomentumScore(symbol);
+    }
+
+    private TradeSignal evaluateCrossSectionalScore(Portfolio portfolio, String symbol, CrossSectionalFactorScore score) {
+        double percentile = score.percentile();
+        double momentum = score.momentum();
+        double topThreshold = 1.0 - (topN / 100.0);
+        double bottomThreshold = topN / 100.0;
+        int position = portfolio.getPosition(symbol);
+
+        if (percentile >= topThreshold && momentum > 0 && position <= 0) {
+            return TradeSignal.longSignal(0.75,
+                String.format("Cross-sectional rank %d/%d (%.1f%%)",
+                    score.rank(), score.total(), percentile * 100));
+        }
+
+        if (percentile <= bottomThreshold && momentum < 0 && position >= 0) {
+            return TradeSignal.shortSignal(0.70,
+                String.format("Cross-sectional rank %d/%d (%.1f%%)",
+                    score.rank(), score.total(), percentile * 100));
+        }
+
+        if (position > 0 && momentum < 0) {
+            return TradeSignal.exitSignal(TradeSignal.SignalDirection.SHORT, 0.65,
+                String.format("Momentum reversal: %.2f%%", momentum * 100));
+        }
+
+        if (position < 0 && momentum > 0) {
+            return TradeSignal.exitSignal(TradeSignal.SignalDirection.LONG, 0.65,
+                String.format("Momentum reversal: %.2f%%", momentum * 100));
+        }
+
+        return TradeSignal.neutral(String.format("Cross-sectional rank %d/%d (%.1f%%)",
+            score.rank(), score.total(), percentile * 100));
     }
 
     @Override

@@ -8,7 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import tw.gc.auto.equity.trader.entities.EarningsBlackoutMeta;
-import tw.gc.auto.equity.trader.services.EarningsBlackoutService;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -21,6 +21,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -28,12 +30,23 @@ class RiskManagementServiceTest {
 
     @Mock
     private EarningsBlackoutService earningsBlackoutService;
+    @Mock
+    private PositionManager positionManager;
+    @Mock
+    private MarketDataRepository marketDataRepository;
+    @Mock
+    private SectorUniverseService sectorUniverseService;
 
     private RiskManagementService riskManagementService;
 
     @BeforeEach
     void setUp() {
-        riskManagementService = new RiskManagementService(earningsBlackoutService);
+        riskManagementService = new RiskManagementService(
+                earningsBlackoutService,
+                positionManager,
+                marketDataRepository,
+                sectorUniverseService
+        );
         when(earningsBlackoutService.getCurrentBlackoutDates()).thenReturn(Collections.emptySet());
         when(earningsBlackoutService.getLatestMeta()).thenReturn(Optional.empty());
         when(earningsBlackoutService.isLatestStale()).thenReturn(true);
@@ -84,6 +97,37 @@ class RiskManagementServiceTest {
         assertEquals(0.0, riskManagementService.getDailyPnL());
         // Weekly should remain
         assertEquals(1000, riskManagementService.getWeeklyPnL());
+    }
+
+    @Test
+    void intradayLossLimit_shouldTrackDrawdownFromPeak() {
+        riskManagementService.recordPnL(1000, 15000);
+        riskManagementService.recordPnL(-700, 15000);
+
+        assertEquals(700.0, riskManagementService.getIntradayDrawdownTwd());
+        assertTrue(riskManagementService.isIntradayLossLimitExceeded(600));
+        assertFalse(riskManagementService.isIntradayLossLimitExceeded(800));
+    }
+
+    @Test
+    void evaluatePreTradeRisk_appliesLiquidityAdjustments() {
+        when(marketDataRepository.averageVolumeSince(anyString(), any(), any())).thenReturn(1000.0);
+        when(positionManager.getPositionsSnapshot()).thenReturn(Collections.emptyMap());
+        when(positionManager.getEntryPriceSnapshot()).thenReturn(Collections.emptyMap());
+        when(sectorUniverseService.findSector(anyString())).thenReturn(Optional.of("Technology"));
+
+        RiskManagementService.PreTradeRiskResult result = riskManagementService.evaluatePreTradeRisk(
+                "2330.TW",
+                200,
+                100.0,
+                0.30,
+                0.10,
+                100,
+                1_000_000.0
+        );
+
+        assertTrue(result.allowed());
+        assertEquals(100, result.adjustedQuantity());
     }
 
     // ==================== Loss limit tests ====================

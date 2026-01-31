@@ -14,7 +14,6 @@ import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.entities.Signal;
 import tw.gc.auto.equity.trader.entities.Signal.SignalDirection;
 import tw.gc.auto.equity.trader.repositories.DailyStatisticsRepository;
-import tw.gc.auto.equity.trader.services.*;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -22,8 +21,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 @Slf4j
@@ -36,6 +33,7 @@ public class TradingEngineService {
     private final ObjectMapper objectMapper;
     private final TelegramService telegramService;
     private final TradingProperties tradingProperties;
+    @SuppressWarnings("unused")
     private final ApplicationContext applicationContext;
     private final ContractScalingService contractScalingService;
     private final RiskManagementService riskManagementService;
@@ -45,6 +43,7 @@ public class TradingEngineService {
     private final EndOfDayStatisticsService endOfDayStatisticsService;
     private final DailyStatisticsRepository dailyStatisticsRepository;
     private final ShioajiSettingsService shioajiSettingsService;
+    private final AdvancedOrderService advancedOrderService;
     
     // New Services
     private final TradingStateService tradingStateService;
@@ -52,6 +51,7 @@ public class TradingEngineService {
     private final OrderExecutionService orderExecutionService;
     private final PositionManager positionManager;
     private final StrategyManager strategyManager;
+    @SuppressWarnings("unused")
     private final ReportingService reportingService;
     private final ActiveStockService activeStockService;
 
@@ -221,6 +221,8 @@ public class TradingEngineService {
                 .volume(100L)       // Placeholder
                 .timestamp(LocalDateTime.now(TAIPEI_ZONE))
                 .build();
+
+            advancedOrderService.evaluateOrders(getActiveSymbol(), currentPrice);
             
             // Run All Strategies
             strategyManager.executeStrategies(marketData, currentPrice);
@@ -287,6 +289,17 @@ public class TradingEngineService {
     }
     
     void checkRiskLimits() { // package-private for testing
+        if (riskManagementService.isIntradayLossLimitExceeded(stockRiskSettingsService.getIntradayLossLimit())) {
+            double drawdown = riskManagementService.getIntradayDrawdownTwd();
+            log.error("🚨 INTRADAY LOSS LIMIT HIT: {} TWD", drawdown);
+            telegramService.sendMessage(String.format(
+                    "🚨 INTRADAY LOSS LIMIT\nDrawdown: %.0f TWD\nFlattening all positions!",
+                    drawdown));
+            orderExecutionService.flattenPosition("Intraday loss limit", getActiveSymbol(), tradingStateService.getTradingMode(), true);
+            tradingStateService.setEmergencyShutdown(true);
+            return;
+        }
+
         if (riskManagementService.isDailyLimitExceeded(stockRiskSettingsService.getDailyLossLimit())) {
             log.error("🚨 DAILY LOSS LIMIT HIT: {} TWD", riskManagementService.getDailyPnL());
             telegramService.sendMessage(String.format(

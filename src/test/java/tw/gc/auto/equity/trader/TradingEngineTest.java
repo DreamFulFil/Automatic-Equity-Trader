@@ -50,6 +50,7 @@ class TradingEngineTest {
     @Mock private StrategyManager strategyManager;
     @Mock private ReportingService reportingService;
     @Mock private ActiveStockService activeStockService;
+    @Mock private AdvancedOrderService advancedOrderService;
 
     // Real instances for state
     private TradingStateService tradingStateService;
@@ -103,7 +104,7 @@ class TradingEngineTest {
             restTemplate, objectMapper, telegramService, tradingProperties, applicationContext,
             contractScalingService, riskManagementService, stockSettingsService, stockRiskSettingsService,
             dataLoggingService, endOfDayStatisticsService, dailyStatisticsRepository, shioajiSettingsService,
-            tradingStateService, telegramCommandHandler, orderExecutionService, positionManager,
+            advancedOrderService, tradingStateService, telegramCommandHandler, orderExecutionService, positionManager,
             strategyManager, reportingService, activeStockService
         );
     }

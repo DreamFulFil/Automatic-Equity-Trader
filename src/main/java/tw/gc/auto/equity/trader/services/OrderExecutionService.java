@@ -6,9 +6,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import tw.gc.auto.equity.trader.services.RiskManagementService;
-import tw.gc.auto.equity.trader.services.StockRiskSettingsService;
-import tw.gc.auto.equity.trader.services.TelegramService;
 import tw.gc.auto.equity.trader.config.TradingProperties;
 import tw.gc.auto.equity.trader.entities.Trade;
 import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
@@ -34,6 +31,7 @@ import java.util.Map;
 public class OrderExecutionService {
 
     private static final ZoneId TAIPEI_ZONE = ZoneId.of("Asia/Taipei");
+    private static final double DEFAULT_BASE_EQUITY = 1_000_000.0;
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -45,6 +43,7 @@ public class OrderExecutionService {
     private final StockRiskSettingsService stockRiskSettingsService;
     private final EarningsBlackoutService earningsBlackoutService;
     private final TaiwanStockComplianceService taiwanComplianceService;
+    @SuppressWarnings("unused")
     private final LlmService llmService;
     private final TradeRiskScorer tradeRiskScorer;
     
@@ -151,6 +150,33 @@ public class OrderExecutionService {
                 "📅 ORDER BLOCKED - EARNINGS BLACKOUT\nAction: %s %d %s @ %.0f\nReason: Earnings blackout window active\nExisting positions can still be closed.",
                 action, quantity, instrument, price));
             return;
+        }
+
+        if (!isExit && "BUY".equalsIgnoreCase(action)) {
+            var settings = stockRiskSettingsService.getSettings();
+            RiskManagementService.PreTradeRiskResult riskResult = riskManagementService.evaluatePreTradeRisk(
+                    instrument,
+                    quantity,
+                    price,
+                    settings.getMaxSectorExposurePct(),
+                    settings.getMaxAdvParticipationPct(),
+                    settings.getMinAverageDailyVolume(),
+                    DEFAULT_BASE_EQUITY
+            );
+
+            if (!riskResult.allowed()) {
+                log.warn("📉 PRE-TRADE RISK BLOCK: {}", riskResult.reason());
+                telegramService.sendMessage(String.format(
+                        "📉 ORDER BLOCKED - RISK LIMIT\nAction: %s %d %s @ %.0f\nReason: %s",
+                        action, quantity, instrument, price, riskResult.reason()
+                ));
+                return;
+            }
+
+            if (riskResult.adjustedQuantity() != quantity) {
+                log.warn("⚠️ Liquidity cap adjusted quantity: {} → {}", quantity, riskResult.adjustedQuantity());
+                quantity = riskResult.adjustedQuantity();
+            }
         }
 
         // Taiwan compliance check - block if odd-lot day trading without sufficient capital

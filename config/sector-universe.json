@@ -1,0 +1,62 @@
+[
+  {
+    "symbol": "2330",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "source": "seed"
+  },
+  {
+    "symbol": "2454",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "source": "seed"
+  },
+  {
+    "symbol": "2317",
+    "sector": "Technology",
+    "industry": "Electronics Manufacturing",
+    "source": "seed"
+  },
+  {
+    "symbol": "2303",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "source": "seed"
+  },
+  {
+    "symbol": "3711",
+    "sector": "Technology",
+    "industry": "Semiconductor Packaging",
+    "source": "seed"
+  },
+  {
+    "symbol": "2412",
+    "sector": "Communication Services",
+    "industry": "Telecom",
+    "source": "seed"
+  },
+  {
+    "symbol": "2882",
+    "sector": "Financials",
+    "industry": "Banks",
+    "source": "seed"
+  },
+  {
+    "symbol": "2881",
+    "sector": "Financials",
+    "industry": "Banks",
+    "source": "seed"
+  },
+  {
+    "symbol": "2886",
+    "sector": "Financials",
+    "industry": "Banks",
+    "source": "seed"
+  },
+  {
+    "symbol": "2002",
+    "sector": "Materials",
+    "industry": "Steel",
+    "source": "seed"
+  }
+]

@@ -33,6 +33,7 @@ public class StockRiskSettingsService {
      * Ensure default risk settings exist in database
      */
     @Transactional
+    @SuppressWarnings("null")
     public void ensureDefaultSettings() {
         if (riskSettingsRepo.findFirst() == null) {
             StockRiskSettings defaultSettings = StockRiskSettings.builder()
@@ -88,10 +89,29 @@ public class StockRiskSettingsService {
     }
 
     /**
+     * Get intraday drawdown limit
+     */
+    public int getIntradayLossLimit() {
+        return getSettings().getIntradayLossLimitTwd();
+    }
+
+    /**
      * Get weekly loss limit
      */
     public int getWeeklyLossLimit() {
         return getSettings().getWeeklyLossLimitTwd();
+    }
+
+    public double getMaxSectorExposurePct() {
+        return getSettings().getMaxSectorExposurePct();
+    }
+
+    public double getMaxAdvParticipationPct() {
+        return getSettings().getMaxAdvParticipationPct();
+    }
+
+    public long getMinAverageDailyVolume() {
+        return getSettings().getMinAverageDailyVolume();
     }
 
     /**
@@ -137,6 +157,12 @@ public class StockRiskSettingsService {
                     int dailyLimit = Integer.parseInt(value);
                     if (dailyLimit <= 0) return "❌ daily_loss_limit_twd must be > 0";
                     settings.setDailyLossLimitTwd(dailyLimit);
+                    break;
+
+                case "intraday_loss_limit_twd":
+                    int intradayLimit = Integer.parseInt(value);
+                    if (intradayLimit <= 0) return "❌ intraday_loss_limit_twd must be > 0";
+                    settings.setIntradayLossLimitTwd(intradayLimit);
                     break;
                     
                 case "weekly_loss_limit_twd":
@@ -214,6 +240,24 @@ public class StockRiskSettingsService {
                     if (volatilityThreshold < 0.1 || volatilityThreshold > 10.0) return "❌ volatility_threshold_multiplier must be 0.1-10.0";
                     settings.setVolatilityThresholdMultiplier(volatilityThreshold);
                     break;
+
+                case "max_sector_exposure_pct":
+                    double maxSectorExposure = Double.parseDouble(value);
+                    if (maxSectorExposure < 0.0 || maxSectorExposure > 1.0) return "❌ max_sector_exposure_pct must be 0.0-1.0";
+                    settings.setMaxSectorExposurePct(maxSectorExposure);
+                    break;
+
+                case "max_adv_participation_pct":
+                    double maxAdvParticipation = Double.parseDouble(value);
+                    if (maxAdvParticipation < 0.0 || maxAdvParticipation > 1.0) return "❌ max_adv_participation_pct must be 0.0-1.0";
+                    settings.setMaxAdvParticipationPct(maxAdvParticipation);
+                    break;
+
+                case "min_average_daily_volume":
+                    long minAvgVolume = Long.parseLong(value);
+                    if (minAvgVolume < 0) return "❌ min_average_daily_volume must be >= 0";
+                    settings.setMinAverageDailyVolume(minAvgVolume);
+                    break;
                     
                 default:
                     return "❌ Unknown risk setting: " + key;
@@ -244,6 +288,7 @@ public class StockRiskSettingsService {
             "  • max_shares_per_trade = %d\n\n" +
             "💰 Loss Limits:\n" +
             "  • daily_loss_limit_twd = %d\n" +
+            "  • intraday_loss_limit_twd = %d\n" +
             "  • weekly_loss_limit_twd = %d\n" +
             "  • stop_loss_twd_per_trade = %d\n\n" +
             "📅 Trade Frequency:\n" +
@@ -260,10 +305,15 @@ public class StockRiskSettingsService {
             "  • enable_ai_veto = %s\n" +
             "  • enable_volatility_filter = %s\n" +
             "  • volatility_threshold_multiplier = %.1f\n\n" +
+            "📉 Exposure & Liquidity:\n" +
+            "  • max_sector_exposure_pct = %.2f\n" +
+            "  • max_adv_participation_pct = %.2f\n" +
+            "  • min_average_daily_volume = %d\n\n" +
             "📝 To update: /risk <key> <value>\n" +
             "Example: /risk daily_loss_limit_twd 1500",
             settings.getMaxSharesPerTrade(),
             settings.getDailyLossLimitTwd(),
+            settings.getIntradayLossLimitTwd(),
             settings.getWeeklyLossLimitTwd(),
             settings.getStopLossTwdPerTrade(),
             settings.getMaxDailyTrades(),
@@ -276,7 +326,10 @@ public class StockRiskSettingsService {
             settings.getMinTotalTradesInBacktest(),
             settings.isEnableAiVeto() ? "✅" : "❌",
             settings.isEnableVolatilityFilter() ? "✅" : "❌",
-            settings.getVolatilityThresholdMultiplier()
+            settings.getVolatilityThresholdMultiplier(),
+            settings.getMaxSectorExposurePct(),
+            settings.getMaxAdvParticipationPct(),
+            settings.getMinAverageDailyVolume()
         );
     }
     
@@ -294,6 +347,7 @@ public class StockRiskSettingsService {
                "  • max_shares_per_trade (1-1000)\n\n" +
                "💰 Loss Limits:\n" +
                "  • daily_loss_limit_twd\n" +
+               "  • intraday_loss_limit_twd\n" +
                "  • weekly_loss_limit_twd\n" +
                "  • stop_loss_twd_per_trade\n\n" +
                "📅 Trade Frequency:\n" +
@@ -310,6 +364,10 @@ public class StockRiskSettingsService {
                "  • enable_ai_veto (true/false)\n" +
                "  • enable_volatility_filter (true/false)\n" +
                "  • volatility_threshold_multiplier (0.1-10.0)\n\n" +
+               "📉 Exposure & Liquidity:\n" +
+               "  • max_sector_exposure_pct (0.0-1.0)\n" +
+               "  • max_adv_participation_pct (0.0-1.0)\n" +
+               "  • min_average_daily_volume (>= 0)\n\n" +
                "💡 Example:\n" +
                "  /risk daily_loss_limit_twd 1500";
     }
