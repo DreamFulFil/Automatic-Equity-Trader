@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.entities.BacktestResult;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
@@ -12,6 +14,9 @@ import tw.gc.auto.equity.trader.entities.StockSettings;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.repositories.BacktestResultRepository;
 import tw.gc.auto.equity.trader.repositories.StockSettingsRepository;
+import tw.gc.auto.equity.trader.services.regime.MarketRegimeService;
+import tw.gc.auto.equity.trader.services.regime.RegimeStrategyMapper;
+import tw.gc.auto.equity.trader.services.regime.RegimeTransitionService;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,6 +29,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AutoStrategySelectorTest {
 
     @Mock
@@ -49,6 +55,21 @@ class AutoStrategySelectorTest {
 
     @Mock
     private TaiwanStockComplianceService complianceService;
+    
+    @Mock
+    private MarketRegimeService marketRegimeService;
+    
+    @Mock
+    private RegimeStrategyMapper regimeStrategyMapper;
+    
+    @Mock
+    private RegimeTransitionService regimeTransitionService;
+    
+    @Mock
+    private FundamentalInsightService fundamentalInsightService;
+    
+    @Mock
+    private FundamentalFilter fundamentalFilter;
 
     private AutoStrategySelector autoStrategySelector;
 
@@ -61,6 +82,8 @@ class AutoStrategySelectorTest {
         lenient().when(complianceService.fetchCurrentCapital()).thenReturn(80_000.0);
         lenient().when(stockSettingsRepository.findFirstByOrderByIdDesc())
             .thenReturn(Optional.of(StockSettings.builder().shareIncrement(27).build()));
+        // By default allow fundamental filter to pass so selection logic proceeds in unit tests
+        lenient().when(fundamentalFilter.passesFilter(anyString())).thenReturn(true);
         
         autoStrategySelector = new AutoStrategySelector(
             mappingRepository,
@@ -71,7 +94,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            selectionRepo
+            selectionRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
     }
 
@@ -450,7 +478,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         // When
@@ -596,7 +629,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         // When
@@ -643,7 +681,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         // When
@@ -698,7 +741,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         // When
@@ -938,7 +986,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         // When
@@ -1004,7 +1057,12 @@ class AutoStrategySelectorTest {
             shadowModeStockService,
             telegramService,
             complianceService,
-            mockRepo
+            mockRepo,
+            marketRegimeService,
+            regimeStrategyMapper,
+            regimeTransitionService,
+            fundamentalInsightService,
+            fundamentalFilter
         );
         
         selector.selectShadowModeStrategiesAndPopulateTable(activeMapping);

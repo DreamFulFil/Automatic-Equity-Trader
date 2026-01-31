@@ -52,6 +52,12 @@ class OrderExecutionServiceConcreteTest {
     @Mock
     LlmService llmService;
 
+    @Mock
+    TradeRiskScorer tradeRiskScorer;
+
+    @Mock
+    FundamentalFilter fundamentalFilter;
+
     OrderExecutionService svc;
 
     @BeforeEach
@@ -61,7 +67,8 @@ class OrderExecutionServiceConcreteTest {
 
         svc = new OrderExecutionService(restTemplate, objectMapper, tradingProperties,
                 telegramService, dataLoggingService, positionManager, riskManagementService,
-                stockRiskSettingsService, earningsBlackoutService, taiwanComplianceService, llmService);
+                stockRiskSettingsService, earningsBlackoutService, taiwanComplianceService, llmService,
+                tradeRiskScorer, fundamentalFilter);
     }
 
     @Test

@@ -40,6 +40,10 @@ class OrderExecutionServiceCoveragePatchTest {
     private EarningsBlackoutService earningsBlackoutService;
     @Mock
     private LlmService llmService;
+    @Mock
+    private TradeRiskScorer tradeRiskScorer;
+    @Mock
+    private FundamentalFilter fundamentalFilter;
 
     private OrderExecutionService service;
 
@@ -56,7 +60,9 @@ class OrderExecutionServiceCoveragePatchTest {
             stockRiskSettingsService,
             earningsBlackoutService,
             new TaiwanStockComplianceService(restTemplate),
-            llmService
+            llmService,
+            tradeRiskScorer,
+            fundamentalFilter
         );
     }
 

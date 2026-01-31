@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -210,5 +211,81 @@ public class RiskManagementService {
      */
     public void resetDailyPnL() {
         dailyPnL.set(0.0);
+    }
+    
+    // =====================================================================
+    // Phase 5: Additional methods for calibrated risk scoring
+    // =====================================================================
+    
+    // Track trades and streaks for risk scoring
+    private final AtomicInteger tradesToday = new AtomicInteger(0);
+    private final AtomicInteger winStreak = new AtomicInteger(0);
+    private final AtomicInteger lossStreak = new AtomicInteger(0);
+    private volatile double peakEquity = 0.0;
+    private volatile double currentEquity = 0.0;
+    
+    /**
+     * Get current drawdown percentage from peak equity
+     */
+    public double getCurrentDrawdownPercent() {
+        if (peakEquity <= 0) {
+            return 0.0;
+        }
+        double drawdown = (peakEquity - currentEquity) / peakEquity * 100;
+        return Math.max(0, drawdown);
+    }
+    
+    /**
+     * Get number of trades executed today
+     */
+    public int getTradesToday() {
+        return tradesToday.get();
+    }
+    
+    /**
+     * Get current winning streak count
+     */
+    public int getWinStreak() {
+        return winStreak.get();
+    }
+    
+    /**
+     * Get current losing streak count
+     */
+    public int getLossStreak() {
+        return lossStreak.get();
+    }
+    
+    /**
+     * Record a completed trade for streak tracking
+     */
+    public void recordTradeResult(boolean profitable) {
+        tradesToday.incrementAndGet();
+        
+        if (profitable) {
+            winStreak.incrementAndGet();
+            lossStreak.set(0);
+        } else {
+            lossStreak.incrementAndGet();
+            winStreak.set(0);
+        }
+    }
+    
+    /**
+     * Update equity for drawdown calculation
+     */
+    public void updateEquity(double equity) {
+        this.currentEquity = equity;
+        if (equity > peakEquity) {
+            this.peakEquity = equity;
+        }
+    }
+    
+    /**
+     * Reset daily tracking (called at start of trading day)
+     */
+    public void resetDailyTracking() {
+        tradesToday.set(0);
+        // Note: Don't reset streaks - they continue across days
     }
 }

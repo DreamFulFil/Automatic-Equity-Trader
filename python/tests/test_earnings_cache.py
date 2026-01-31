@@ -3,10 +3,13 @@ import json
 import shutil
 from app import main as main_module
 
-CONFIG_PATH = os.path.join(os.getcwd(), 'config', 'earnings-blackout-dates.json')
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(main_module.__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, '..', '..'))
+CONFIG_PATH = os.path.join(_PROJECT_ROOT, 'config', 'earnings-blackout-dates.json')
 
 
 def _backup_and_write(content: dict):
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     backup = None
     if os.path.exists(CONFIG_PATH):
         backup = CONFIG_PATH + '.bak'
