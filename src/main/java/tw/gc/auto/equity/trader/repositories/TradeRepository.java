@@ -51,6 +51,11 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     List<Trade> findByStrategyNameOrderByTimestampDesc(String strategyName);
     
     /**
+     * Find trades by strategy name after a given timestamp
+     */
+    List<Trade> findByStrategyNameAndTimestampAfter(String strategyName, LocalDateTime since);
+    
+    /**
      * Count trades since a given timestamp
      */
     @Query("SELECT COUNT(t) FROM Trade t WHERE t.mode = :mode AND t.timestamp >= :since")

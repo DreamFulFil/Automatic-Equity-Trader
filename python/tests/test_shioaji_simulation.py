@@ -15,18 +15,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.mark.skipif(
-    not os.environ.get('JASYPT_PASSWORD'),
-    reason="JASYPT_PASSWORD not set - skipping credential tests"
-)
 class TestShioajiSimulation:
     """Tests that require Shioaji credentials"""
+
+    @staticmethod
+    def _get_password_or_skip():
+        password = os.environ.get('JASYPT_PASSWORD')
+        if not password:
+            pytest.skip("JASYPT_PASSWORD not set - skipping credential tests")
+        return password
     
     def test_config_loading(self):
         """Config should load with decryption"""
         from app.core.config import load_config_with_decryption
-        
-        password = os.environ['JASYPT_PASSWORD']
+
+        password = self._get_password_or_skip()
         config = load_config_with_decryption(password)
         
         assert 'shioaji' in config
@@ -38,8 +41,8 @@ class TestShioajiSimulation:
     def test_ca_path_resolution(self):
         """CA path should resolve to absolute path"""
         from app.core.config import load_config_with_decryption
-        
-        password = os.environ['JASYPT_PASSWORD']
+
+        password = self._get_password_or_skip()
         config = load_config_with_decryption(password)
         
         ca_path = config['shioaji']['ca-path']
@@ -50,8 +53,8 @@ class TestShioajiSimulation:
     def test_secret_key_decryption(self):
         """Secret key should be decrypted"""
         from app.core.config import load_config_with_decryption
-        
-        password = os.environ['JASYPT_PASSWORD']
+
+        password = self._get_password_or_skip()
         config = load_config_with_decryption(password)
         
         assert 'stock' in config['shioaji']
@@ -62,8 +65,8 @@ class TestShioajiSimulation:
     def test_person_id_decryption(self):
         """Person ID should be decrypted"""
         from app.core.config import load_config_with_decryption
-        
-        password = os.environ['JASYPT_PASSWORD']
+
+        password = self._get_password_or_skip()
         config = load_config_with_decryption(password)
         
         assert 'person-id' in config['shioaji']
@@ -73,8 +76,8 @@ class TestShioajiSimulation:
     def test_simulation_mode_flag(self):
         """Simulation mode should be set"""
         from app.core.config import load_config_with_decryption
-        
-        password = os.environ['JASYPT_PASSWORD']
+
+        password = self._get_password_or_skip()
         config = load_config_with_decryption(password)
         
         assert 'simulation' in config['shioaji']

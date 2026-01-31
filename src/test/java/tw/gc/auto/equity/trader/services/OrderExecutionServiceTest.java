@@ -48,6 +48,10 @@ class OrderExecutionServiceTest {
     private tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService taiwanComplianceService;
     @Mock
     private LlmService llmService;
+    @Mock
+    private TradeRiskScorer tradeRiskScorer;
+    @Mock
+    private FundamentalFilter fundamentalFilter;
 
     private PositionManager positionManager;
     private OrderExecutionService orderExecutionService;
@@ -58,12 +62,16 @@ class OrderExecutionServiceTest {
         when(bridge.getUrl()).thenReturn("http://localhost:8888");
         when(earningsBlackoutService.isDateBlackout(any())).thenReturn(false);
         when(stockRiskSettingsService.isAiVetoEnabled()).thenReturn(false);
+        // By default allow fundamentals to pass so AI veto and risk scoring paths are exercised
+        when(fundamentalFilter.evaluateStock(anyString())).thenReturn(FundamentalFilter.FilterResult.builder().passed(true).build());
+        // By default, ensure trade risk scorer does not veto so tests can exercise AI veto paths
+        when(tradeRiskScorer.quickRiskCheck(any())).thenReturn(Map.of("veto", false, "risk_score", 0.0, "reason", "OK"));
 
         positionManager = new PositionManager();
         orderExecutionService = new OrderExecutionService(
                 restTemplate, objectMapper, tradingProperties, telegramService,
                 dataLoggingService, positionManager, riskManagementService, stockRiskSettingsService,
-                earningsBlackoutService, taiwanComplianceService, llmService
+                earningsBlackoutService, taiwanComplianceService, llmService, tradeRiskScorer, fundamentalFilter
         );
     }
 
@@ -231,15 +239,13 @@ class OrderExecutionServiceTest {
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
         when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
-        Map<String, Object> vetoResult = new HashMap<>();
-        vetoResult.put("veto", true);
-        vetoResult.put("reason", "High volatility detected");
-        when(llmService.executeTradeVeto(any())).thenReturn(vetoResult);
+        // Simulate risk scorer veto (AI veto now implemented via TradeRiskScorer)
+        when(tradeRiskScorer.quickRiskCheck(any())).thenReturn(Map.of("veto", true, "risk_score", 100.0, "reason", "High volatility detected"));
 
         orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false, "TestStrategy");
 
         verify(restTemplate, never()).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
-        verify(telegramService).sendMessage(contains("AI RISK VETO"));
+        verify(telegramService).sendMessage(contains("RISK SCORE VETO"));
     }
 
     @Test
@@ -252,7 +258,8 @@ class OrderExecutionServiceTest {
         Map<String, Object> vetoResult = new HashMap<>();
         vetoResult.put("veto", false);
         vetoResult.put("reason", "Trade approved");
-        when(llmService.executeTradeVeto(any())).thenReturn(vetoResult);
+        // Ensure risk scorer allows the trade to proceed to execution for this test
+        when(tradeRiskScorer.quickRiskCheck(any())).thenReturn(Map.of("veto", false, "risk_score", 0.0, "reason", "OK"));
         when(restTemplate.postForObject(anyString(), any(java.util.Map.class), eq(String.class)))
                 .thenReturn("{\"status\":\"filled\"}");
 
@@ -269,12 +276,12 @@ class OrderExecutionServiceTest {
         when(taiwanComplianceService.fetchCurrentCapital()).thenReturn(1000000.0);
         when(taiwanComplianceService.checkTradeCompliance(anyInt(), anyBoolean(), anyDouble()))
                 .thenReturn(TaiwanStockComplianceService.ComplianceResult.approved());
-        when(llmService.executeTradeVeto(any())).thenThrow(new RuntimeException("LLM service unavailable"));
+        when(tradeRiskScorer.quickRiskCheck(any())).thenThrow(new RuntimeException("Risk scoring service unavailable"));
 
         orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false, "TestStrategy");
 
         verify(restTemplate, never()).postForObject(anyString(), any(java.util.Map.class), eq(String.class));
-        verify(telegramService).sendMessage(contains("AI VETO CHECK FAILED"));
+        verify(telegramService).sendMessage(contains("RISK SCORING FAILED"));
     }
 
     @Test
@@ -414,9 +421,10 @@ class OrderExecutionServiceTest {
                 .thenReturn("{\"status\":\"filled\"}");
 
         // Call with null strategyName to trigger line 150 fallback
+        when(tradeRiskScorer.quickRiskCheck(any())).thenReturn(Map.of("veto", false, "risk_score", 0.0, "reason", "OK"));
         orderExecutionService.executeOrderWithRetry("BUY", 1, 20000.0, "2454.TW", false, false, null);
 
-        verify(llmService).executeTradeVeto(argThat(proposal -> {
+        verify(tradeRiskScorer).quickRiskCheck(argThat(proposal -> {
             Map<String, Object> map = (Map<String, Object>) proposal;
             return "Unknown".equals(map.get("strategy_name"));
         }));

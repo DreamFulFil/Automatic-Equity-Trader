@@ -8,9 +8,16 @@ import tw.gc.auto.equity.trader.compliance.TaiwanStockComplianceService;
 import tw.gc.auto.equity.trader.entities.StrategyStockMapping;
 import tw.gc.auto.equity.trader.entities.BacktestResult;
 import tw.gc.auto.equity.trader.entities.StockSettings;
+import tw.gc.auto.equity.trader.entities.MarketData;
 import tw.gc.auto.equity.trader.repositories.StrategyStockMappingRepository;
 import tw.gc.auto.equity.trader.repositories.BacktestResultRepository;
 import tw.gc.auto.equity.trader.repositories.StockSettingsRepository;
+import tw.gc.auto.equity.trader.repositories.MarketDataRepository;
+import tw.gc.auto.equity.trader.services.regime.MarketRegimeService;
+import tw.gc.auto.equity.trader.services.regime.MarketRegimeService.MarketRegime;
+import tw.gc.auto.equity.trader.services.regime.MarketRegimeService.RegimeAnalysis;
+import tw.gc.auto.equity.trader.services.regime.RegimeStrategyMapper;
+import tw.gc.auto.equity.trader.services.regime.RegimeTransitionService;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +29,9 @@ public class AutoStrategySelector {
 
     @SuppressWarnings("unused")
     private static final double MIN_CAPITAL_FOR_ODD_LOT_DAY_TRADING = 2_000_000.0;
+    
+    /** Regime fitness weight in score calculation (0.0-1.0) */
+    private static final double REGIME_FITNESS_WEIGHT = 0.3;
 
     private final StrategyStockMappingRepository mappingRepository;
     private final BacktestResultRepository backtestResultRepository;
@@ -33,6 +43,15 @@ public class AutoStrategySelector {
     @SuppressWarnings("unused")
     private final TaiwanStockComplianceService complianceService;
     private final tw.gc.auto.equity.trader.repositories.ActiveShadowSelectionRepository activeShadowSelectionRepository;
+    
+    // Regime awareness services (Phase 3)
+    private final MarketRegimeService marketRegimeService;
+    private final RegimeStrategyMapper regimeStrategyMapper;
+    private final RegimeTransitionService regimeTransitionService;
+    
+    // Phase 7: Fundamental analysis integration
+    private final FundamentalInsightService fundamentalInsightService;
+    private final FundamentalFilter fundamentalFilter;
 
     /**
      * DISABLED: Automated daily strategy selection.
@@ -246,6 +265,7 @@ public class AutoStrategySelector {
             .filter(r -> r.getTotalReturnPct() != null && r.getSharpeRatio() != null)
             .filter(r -> r.getTotalTrades() != null && r.getTotalTrades() > 10) // Sufficient sample size
             .filter(r -> !shouldFilterStrategy(r.getStrategyName(), isRoundLot)) // Filter intraday for round-lot
+            .filter(r -> fundamentalFilter.passesFilter(r.getSymbol())) // Phase 7: Fundamental filter
             .filter(r -> r.getTotalReturnPct() > 5.0)
             .filter(r -> r.getSharpeRatio() > 1.0)
             .filter(r -> r.getWinRatePct() != null && r.getWinRatePct() > 50.0)
@@ -283,7 +303,18 @@ public class AutoStrategySelector {
         double ddScore = r.getMaxDrawdownPct() != null ? Math.abs(r.getMaxDrawdownPct()) : 1.0;
         
         if (ddScore < 0.01) ddScore = 0.01;
-        return (returnScore * sharpeScore * winRateScore) / ddScore;
+        double baseScore = (returnScore * sharpeScore * winRateScore) / ddScore;
+        
+        // Apply regime fitness adjustment
+        double regimeFitness = getRegimeFitnessForStrategy(r.getStrategyName(), r.getSymbol());
+        double scoreWithRegime = blendScoreWithRegime(baseScore, regimeFitness);
+        
+        // Phase 7: Apply fundamental scoring (0-100 scale)
+        double fundamentalScore = fundamentalInsightService.scoreFundamentals(r.getSymbol());
+        // Normalize fundamental score to 0-1 and apply 20% weight
+        double fundamentalMultiplier = 1.0 + ((fundamentalScore - 50.0) / 100.0) * 0.2;
+        
+        return scoreWithRegime * fundamentalMultiplier;
     }
     
     /**
@@ -309,7 +340,111 @@ public class AutoStrategySelector {
         // Avoid division by zero
         if (ddScore < 0.01) ddScore = 0.01;
         
-        return (returnScore * sharpeScore * winRateScore) / ddScore;
+        double baseScore = (returnScore * sharpeScore * winRateScore) / ddScore;
+        
+        // Apply regime fitness adjustment
+        double regimeFitness = getRegimeFitnessForStrategy(m.getStrategyName(), m.getSymbol());
+        double scoreWithRegime = blendScoreWithRegime(baseScore, regimeFitness);
+        
+        // Phase 7: Apply fundamental scoring (0-100 scale)
+        double fundamentalScore = fundamentalInsightService.scoreFundamentals(m.getSymbol());
+        // Normalize fundamental score to 0-1 and apply 20% weight
+        double fundamentalMultiplier = 1.0 + ((fundamentalScore - 50.0) / 100.0) * 0.2;
+        
+        return scoreWithRegime * fundamentalMultiplier;
+    }
+    
+    /**
+     * Get regime fitness for a strategy-symbol combination.
+     * 
+     * @param strategyName the strategy name
+     * @param symbol the stock symbol
+     * @return fitness score (0.0 to 1.0)
+     */
+    private double getRegimeFitnessForStrategy(String strategyName, String symbol) {
+        if (marketRegimeService == null || regimeStrategyMapper == null) {
+            return 1.0; // No regime service, use full score
+        }
+        
+        try {
+            RegimeAnalysis analysis = marketRegimeService.getCachedRegime(symbol);
+            if (analysis == null) {
+                return 1.0; // No regime data, use full score
+            }
+            
+            return regimeStrategyMapper.getStrategyFitness(strategyName, symbol);
+        } catch (Exception e) {
+            log.debug("Error getting regime fitness for {} / {}: {}", strategyName, symbol, e.getMessage());
+            return 1.0;
+        }
+    }
+    
+    /**
+     * Blend base score with regime fitness.
+     * 
+     * @param baseScore raw performance score
+     * @param regimeFitness regime fitness (0.0 to 1.0)
+     * @return blended score
+     */
+    private double blendScoreWithRegime(double baseScore, double regimeFitness) {
+        // Blend: (1 - weight) * baseScore + weight * (baseScore * regimeFitness)
+        // This penalizes strategies that don't fit the current regime
+        return baseScore * (1 - REGIME_FITNESS_WEIGHT + REGIME_FITNESS_WEIGHT * regimeFitness);
+    }
+    
+    /**
+     * Check if a strategy should be blocked due to unfavorable regime.
+     * 
+     * @param strategyName the strategy name
+     * @param symbol the stock symbol
+     * @return true if strategy should not be used in current regime
+     */
+    public boolean shouldBlockDueToRegime(String strategyName, String symbol) {
+        if (regimeStrategyMapper == null) {
+            return false;
+        }
+        
+        return regimeStrategyMapper.shouldBlockStrategy(strategyName, symbol);
+    }
+    
+    /**
+     * Get position size adjustment factor based on regime.
+     * 
+     * @param symbol the stock symbol
+     * @return multiplier for position size (0.0 to 1.0)
+     */
+    public double getRegimePositionMultiplier(String symbol) {
+        if (marketRegimeService == null) {
+            return 1.0;
+        }
+        
+        RegimeAnalysis analysis = marketRegimeService.getCachedRegime(symbol);
+        if (analysis == null) {
+            return 1.0;
+        }
+        
+        // During transitions, reduce position sizes for safety
+        if (regimeTransitionService != null && regimeTransitionService.isInTransition(symbol)) {
+            double transitionFactor = regimeTransitionService.getTransitionScalingFactor(symbol);
+            return analysis.getPositionScaleFactor() * (0.7 + 0.3 * transitionFactor);
+        }
+        
+        return analysis.getPositionScaleFactor();
+    }
+    
+    /**
+     * Get current market regime for a symbol.
+     * 
+     * @param symbol the stock symbol
+     * @return current regime or RANGING if unknown
+     */
+    public MarketRegime getCurrentRegime(String symbol) {
+        if (marketRegimeService == null) {
+            return MarketRegime.RANGING;
+        }
+        
+        RegimeAnalysis analysis = marketRegimeService.getCachedRegime(symbol);
+        return analysis != null ? analysis.regime() : MarketRegime.RANGING;
     }
     
     private boolean shouldSwitchStrategy(StrategyStockMapping best, String currentStrategy, String currentStock) {

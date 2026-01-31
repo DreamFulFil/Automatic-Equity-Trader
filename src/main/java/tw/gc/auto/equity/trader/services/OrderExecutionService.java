@@ -25,6 +25,8 @@ import java.util.Map;
  * 
  * Integrates with the EarningsBlackoutService to enforce trading restrictions around earnings dates.
  * Before placing any new orders (not exits), verifies the symbol is not in an earnings blackout window.
+ * 
+ * Phase 5 Enhancement: Supports signal confidence for calibrated risk scoring.
  */
 @Service
 @Slf4j
@@ -44,6 +46,10 @@ public class OrderExecutionService {
     private final EarningsBlackoutService earningsBlackoutService;
     private final TaiwanStockComplianceService taiwanComplianceService;
     private final LlmService llmService;
+    private final TradeRiskScorer tradeRiskScorer;
+    
+    // Phase 7: Fundamental analysis integration
+    private final FundamentalFilter fundamentalFilter;
 
     private String getBridgeUrl() {
         return tradingProperties.getBridge().getUrl();
@@ -113,8 +119,31 @@ public class OrderExecutionService {
     /**
      * Execute order with retry wrapper and quantity bug fix.
      * Enforces earnings blackout check and Taiwan compliance before placing new (non-exit) orders.
+     * 
+     * This overload is for backward compatibility - uses default signal confidence (null).
      */
     public void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit, boolean emergencyShutdown, String strategyName) {
+        executeOrderWithRetry(action, quantity, price, instrument, isExit, emergencyShutdown, strategyName, null);
+    }
+
+    /**
+     * Execute order with retry wrapper, quantity bug fix, and signal confidence support.
+     * Enforces earnings blackout check and Taiwan compliance before placing new (non-exit) orders.
+     * 
+     * Phase 5 Enhancement: Uses signal confidence for calibrated risk scoring.
+     * High-confidence signals (>0.9) get relaxed veto criteria.
+     * Low-confidence signals (<0.5) get stricter veto criteria.
+     * 
+     * @param action BUY or SELL
+     * @param quantity Number of shares
+     * @param price Target price
+     * @param instrument Stock symbol
+     * @param isExit Whether this is an exit order
+     * @param emergencyShutdown Whether emergency shutdown is active
+     * @param strategyName Name of the strategy generating this order
+     * @param signalConfidence Signal confidence (0.0-1.0), null for unknown
+     */
+    public void executeOrderWithRetry(String action, int quantity, double price, String instrument, boolean isExit, boolean emergencyShutdown, String strategyName, Double signalConfidence) {
         // Earnings blackout check - block new entries but allow exits
         if (!isExit && isInEarningsBlackout()) {
             log.warn("📅 EARNINGS BLACKOUT: Blocking {} order for {} - blackout window active", action, instrument);
@@ -139,7 +168,30 @@ public class OrderExecutionService {
             }
         }
         
-        // Ollama AI veto check (if enabled)
+        // Phase 7: Fundamental filter check - block if poor fundamentals (P/E, debt, revenue)
+        if (!isExit) {
+            try {
+                FundamentalFilter.FilterResult fundamentalResult = fundamentalFilter.evaluateStock(instrument);
+                if (!fundamentalResult.isPassed()) {
+                    log.warn("📊 FUNDAMENTAL FILTER VETO: {}", fundamentalResult.getReason());
+                    telegramService.sendMessage(String.format(
+                        "📊 ORDER BLOCKED - POOR FUNDAMENTALS\nAction: %s %d %s @ %.0f\nReason: %s%s",
+                        action, quantity, instrument, price, fundamentalResult.getReason(),
+                        fundamentalResult.isCaution() ? "\n⚠️ Caution flag set" : ""));
+                    return;
+                }
+                // Log warnings if there are caution flags (passed but marginal)
+                if (fundamentalResult.isCaution()) {
+                    log.info("⚠️ Fundamental caution for {}", instrument);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ Fundamental filter check failed for {}: {} - Allowing trade to proceed", instrument, e.getMessage());
+                // On failure, log but proceed with trade to avoid blocking all trades due to data issues
+            }
+        }
+        
+        // Phase 5: Calibrated risk scoring with signal confidence support
+        // Uses TradeRiskScorer for weighted risk assessment instead of binary LLM veto
         if (!isExit && stockRiskSettingsService.isAiVetoEnabled()) {
             try {
                 Map<String, Object> tradeProposal = new HashMap<>();
@@ -150,34 +202,45 @@ public class OrderExecutionService {
                 tradeProposal.put("strategy_name", strategyName != null ? strategyName : "Unknown");
                 tradeProposal.put("daily_pnl", String.format("%.0f", riskManagementService.getDailyPnL()));
                 tradeProposal.put("weekly_pnl", String.format("%.0f", riskManagementService.getWeeklyPnL()));
-                tradeProposal.put("drawdown_percent", "N/A");
-                tradeProposal.put("trades_today", "N/A");
-                tradeProposal.put("win_streak", "0");
-                tradeProposal.put("loss_streak", "0");
-                tradeProposal.put("volatility_level", "Normal");
+                tradeProposal.put("drawdown_percent", riskManagementService.getCurrentDrawdownPercent());
+                tradeProposal.put("trades_today", riskManagementService.getTradesToday());
+                tradeProposal.put("win_streak", riskManagementService.getWinStreak());
+                tradeProposal.put("loss_streak", riskManagementService.getLossStreak());
+                tradeProposal.put("volatility_level", "Normal"); // TODO: Get from market regime service
                 tradeProposal.put("time_of_day", LocalDateTime.now(TAIPEI_ZONE).toString());
                 tradeProposal.put("session_phase", "Intraday");
                 tradeProposal.put("news_headlines", "");
-                tradeProposal.put("strategy_days_active", "N/A");
+                tradeProposal.put("strategy_days_active", 30); // Default to mature strategy
                 tradeProposal.put("recent_backtest_stats", "N/A");
                 
-                Map<String, Object> vetoResult = llmService.executeTradeVeto(tradeProposal);
-                boolean vetoed = (Boolean) vetoResult.getOrDefault("veto", true);
-                String vetoReason = (String) vetoResult.getOrDefault("reason", "Unknown");
+                // Phase 5.4: Pass signal confidence for calibrated risk scoring
+                // High-confidence signals (>0.9) get relaxed veto criteria (threshold 80)
+                // Low-confidence signals (<0.5) get stricter veto criteria (threshold 60)
+                if (signalConfidence != null) {
+                    tradeProposal.put("signal_confidence", signalConfidence);
+                    log.debug("📊 Signal confidence: {}", signalConfidence);
+                }
+                
+                // Use TradeRiskScorer for weighted risk assessment
+                Map<String, Object> riskResult = tradeRiskScorer.quickRiskCheck(tradeProposal);
+                boolean vetoed = (Boolean) riskResult.getOrDefault("veto", true);
+                String vetoReason = (String) riskResult.getOrDefault("reason", "Unknown");
+                Double riskScore = (Double) riskResult.getOrDefault("risk_score", 100.0);
                 
                 if (vetoed) {
-                    log.warn("🤖 OLLAMA AI VETO: {}", vetoReason);
+                    log.warn("📊 RISK SCORE VETO: {} (score: {:.1f})", vetoReason, riskScore);
                     telegramService.sendMessage(String.format(
-                        "🤖 ORDER BLOCKED - AI RISK VETO\nAction: %s %d %s @ %.0f\nReason: %s\n\nUse /risk enable_ai_veto false to disable AI veto",
-                        action, quantity, instrument, price, vetoReason));
+                        "📊 ORDER BLOCKED - RISK SCORE VETO\nAction: %s %d %s @ %.0f\nRisk Score: %.1f\nReason: %s%s\n\nUse /risk enable_ai_veto false to disable risk scoring",
+                        action, quantity, instrument, price, riskScore, vetoReason,
+                        signalConfidence != null ? String.format("\nSignal Confidence: %.2f", signalConfidence) : ""));
                     return;
                 } else {
-                    log.info("✅ Ollama AI approved trade: {}", vetoReason);
+                    log.info("✅ Risk check passed (score: {:.1f}): {}", riskScore, vetoReason);
                 }
             } catch (Exception e) {
-                log.error("❌ Ollama veto check failed: {} - Defaulting to VETO (fail-safe)", e.getMessage());
+                log.error("❌ Risk scoring check failed: {} - Defaulting to VETO (fail-safe)", e.getMessage());
                 telegramService.sendMessage(String.format(
-                    "⚠️ AI VETO CHECK FAILED - Trade blocked as fail-safe\nError: %s", e.getMessage()));
+                    "⚠️ RISK SCORING FAILED - Trade blocked as fail-safe\nError: %s", e.getMessage()));
                 return;
             }
         }

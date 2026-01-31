@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import json
@@ -29,6 +29,27 @@ from app.services.calendar_service import (
     get_trading_days, count_trading_days, get_futures_expiration, get_next_futures_expiration,
     get_futures_expirations, get_seasonal_strength, get_all_seasonal_strength,
     get_event_risk_level, get_market_calendar_summary
+)
+from app.services.annual_report_service import (
+    AnnualReportRequest,
+    AnnualReportResponse,
+    AnnualReportDownloadError,
+    download_shareholders_annual_report,
+)
+from app.services.annual_report_rag_service import (
+    AnnualReportRagIndexRequest,
+    AnnualReportRagIndexResponse,
+    AnnualReportRagQueryRequest,
+    AnnualReportRagQueryResponse,
+    AnnualReportRagError,
+    index_annual_report_rag,
+    query_annual_report_rag,
+)
+from app.services.annual_report_summary_service import (
+    AnnualReportSummaryRequest,
+    AnnualReportSummaryResponse,
+    AnnualReportSummaryError,
+    summarize_annual_report,
 )
 from app.strategies.legacy_strategy import get_signal_legacy, notify_exit_order
 
@@ -337,6 +358,60 @@ def scrape_earnings_endpoint(force: bool = False):
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/reports/shareholders/annual", response_model=AnnualReportResponse)
+def download_shareholders_annual_report_endpoint(request: AnnualReportRequest):
+    try:
+        return download_shareholders_annual_report(
+            ticker=request.ticker,
+            report_year=request.report_year,
+            report_type=request.report_type,
+            force=request.force,
+        )
+    except AnnualReportDownloadError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@app.post("/reports/shareholders/annual/rag/index", response_model=AnnualReportRagIndexResponse)
+def index_shareholders_annual_report_rag_endpoint(request: AnnualReportRagIndexRequest):
+    try:
+        return index_annual_report_rag(
+            ticker=request.ticker,
+            report_year=request.report_year,
+            report_type=request.report_type,
+            force=request.force,
+        )
+    except (AnnualReportDownloadError, AnnualReportRagError) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@app.post("/reports/shareholders/annual/rag/query", response_model=AnnualReportRagQueryResponse)
+def query_shareholders_annual_report_rag_endpoint(request: AnnualReportRagQueryRequest):
+    try:
+        return query_annual_report_rag(
+            ticker=request.ticker,
+            question=request.question,
+            report_year=request.report_year,
+            report_type=request.report_type,
+            top_k=request.top_k,
+            force=request.force,
+        )
+    except (AnnualReportDownloadError, AnnualReportRagError) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@app.post("/reports/shareholders/annual/summary", response_model=AnnualReportSummaryResponse)
+def summarize_shareholders_annual_report_endpoint(request: AnnualReportSummaryRequest):
+    try:
+        return summarize_annual_report(
+            ticker=request.ticker,
+            report_year=request.report_year,
+            report_type=request.report_type,
+            force=request.force,
+        )
+    except (AnnualReportDownloadError, AnnualReportSummaryError) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
 @app.get("/stream/quotes")
 def get_streaming_quotes(limit: int = 50):
